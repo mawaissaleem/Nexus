@@ -51,6 +51,8 @@ void ResultWidget::setup_ui() {
             icon = QIcon::fromTheme("folder");
         } else if (result_.provider_id == "alias") {
             icon = QIcon::fromTheme("emblem-favorite");
+        } else if (result_.provider_id == "settings") {
+            icon = QIcon::fromTheme("preferences-system");
         } else {
             icon = QIcon::fromTheme("application-x-executable");
         }

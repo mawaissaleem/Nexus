@@ -1,10 +1,12 @@
 #include "nexus/ui/launcher_window.hpp"
 #include "nexus/ui/result_widget.hpp"
+#include "nexus/ui/settings_dialog.hpp"
 #include "nexus/core/query.hpp"
 #include "nexus/utils/logger.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QKeyEvent>
 #include <QScreen>
 #include <QWindow>
@@ -150,6 +152,26 @@ void LauncherWindow::setup_ui() {
     brand->setStyleSheet("color: #55555E; font-size: 11px; font-weight: 600;");
     footer_layout->addWidget(brand);
 
+    auto* settings_btn = new QPushButton("⚙ Settings", footer_);
+    settings_btn->setCursor(Qt::PointingHandCursor);
+    settings_btn->setStyleSheet(
+        "QPushButton {"
+        "  background: transparent;"
+        "  color: #72727A;"
+        "  border: none;"
+        "  font-size: 11px;"
+        "  font-weight: 600;"
+        "  padding: 2px 6px;"
+        "  border-radius: 4px;"
+        "}"
+        "QPushButton:hover {"
+        "  color: #007AFF;"
+        "  background: rgba(255, 255, 255, 0.05);"
+        "}"
+    );
+    connect(settings_btn, &QPushButton::clicked, this, &LauncherWindow::open_settings);
+    footer_layout->addWidget(settings_btn);
+
     container_layout->addWidget(footer_);
 
     main_layout->addWidget(container_);
@@ -222,6 +244,22 @@ void LauncherWindow::perform_search() {
 
     core::Query query(q_str.toStdString());
     auto results = search_engine_->search(query, 7);
+
+    QString lower = q_str.toLower();
+    if (lower == "settings" || lower == "setting" || lower == "config" || lower == "preferences" || lower == "prefs") {
+        core::SearchResult settings_res;
+        settings_res.title = "Nexus Settings";
+        settings_res.subtitle = "Manage web links, aliases, and search directories";
+        settings_res.provider_id = "settings";
+        settings_res.icon = "preferences-system";
+        settings_res.score = 3000.0;
+        settings_res.action = [this]() -> bool {
+            open_settings();
+            return true;
+        };
+        results.insert(results.begin(), settings_res);
+    }
+
     update_results(results);
 }
 
@@ -318,6 +356,11 @@ void LauncherWindow::changeEvent(QEvent* event) {
         }
     }
     QWidget::changeEvent(event);
+}
+
+void LauncherWindow::open_settings() {
+    hide_launcher();
+    SettingsDialog::show_settings();
 }
 
 } // namespace nexus::ui

@@ -72,12 +72,14 @@ set(NEXUS_UI_HEADERS
     include/nexus/ui/global_shortcut.hpp
     include/nexus/ui/result_widget.hpp
     include/nexus/ui/launcher_window.hpp
+    include/nexus/ui/settings_dialog.hpp
 )
 
 set(NEXUS_UI_SOURCES
     src/ui/global_shortcut.cpp
     src/ui/result_widget.cpp
     src/ui/launcher_window.cpp
+    src/ui/settings_dialog.cpp
 )
 
 # Main Application Executable (GUI + CLI fallback)

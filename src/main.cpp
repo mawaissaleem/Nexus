@@ -11,6 +11,7 @@
 #include "nexus/core/config_manager.hpp"
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/ui/launcher_window.hpp"
+#include "nexus/ui/settings_dialog.hpp"
 #include "nexus/ui/global_shortcut.hpp"
 #include "nexus/utils/logger.hpp"
 #include <QApplication>
@@ -40,6 +41,8 @@ void print_help() {
               << "  --hide                 Hide the launcher window\n"
               << "  --rebuild-index        Rescan system directories and rebuild desktop application index\n"
               << "  --list-apps            List all currently indexed desktop applications\n"
+              << "  settings, config       Open Nexus Settings GUI (manage shortcuts & directories)\n"
+              << "  --settings             Open Nexus Settings GUI\n"
               << "  --help, -h             Show this help message\n\n"
               << "Directory Search Management:\n"
               << "  dir add <path>         Add a directory to file/folder search\n"
@@ -85,6 +88,8 @@ int main(int argc, char* argv[]) {
 
     nexus::utils::Logger::instance().set_level(nexus::utils::LogLevel::Info);
 
+    bool start_with_settings = false;
+
     // 1. Check for quick CLI commands that don't need GUI/daemon
     if (argc > 1) {
         std::string arg1 = argv[1];
@@ -95,17 +100,25 @@ int main(int argc, char* argv[]) {
         }
 
         // IPC client: Check if another instance is already running
-        if (arg1 == "--toggle" || arg1 == "-t" || arg1 == "--show" || arg1 == "--hide") {
+        if (arg1 == "--toggle" || arg1 == "-t" || arg1 == "--show" || arg1 == "--hide" ||
+            arg1 == "--settings" || arg1 == "settings" || arg1 == "config") {
             QLocalSocket socket;
             socket.connectToServer(IPC_SOCKET_NAME);
             if (socket.waitForConnected(200)) {
-                std::string cmd = (arg1 == "--hide") ? "HIDE" : (arg1 == "--show" ? "SHOW" : "TOGGLE");
+                std::string cmd;
+                if (arg1 == "--hide") cmd = "HIDE";
+                else if (arg1 == "--show") cmd = "SHOW";
+                else if (arg1 == "--settings" || arg1 == "settings" || arg1 == "config") cmd = "SETTINGS";
+                else cmd = "TOGGLE";
                 socket.write(cmd.c_str(), cmd.size());
                 socket.flush();
                 socket.waitForBytesWritten(200);
                 return 0;
             }
-            // If server not running, continue and launch it!
+            // If server not running and arg is settings, mark flag to launch settings directly!
+            if (arg1 == "--settings" || arg1 == "settings" || arg1 == "config") {
+                start_with_settings = true;
+            }
         }
     } else {
         // If launched with no args, check if an instance is already running to toggle it
@@ -263,6 +276,8 @@ int main(int argc, char* argv[]) {
                     launcher->show_launcher();
                 } else if (msg == "HIDE") {
                     launcher->hide_launcher();
+                } else if (msg == "SETTINGS") {
+                    nexus::ui::SettingsDialog::show_settings();
                 }
             });
         });
@@ -292,6 +307,11 @@ int main(int argc, char* argv[]) {
         launcher->toggle_launcher();
     });
 
+    auto* settings_action = tray_menu.addAction("Settings & Shortcuts...");
+    QObject::connect(settings_action, &QAction::triggered, []() {
+        nexus::ui::SettingsDialog::show_settings();
+    });
+
     auto* rebuild_action = tray_menu.addAction("Rebuild Application Index");
     QObject::connect(rebuild_action, &QAction::triggered, [&app_indexer]() {
         app_indexer->rebuild_index();
@@ -317,7 +337,11 @@ int main(int argc, char* argv[]) {
     }
 
     // Show initially so user sees it right away on first run
-    launcher->show_launcher();
+    if (start_with_settings) {
+        nexus::ui::SettingsDialog::show_settings();
+    } else {
+        launcher->show_launcher();
+    }
 
     NEXUS_LOG_INFO("Nexus is running in the background. Press Alt + Space to toggle.");
     return app.exec();

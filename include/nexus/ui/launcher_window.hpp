@@ -21,6 +21,7 @@ public:
     void toggle_launcher();
     void show_launcher();
     void hide_launcher();
+    void open_settings();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
