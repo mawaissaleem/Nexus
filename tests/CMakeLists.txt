@@ -8,6 +8,7 @@ set(TEST_TARGETS
     test_database
     test_alias
     test_file_search
+    test_config
 )
 
 foreach(test_name ${TEST_TARGETS})

@@ -2,6 +2,7 @@
 #include "nexus/ui/result_widget.hpp"
 #include "nexus/ui/settings_dialog.hpp"
 #include "nexus/core/query.hpp"
+#include "nexus/core/config_manager.hpp"
 #include "nexus/utils/logger.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -142,9 +143,10 @@ void LauncherWindow::setup_ui() {
     auto* footer_layout = new QHBoxLayout(footer_);
     footer_layout->setContentsMargins(6, 4, 6, 2);
 
-    QLabel* hint = new QLabel("↑↓ Navigate   •   ↵ Launch   •   Esc Close", footer_);
-    hint->setStyleSheet("color: #72727A; font-size: 11px; font-weight: 500;");
-    footer_layout->addWidget(hint);
+    hint_label_ = new QLabel(footer_);
+    hint_label_->setStyleSheet("color: #72727A; font-size: 11px; font-weight: 500;");
+    update_footer_hint();
+    footer_layout->addWidget(hint_label_);
 
     footer_layout->addStretch();
 
@@ -202,6 +204,7 @@ void LauncherWindow::center_on_screen() {
 }
 
 void LauncherWindow::show_launcher() {
+    update_footer_hint();
     center_on_screen();
     show();
     raise();
@@ -319,16 +322,45 @@ void LauncherWindow::on_item_clicked(QListWidgetItem* item) {
     }
 }
 
+void LauncherWindow::update_footer_hint() {
+    if (!hint_label_) return;
+    if (core::ConfigManager::instance().is_ctrl_np_navigation_enabled()) {
+        hint_label_->setText("↑↓ or Ctrl+N/P Navigate   •   ↵ Launch   •   Esc Close");
+    } else {
+        hint_label_->setText("↑↓ Navigate   •   ↵ Launch   •   Esc Close");
+    }
+}
+
+void LauncherWindow::select_next_result() {
+    if (result_list_->count() > 0) {
+        int next_row = std::min(result_list_->currentRow() + 1, result_list_->count() - 1);
+        result_list_->setCurrentRow(next_row);
+    }
+}
+
+void LauncherWindow::select_prev_result() {
+    if (result_list_->count() > 0) {
+        int prev_row = std::max(result_list_->currentRow() - 1, 0);
+        result_list_->setCurrentRow(prev_row);
+    }
+}
+
 bool LauncherWindow::eventFilter(QObject* watched, QEvent* event) {
     if (watched == search_input_ && event->type() == QEvent::KeyPress) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent->key() == Qt::Key_Down) {
-            int next_row = std::min(result_list_->currentRow() + 1, result_list_->count() - 1);
-            result_list_->setCurrentRow(next_row);
+        bool ctrl_np_enabled = core::ConfigManager::instance().is_ctrl_np_navigation_enabled();
+        bool is_ctrl = (keyEvent->modifiers() == Qt::ControlModifier);
+
+        bool is_next = (keyEvent->key() == Qt::Key_Down) ||
+                       (ctrl_np_enabled && is_ctrl && keyEvent->key() == Qt::Key_N);
+        bool is_prev = (keyEvent->key() == Qt::Key_Up) ||
+                       (ctrl_np_enabled && is_ctrl && keyEvent->key() == Qt::Key_P);
+
+        if (is_next) {
+            select_next_result();
             return true;
-        } else if (keyEvent->key() == Qt::Key_Up) {
-            int prev_row = std::max(result_list_->currentRow() - 1, 0);
-            result_list_->setCurrentRow(prev_row);
+        } else if (is_prev) {
+            select_prev_result();
             return true;
         } else if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
             execute_selected();
@@ -345,6 +377,21 @@ void LauncherWindow::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
         hide_launcher();
     } else {
+        bool ctrl_np_enabled = core::ConfigManager::instance().is_ctrl_np_navigation_enabled();
+        bool is_ctrl = (event->modifiers() == Qt::ControlModifier);
+        if (event->key() == Qt::Key_Down || (ctrl_np_enabled && is_ctrl && event->key() == Qt::Key_N)) {
+            select_next_result();
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_Up || (ctrl_np_enabled && is_ctrl && event->key() == Qt::Key_P)) {
+            select_prev_result();
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            execute_selected();
+            event->accept();
+            return;
+        }
         QWidget::keyPressEvent(event);
     }
 }

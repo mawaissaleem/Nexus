@@ -14,6 +14,10 @@
 #include <QFileInfo>
 #include <QIcon>
 #include <QDialogButtonBox>
+#include <QPainter>
+#include <QPainterPath>
+#include <QFontMetrics>
+#include <QEvent>
 
 namespace nexus::ui {
 
@@ -160,11 +164,85 @@ QString AliasEditDialog::target() const {
 
 namespace {
     SettingsDialog* g_active_settings = nullptr;
+
+    class ModernCheckBox : public QCheckBox {
+    public:
+        explicit ModernCheckBox(const QString& text, QWidget* parent = nullptr)
+            : QCheckBox(text, parent) {
+            setCursor(Qt::PointingHandCursor);
+            setAttribute(Qt::WA_Hover, true);
+        }
+
+        QSize sizeHint() const override {
+            QFontMetrics fm(font());
+            int w = 32 + fm.horizontalAdvance(text()) + 8;
+            int h = std::max(24, fm.height() + 6);
+            return QSize(w, h);
+        }
+
+    protected:
+        void paintEvent(QPaintEvent* /*event*/) override {
+            QPainter painter(this);
+            painter.setRenderHint(QPainter::Antialiasing);
+
+            int h = height();
+            int box_size = 20;
+            int box_y = (h - box_size) / 2;
+            QRect box_rect(0, box_y, box_size, box_size);
+
+            if (isChecked()) {
+                painter.setBrush(QColor(0, 122, 255)); // #007AFF
+                painter.setPen(Qt::NoPen);
+                painter.drawRoundedRect(box_rect, 5, 5);
+
+                // Draw crisp white checkmark
+                QPen pen(Qt::white, 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+                painter.setPen(pen);
+                QPainterPath path;
+                path.moveTo(box_rect.x() + 5, box_rect.y() + 10);
+                path.lineTo(box_rect.x() + 8.5, box_rect.y() + 14);
+                path.lineTo(box_rect.x() + 15, box_rect.y() + 6.5);
+                painter.drawPath(path);
+            } else {
+                painter.setBrush(QColor(22, 22, 28));
+                QColor border_color = underMouse() ? QColor(0, 122, 255) : QColor(255, 255, 255, 75);
+                painter.setPen(QPen(border_color, 1.5));
+                painter.drawRoundedRect(box_rect, 5, 5);
+            }
+
+            // Draw label text
+            painter.setPen(underMouse() ? QColor(255, 255, 255) : QColor(240, 240, 245));
+            QFont f = font();
+            f.setPointSize(10);
+            f.setWeight(QFont::DemiBold);
+            painter.setFont(f);
+            QRect text_rect(30, 0, width() - 30, h);
+            painter.drawText(text_rect, Qt::AlignLeft | Qt::AlignVCenter, text());
+        }
+
+        void enterEvent(QEvent* event) override {
+            QCheckBox::enterEvent(event);
+            update();
+        }
+
+        void leaveEvent(QEvent* event) override {
+            QCheckBox::leaveEvent(event);
+            update();
+        }
+    };
 }
 
 void SettingsDialog::show_settings(QWidget* parent) {
     if (!g_active_settings) {
         g_active_settings = new SettingsDialog(parent);
+    }
+    if (g_active_settings->ctrl_np_checkbox_) {
+        bool blocked = g_active_settings->ctrl_np_checkbox_->blockSignals(true);
+        g_active_settings->ctrl_np_checkbox_->setChecked(
+            core::ConfigManager::instance().is_ctrl_np_navigation_enabled()
+        );
+        g_active_settings->ctrl_np_checkbox_->blockSignals(blocked);
+        g_active_settings->ctrl_np_checkbox_->update();
     }
     g_active_settings->show();
     g_active_settings->raise();
@@ -358,6 +436,49 @@ void SettingsDialog::setup_ui() {
 
     tab_widget_->addTab(dir_tab, "📁 Search Directories");
 
+    // ========================================================================
+    // Tab 3: Navigation & Keyboard
+    // ========================================================================
+    auto* nav_tab = new QWidget();
+    auto* nav_layout = new QVBoxLayout(nav_tab);
+    nav_layout->setSpacing(14);
+    nav_layout->setContentsMargins(12, 12, 12, 12);
+
+    auto* card = new QWidget(nav_tab);
+    card->setObjectName("navCard");
+    card->setStyleSheet(
+        "#navCard {"
+        "  background-color: #141418;"
+        "  border: 1px solid rgba(255, 255, 255, 0.08);"
+        "  border-radius: 8px;"
+        "}"
+    );
+    auto* card_layout = new QVBoxLayout(card);
+    card_layout->setSpacing(8);
+    card_layout->setContentsMargins(18, 16, 18, 16);
+
+    ctrl_np_checkbox_ = new ModernCheckBox("Enable Ctrl+N / Ctrl+P navigation for search results", card);
+    ctrl_np_checkbox_->setChecked(core::ConfigManager::instance().is_ctrl_np_navigation_enabled());
+    connect(ctrl_np_checkbox_, &QCheckBox::toggled, this, &SettingsDialog::on_ctrl_np_toggled);
+    card_layout->addWidget(ctrl_np_checkbox_);
+
+    auto* desc_label = new QLabel(
+        "When enabled, you can navigate up and down through search suggestions using Ctrl+N (next) "
+        "and Ctrl+P (previous) in addition to the arrow keys. This is especially convenient for Vim users "
+        "and terminal workflows without moving your hands away from the home row.",
+        card
+    );
+    desc_label->setWordWrap(true);
+    desc_label->setCursor(Qt::PointingHandCursor);
+    desc_label->setStyleSheet("color: #9A9AA4; font-size: 12px; line-height: 1.4; border: none; background: transparent; padding-left: 30px;");
+    desc_label->installEventFilter(this);
+    card_layout->addWidget(desc_label);
+
+    nav_layout->addWidget(card);
+    nav_layout->addStretch();
+
+    tab_widget_->addTab(nav_tab, "⌨ Navigation");
+
     main_layout->addWidget(tab_widget_, 1);
 
     // Bottom bar
@@ -512,6 +633,21 @@ void SettingsDialog::on_open_directory() {
     auto* item = dir_list_->currentItem();
     if (!item) return;
     QDesktopServices::openUrl(QUrl::fromLocalFile(item->text()));
+}
+
+void SettingsDialog::on_ctrl_np_toggled(bool checked) {
+    core::ConfigManager::instance().set_ctrl_np_navigation_enabled(checked);
+    emit settings_changed();
+}
+
+bool SettingsDialog::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::MouseButtonRelease) {
+        if (ctrl_np_checkbox_) {
+            ctrl_np_checkbox_->toggle();
+            return true;
+        }
+    }
+    return QDialog::eventFilter(watched, event);
 }
 
 } // namespace nexus::ui

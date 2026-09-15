@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QLabel>
 #include <QTimer>
 #include <memory>
 
@@ -38,12 +39,16 @@ private:
     void setup_ui();
     void center_on_screen();
     void update_results(const std::vector<core::SearchResult>& results);
+    void update_footer_hint();
+    void select_next_result();
+    void select_prev_result();
 
     std::shared_ptr<core::SearchEngine> search_engine_;
     QLineEdit* search_input_{nullptr};
     QListWidget* result_list_{nullptr};
     QWidget* container_{nullptr};
     QWidget* footer_{nullptr};
+    QLabel* hint_label_{nullptr};
     QTimer* debounce_timer_{nullptr};
     std::vector<core::SearchResult> current_results_;
 };

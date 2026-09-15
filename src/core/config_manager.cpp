@@ -66,6 +66,7 @@ std::string ConfigManager::resolve_config_path() {
 }
 
 void ConfigManager::set_defaults() {
+    enable_ctrl_np_navigation_ = true;
     search_directories_.clear();
 
     const char* home = std::getenv("HOME");
@@ -115,6 +116,15 @@ bool ConfigManager::load(const std::string& custom_path) {
     bool in_search_dirs = false;
 
     while (std::getline(file, line)) {
+        if (line.find("\"enable_ctrl_np_navigation\"") != std::string::npos) {
+            if (line.find("false") != std::string::npos) {
+                enable_ctrl_np_navigation_ = false;
+            } else if (line.find("true") != std::string::npos) {
+                enable_ctrl_np_navigation_ = true;
+            }
+            continue;
+        }
+
         if (line.find("\"search_directories\"") != std::string::npos) {
             in_search_dirs = true;
             continue;
@@ -151,6 +161,7 @@ bool ConfigManager::save() {
     }
 
     file << "{\n";
+    file << "  \"enable_ctrl_np_navigation\": " << (enable_ctrl_np_navigation_ ? "true" : "false") << ",\n";
     file << "  \"search_directories\": [\n";
     for (size_t i = 0; i < search_directories_.size(); ++i) {
         file << "    \"" << search_directories_[i] << "\"";
@@ -207,6 +218,19 @@ bool ConfigManager::remove_search_directory(const std::string& path) {
         }
     }
     return save();
+}
+
+bool ConfigManager::is_ctrl_np_navigation_enabled() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return enable_ctrl_np_navigation_;
+}
+
+void ConfigManager::set_ctrl_np_navigation_enabled(bool enabled) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        enable_ctrl_np_navigation_ = enabled;
+    }
+    save();
 }
 
 } // namespace nexus::core

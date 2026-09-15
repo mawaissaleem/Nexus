@@ -7,6 +7,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QCheckBox>
 #include <memory>
 
 namespace nexus::ui {
@@ -46,6 +47,9 @@ public:
 signals:
     void settings_changed();
 
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private slots:
     // Alias tab slots
     void on_add_alias();
@@ -57,6 +61,9 @@ private slots:
     void on_add_directory();
     void on_remove_directory();
     void on_open_directory();
+
+    // Navigation tab slots
+    void on_ctrl_np_toggled(bool checked);
 
 private:
     void setup_ui();
@@ -79,6 +86,9 @@ private:
     QPushButton* add_dir_btn_{nullptr};
     QPushButton* remove_dir_btn_{nullptr};
     QPushButton* open_dir_btn_{nullptr};
+
+    // Navigation widgets
+    QCheckBox* ctrl_np_checkbox_{nullptr};
 };
 
 } // namespace nexus::ui
