@@ -32,8 +32,6 @@ Testing/
 *.db-wal
 *.db-shm
 
-README.md
-nexus-SRS.md
 commands_to_build.txt
 
 
