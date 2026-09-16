@@ -18,6 +18,7 @@
 #include <QPainterPath>
 #include <QFontMetrics>
 #include <QEvent>
+#include <QPalette>
 
 namespace nexus::ui {
 
@@ -29,6 +30,9 @@ AliasEditDialog::AliasEditDialog(QWidget* parent,
                                  const QString& initial_name,
                                  const QString& initial_target)
     : QDialog(parent) {
+    if (parent) {
+        setPalette(parent->palette());
+    }
     setWindowTitle(initial_name.isEmpty() ? "Add New Alias" : "Edit Alias");
     setMinimumWidth(480);
     setup_ui();
@@ -261,11 +265,29 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
 }
 
 void SettingsDialog::apply_theme() {
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, QColor(24, 24, 30));
+    pal.setColor(QPalette::WindowText, QColor(240, 240, 245));
+    pal.setColor(QPalette::Base, QColor(20, 20, 24));
+    pal.setColor(QPalette::Text, QColor(240, 240, 245));
+    pal.setColor(QPalette::Button, QColor(45, 45, 56));
+    pal.setColor(QPalette::ButtonText, QColor(255, 255, 255));
+    pal.setColor(QPalette::Highlight, QColor(0, 122, 255));
+    pal.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+    setPalette(pal);
+
     setStyleSheet(
-        "QDialog {"
+        "QDialog, QMessageBox {"
         "  background-color: #18181E;"
         "  color: #F0F0F5;"
         "  font-family: system-ui, -apple-system, sans-serif;"
+        "}"
+        "QLabel {"
+        "  color: #F0F0F5;"
+        "}"
+        "QMessageBox QLabel {"
+        "  color: #F0F0F5;"
+        "  font-size: 13px;"
         "}"
         "QTabWidget::pane {"
         "  border: 1px solid rgba(255, 255, 255, 0.1);"
