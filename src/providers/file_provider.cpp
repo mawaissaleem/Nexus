@@ -55,7 +55,7 @@ std::vector<core::SearchResult> FileProvider::search(
     std::vector<core::SearchResult> results;
 
     bool is_file_mode = (query.mode() == core::QueryMode::File);
-    if (!is_file_mode && query.mode() != core::QueryMode::General) {
+    if (!is_file_mode) {
         return results;
     }
 
