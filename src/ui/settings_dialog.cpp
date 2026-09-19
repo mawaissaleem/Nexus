@@ -223,11 +223,14 @@ namespace {
             QRect text_rect(30, 0, width() - 30, h);
             painter.drawText(text_rect, Qt::AlignLeft | Qt::AlignVCenter, text());
         }
-
-        void enterEvent(QEvent* event) override {
-            QCheckBox::enterEvent(event);
-            update();
-        }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+void enterEvent(QEnterEvent* event) override {
+#else
+void enterEvent(QEvent* event) override {
+#endif
+    QCheckBox::enterEvent(event);
+    update();
+}
 
         void leaveEvent(QEvent* event) override {
             QCheckBox::leaveEvent(event);
