@@ -3,10 +3,14 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <spawn.h>
+#include <fcntl.h>
 #include <sstream>
 #include <vector>
 #include <cstring>
 #include <cstdlib>
+
+extern char **environ;
 
 namespace nexus::core {
 
@@ -100,8 +104,52 @@ bool Executor::launch_shell_command(std::string_view command) {
 
 bool Executor::open_path_or_url(std::string_view target) {
     if (target.empty()) return false;
-    std::string command = "xdg-open \"" + std::string(target) + "\"";
-    return launch_shell_command(command);
+
+    std::string target_str(target);
+    std::vector<char*> argv = {
+        const_cast<char*>("xdg-open"),
+        target_str.data(),
+        nullptr
+    };
+
+    posix_spawnattr_t attr;
+    posix_spawn_file_actions_t actions;
+
+    if (posix_spawnattr_init(&attr) != 0 || posix_spawn_file_actions_init(&actions) != 0) {
+        if (posix_spawnattr_init(&attr) == 0) {
+            posix_spawnattr_destroy(&attr);
+        }
+        if (posix_spawn_file_actions_init(&actions) == 0) {
+            posix_spawn_file_actions_destroy(&actions);
+        }
+        return false;
+    }
+
+    int stdin_fd = open("/dev/null", O_RDONLY);
+    int stdout_fd = open("/dev/null", O_WRONLY);
+    int stderr_fd = open("/dev/null", O_WRONLY);
+
+    if (stdin_fd >= 0) {
+        posix_spawn_file_actions_adddup2(&actions, stdin_fd, STDIN_FILENO);
+        close(stdin_fd);
+    }
+    if (stdout_fd >= 0) {
+        posix_spawn_file_actions_adddup2(&actions, stdout_fd, STDOUT_FILENO);
+        close(stdout_fd);
+    }
+    if (stderr_fd >= 0) {
+        posix_spawn_file_actions_adddup2(&actions, stderr_fd, STDERR_FILENO);
+        close(stderr_fd);
+    }
+
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID);
+
+    pid_t pid = 0;
+    int rc = posix_spawnp(&pid, "xdg-open", &actions, &attr, argv.data(), environ);
+
+    posix_spawnattr_destroy(&attr);
+    posix_spawn_file_actions_destroy(&actions);
+    return rc == 0;
 }
 
 } // namespace nexus::core
