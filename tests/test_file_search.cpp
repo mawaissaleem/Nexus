@@ -26,22 +26,32 @@ int main() {
     FileProvider provider;
     std::atomic<bool> cancel{false};
 
-    // Test 1: Search directory name
+    // Test 1: Search directory name (explicit "file " prefix required —
+    // FileProvider no longer responds to General-mode queries, see file_provider.cpp)
     {
-        Query q("my_project");
+        Query q("file my_project");
         auto results = provider.search(q, cancel);
         assert(!results.empty());
         assert(results[0].title == "my_project");
         assert(results[0].icon == "folder");
     }
 
-    // Test 2: Search file inside directory
+    // Test 2: Search file inside directory (explicit "file " prefix required)
     {
-        Query q("thesis");
+        Query q("file thesis");
         auto results = provider.search(q, cancel);
         assert(!results.empty());
         assert(results[0].title == "thesis.pdf");
         assert(results[0].icon == "application-pdf");
+    }
+
+    // Test 4: General-mode queries must NOT trigger a file search
+    // (this is the actual behavior being fixed for 0.1.0 — file search must
+    // only run behind the explicit "file " prefix, never on plain typing)
+    {
+        Query q("my_project");
+        auto results = provider.search(q, cancel);
+        assert(results.empty());
     }
 
     // Test 3: Explicit file mode
