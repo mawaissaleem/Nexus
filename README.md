@@ -88,7 +88,7 @@ Listed honestly so you know what you are getting. These are planned — see the 
 - Linux, **X11 session** (see [Wayland](#wayland))
 - CMake 3.22 or newer
 - A C++20 compiler (GCC 11+ or Clang 14+)
-- Qt 6 or Qt 5 — `Core`, `Gui`, `Widgets`, `Network`
+- Qt — `Core`, `Gui`, `Widgets`, `Network`. Developed and tested against **Qt 5.15.3**. Qt 6 builds successfully and is covered by CI, but has had far less real-world testing — see [Known Qt6 differences](#known-qt6-differences) if you hit anything.
 - SQLite 3 development headers
 - libX11 development headers
 
@@ -210,6 +210,9 @@ Command: nexus --toggle
 
 GNOME: Settings → Keyboard → Custom Shortcuts. KDE: System Settings → Shortcuts → Custom Shortcuts.
 
+## Known Qt6 differences
+
+Nexus targets Qt 5.15.3 in day-to-day development. CI builds against Qt 6 to catch API drift early, but Qt6 has not had the same hours of real usage as Qt5. One signature change has already surfaced and been fixed (`QWidget::enterEvent` takes `QEnterEvent*` in Qt6 vs `QEvent*` in Qt5 — handled with a `QT_VERSION_CHECK` guard in `settings_dialog.cpp`). If you build against Qt6 and something behaves differently from what's described here, please open an issue.
 
 ## Where your data lives
 

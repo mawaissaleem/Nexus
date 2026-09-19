@@ -23,7 +23,8 @@ endif()
 find_package(Threads REQUIRED)
 find_package(SQLite3 REQUIRED)
 
-# Qt: Prefer Qt6, fall back to Qt5
+# Qt: developed and tested against Qt 5.15.3. Qt6 is supported and built in CI
+# but has had less real-world testing — watch for API differences (see README).
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets Network)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Network)
 message(STATUS "Using Qt version: ${QT_VERSION_MAJOR} (${Qt${QT_VERSION_MAJOR}_VERSION})")

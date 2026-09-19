@@ -2,13 +2,26 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Qt 5.15.3 (matches local dev)"
+            os: ubuntu-22.04
+            qt_package: qtbase5-dev
+
+          - name: "Qt 6 (forward compatibility)"
+            os: ubuntu-24.04
+            qt_package: qt6-base-dev
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Check out repository
@@ -21,7 +34,7 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
-            qt6-base-dev \
+            ${{ matrix.qt_package }} \
             libsqlite3-dev \
             libx11-dev
 
