@@ -9,6 +9,9 @@ set(TEST_TARGETS
     test_alias
     test_file_search
     test_config
+    test_query
+    test_executor
+    test_search_engine
 )
 
 foreach(test_name ${TEST_TARGETS})
