@@ -12,6 +12,7 @@ set(TEST_TARGETS
     test_query
     test_executor
     test_search_engine
+    test_async_search_coordinator
 )
 
 foreach(test_name ${TEST_TARGETS})

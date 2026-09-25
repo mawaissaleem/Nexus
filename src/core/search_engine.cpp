@@ -30,6 +30,10 @@ void SearchEngine::unregister_provider(const std::string& provider_id) {
 }
 
 std::vector<SearchResult> SearchEngine::search(const Query& query, size_t max_results) {
+    return search(query, current_cancel_token_, max_results);
+}
+
+std::vector<SearchResult> SearchEngine::search(const Query& query, std::atomic<bool>& cancel_token, size_t max_results) {
     std::vector<SearchResult> combined_results;
 
     if (query.empty()) {
@@ -43,12 +47,12 @@ std::vector<SearchResult> SearchEngine::search(const Query& query, size_t max_re
     }
 
     for (const auto& provider : current_providers) {
-        if (current_cancel_token_.load()) {
+        if (cancel_token.load()) {
             break;
         }
 
         try {
-            auto provider_results = provider->search(query, current_cancel_token_);
+            auto provider_results = provider->search(query, cancel_token);
             combined_results.insert(
                 combined_results.end(),
                 std::make_move_iterator(provider_results.begin()),
@@ -61,7 +65,7 @@ std::vector<SearchResult> SearchEngine::search(const Query& query, size_t max_re
         }
     }
 
-    if (current_cancel_token_.load()) {
+    if (cancel_token.load()) {
         return {};
     }
 
