@@ -20,6 +20,9 @@ LauncherWindow::LauncherWindow(
     std::shared_ptr<core::SearchEngine> search_engine,
     QWidget* parent
 ) : QWidget(parent), search_engine_(std::move(search_engine)) {
+    query_manager_ = std::make_unique<QueryManager>(search_engine_, this);
+    connect(query_manager_.get(), &QueryManager::results_ready, this, &LauncherWindow::on_search_results);
+
     setup_ui();
 
     debounce_timer_ = new QTimer(this);
@@ -220,6 +223,9 @@ void LauncherWindow::show_launcher() {
 }
 
 void LauncherWindow::hide_launcher() {
+    if (query_manager_) {
+        query_manager_->cancel_all();
+    }
     hide();
 }
 
@@ -238,6 +244,9 @@ void LauncherWindow::on_text_changed(const QString& /*text*/) {
 void LauncherWindow::perform_search() {
     QString q_str = search_input_->text().trimmed();
     if (q_str.isEmpty()) {
+        if (query_manager_) {
+            query_manager_->cancel_all();
+        }
         result_list_->clear();
         result_list_->hide();
         current_results_.clear();
@@ -245,10 +254,16 @@ void LauncherWindow::perform_search() {
         return;
     }
 
-    core::Query query(q_str.toStdString());
-    auto results = search_engine_->search(query, 7);
+    query_manager_->search(q_str, 7);
+}
 
-    QString lower = q_str.toLower();
+void LauncherWindow::on_search_results(const std::vector<core::SearchResult>& results, const QString& query_text) {
+    if (search_input_->text().trimmed().isEmpty()) {
+        return;
+    }
+
+    auto final_results = results;
+    QString lower = query_text.toLower();
     if (lower == "settings" || lower == "setting" || lower == "config" || lower == "preferences" || lower == "prefs") {
         core::SearchResult settings_res;
         settings_res.title = "Nexus Settings";
@@ -260,10 +275,10 @@ void LauncherWindow::perform_search() {
             open_settings();
             return true;
         };
-        results.insert(results.begin(), settings_res);
+        final_results.insert(final_results.begin(), settings_res);
     }
 
-    update_results(results);
+    update_results(final_results);
 }
 
 void LauncherWindow::update_results(const std::vector<core::SearchResult>& results) {

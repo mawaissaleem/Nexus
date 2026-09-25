@@ -1,6 +1,7 @@
 #pragma once
 
 #include "nexus/core/search_engine.hpp"
+#include "nexus/ui/query_manager.hpp"
 #include <QWidget>
 #include <QLineEdit>
 #include <QListWidget>
@@ -32,6 +33,7 @@ protected:
 private slots:
     void on_text_changed(const QString& text);
     void perform_search();
+    void on_search_results(const std::vector<core::SearchResult>& results, const QString& query_text);
     void on_item_clicked(QListWidgetItem* item);
     void execute_selected();
 
@@ -51,6 +53,7 @@ private:
     QLabel* hint_label_{nullptr};
     QTimer* debounce_timer_{nullptr};
     std::vector<core::SearchResult> current_results_;
+    std::unique_ptr<QueryManager> query_manager_{nullptr};
 };
 
 } // namespace nexus::ui

@@ -23,6 +23,7 @@ public:
 
     // Synchronous search across all providers with ranking
     std::vector<SearchResult> search(const Query& query, size_t max_results = 20);
+    std::vector<SearchResult> search(const Query& query, std::atomic<bool>& cancel_token, size_t max_results = 20);
 
     // Asynchronous search with cancellation support
     // Starts search in background, cancelling any in-flight search.

@@ -42,6 +42,7 @@ set(NEXUS_CORE_SOURCES
     src/core/executor.cpp
     src/core/ranking_engine.cpp
     src/core/search_engine.cpp
+    src/core/async_search_coordinator.cpp
     src/index/desktop_entry.cpp
     src/index/database.cpp
     src/index/app_indexer.cpp
@@ -74,6 +75,7 @@ set(NEXUS_UI_HEADERS
     include/nexus/ui/result_widget.hpp
     include/nexus/ui/launcher_window.hpp
     include/nexus/ui/settings_dialog.hpp
+    include/nexus/ui/query_manager.hpp
 )
 
 set(NEXUS_UI_SOURCES
@@ -81,6 +83,7 @@ set(NEXUS_UI_SOURCES
     src/ui/result_widget.cpp
     src/ui/launcher_window.cpp
     src/ui/settings_dialog.cpp
+    src/ui/query_manager.cpp
 )
 
 # Main Application Executable (GUI + CLI fallback)
