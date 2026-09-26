@@ -45,8 +45,12 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results)
             }
         }
 
-        // Combine scores with base fuzzy score
-        res.score = (res.score * weights_.fuzzy_weight) + lexical_score + usage_score;
+        // Combine scores: normalize raw provider score into [0.0, 1.0], scale by provider_relevance_weight,
+        // and add lexical and usage boosts
+        double normalized_relevance = (weights_.max_provider_score > 0.0)
+            ? std::clamp(res.score / weights_.max_provider_score, 0.0, 1.0)
+            : 0.0;
+        res.score = (normalized_relevance * weights_.provider_relevance_weight) + lexical_score + usage_score;
     }
 
     // Sort descending by score
