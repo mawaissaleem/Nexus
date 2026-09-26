@@ -8,7 +8,70 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
-## [0.1.0] — 2026-09-20
+## [0.2.0] — 2026-09-27
+
+Closes out Phase 2 (search architecture) from `nexus-SRS.md`. No new
+user-facing features — this release is entirely about fixing how search
+runs internally: it no longer blocks the UI, cancellation actually works,
+and ranking is no longer distorted by inconsistent provider score scales.
+
+### Fixed
+
+- **UI freezing during search (D-12).** `LauncherWindow` previously called
+  `SearchEngine::search()` directly and synchronously on the Qt main
+  thread, so every provider's work — including any filesystem access —
+  ran on the same thread responsible for the window responding to input.
+  Search is now dispatched through a new `QueryManager` (UI layer) backed
+  by `AsyncSearchCoordinator` (Qt-free, in `nexus_core`), so provider work
+  runs off the UI thread and results are marshaled back safely.
+- **Broken search cancellation (D-14).** `SearchEngine::search_async()`
+  and `cancel()` shared a single reused cancellation token across
+  overlapping calls, so a newer search could reset the flag before an
+  older, still-running search ever read it — meaning cancellation
+  frequently did nothing. Every search now gets its own independently
+  owned cancellation token and a generation number; a superseded search's
+  results are discarded even if the search itself doesn't stop in time.
+  `search_async()` and `cancel()` are left in place, unused — see Known
+  issues.
+- **Ranking dominated by arbitrary provider score scale (D-29).** A
+  provider's raw `res.score` (ranging from ~400 to 2500 depending on
+  provider) was added directly to `RankingEngine`'s own lexical/usage
+  boosts (max ~800 combined), so a provider's arbitrary choice of raw
+  score could overwhelm actual match-quality signals regardless of how
+  well something matched the query. Provider scores are now normalized to
+  a 0.0–1.0 relevance value before being combined, so provider score
+  scale and ranking weight tuning are independent again.
+
+### Added
+
+- Unit tests for `Query`, `Executor`, and `SearchEngine` (D-40) — three
+  previously untested, central classes now have dedicated coverage.
+- `AsyncSearchCoordinator` tests covering generation ordering, discarding
+  superseded results, and cancellation token delivery.
+- Two new `RankingEngine` tests verifying a low-scoring provider with an
+  exact lexical match now correctly outranks a high-scoring provider with
+  no match, and that score normalization clamps correctly.
+- Test count: 8 → 12.
+
+### Known issues
+
+Carried forward from 0.1.0 except where noted resolved below. See
+`nexus-SRS.md` for full detail.
+
+- `SearchEngine::search_async()` and `cancel()` still exist, unused —
+  superseded by `AsyncSearchCoordinator`/`QueryManager` rather than
+  repaired or removed. Removing them is a candidate for future cleanup.
+- **File search is still slow to run** (though it no longer freezes the
+  UI while doing so). Each `file `-prefixed search still performs a live
+  filesystem walk rather than querying an index — the index itself is
+  Phase 3 work, not yet started.
+- No plugin system, no web/clipboard providers, no system actions, no URL
+  detection, no Wayland support, no configurable shortcut, no schema
+  migrations, no incremental indexing, no history controls, no unit
+  conversion, minimal settings coverage, dark theme only, no accessibility
+  pass — all unchanged from 0.1.0.
+
+
 
 First tagged release. Nexus is a working, daily-usable launcher on X11. It is
 not feature-complete against its own specification — see **Known issues**

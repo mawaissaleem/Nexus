@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.1.0 — early release.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: the plugin system, web search, and clipboard history are not built yet, and Wayland is not supported. See [Not implemented yet](#not-implemented-yet) before installing.
+> **Version 0.2.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: the plugin system, web search, and clipboard history are not built yet, and Wayland is not supported. See [Not implemented yet](#not-implemented-yet) before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -223,7 +223,7 @@ Everything stays on your machine. Nexus makes no network requests and requires n
 ~/.config/nexus/config.json       Search directories, aliases, navigation settings
 ```
 
-Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe all history, delete `nexus.db` — it will be rebuilt on next launch. A proper clear-history command is planned for 0.3.0.
+Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe all history, delete `nexus.db` — it will be rebuilt on next launch. A proper clear-history command is planned for 0.4.0.
 
 
 ## Architecture
@@ -268,19 +268,26 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
-Eight suites cover fuzzy matching, desktop-entry parsing, ranking, the calculator, the database layer, aliases, file search and configuration. Integration and performance suites are planned for 0.2.0.
+Twelve suites cover fuzzy matching, desktop-entry parsing, ranking, the calculator, the database layer, aliases, file search, configuration, query parsing, OS-integration (`Executor`), the search engine, and async search cancellation. Integration and performance suites are not yet started — see the [roadmap](#roadmap).
 
 
 ## Roadmap
 
 | Version | Focus |
 |---|---|
-| **0.1.0** | This release: apps, calculator, shell, files, aliases on X11 |
-| 0.2.0 | Search off the UI thread, real file index with inotify, schema migrations, published benchmarks |
-| 0.3.0 | Configurable shortcut, themes, full settings coverage, history controls, query-aware ranking |
-| 0.4.0 | Plugin API, discovery, lifecycle and isolation; web, clipboard and system actions built as plugins |
-| 0.5.0 | Wayland support, packaging, tested across GNOME / KDE / XFCE |
+| ~~0.1.0~~ | **Shipped.** Apps, calculator, shell, files, aliases on X11 |
+| ~~0.2.0~~ | **Shipped.** Search moved off the UI thread, search cancellation fixed, ranking no longer distorted by inconsistent provider score scales |
+| 0.3.0 | Real file index with inotify watching, schema migrations, published benchmarks |
+| 0.4.0 | Configurable shortcut, themes, full settings coverage, history controls, query-aware ranking |
+| 0.5.0 | Plugin API, discovery, lifecycle and isolation; web, clipboard and system actions built as plugins |
+| 0.6.0 | Wayland support, packaging, tested across GNOME / KDE / XFCE |
 | 1.0.0 | Stable plugin API, accessibility, security review |
+
+Revised after 0.2.0: the file index, schema migrations, and benchmarks
+originally planned for 0.2.0 didn't ship in it — that release ended up
+scoped entirely to fixing how search runs internally instead. They're
+carried forward to 0.3.0 rather than pretended-done here.
+
 
 The full specification lives in [`nexus-SRS.md`](nexus-SRS.md).
 
@@ -300,7 +307,7 @@ Found a security problem? Open an issue, or mail the address on the author's Git
 
 ## Contributing
 
-Issues and pull requests are welcome. Because the plugin API does not exist yet, new search sources currently mean adding a provider to `src/providers/` and registering it in `src/main.cpp` — that will change in 0.4.0, so expect churn there.
+Issues and pull requests are welcome. Because the plugin API does not exist yet, new search sources currently mean adding a provider to `src/providers/` and registering it in `src/main.cpp` — that will change in 0.5.0, so expect churn there.
 
 Build with warnings on (`-Wall -Wextra -Wpedantic` are enabled by default) and keep `ctest` green.
 

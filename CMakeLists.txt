@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(nexus VERSION 0.1.0 LANGUAGES CXX C)
+project(nexus VERSION 0.2.0 LANGUAGES CXX C)
 
 # Enforce C++20 standard
 set(CMAKE_CXX_STANDARD 20)
