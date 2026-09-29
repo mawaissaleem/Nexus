@@ -1,4 +1,6 @@
 #include <cassert>
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include "nexus/core/executor.hpp"
 
@@ -37,7 +39,28 @@ int main() {
         assert(ok);
     }
 
-    // Do NOT call open_path_or_url here to avoid spawning GUI-openers in CI.
+    // open_path_or_url must keep redirected descriptors open until xdg-open starts.
+    {
+        const auto fake_bin = std::filesystem::temp_directory_path() / "nexus_test_xdg_open";
+        std::filesystem::remove_all(fake_bin);
+        std::filesystem::create_directories(fake_bin);
+        std::filesystem::create_symlink("/usr/bin/true", fake_bin / "xdg-open");
+
+        const char* current_path = std::getenv("PATH");
+        const std::string saved_path = current_path ? current_path : "";
+        setenv("PATH", fake_bin.c_str(), 1);
+        bool ok = Executor::open_path_or_url("https://example.invalid");
+        if (current_path) {
+            setenv("PATH", saved_path.c_str(), 1);
+        } else {
+            unsetenv("PATH");
+        }
+
+        std::filesystem::remove_all(fake_bin);
+        assert(ok);
+    }
+
+    // Do not spawn a real GUI opener in CI; the regression above uses a fake.
 
     std::cout << "All Executor tests passed successfully!\n";
     return 0;

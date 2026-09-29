@@ -131,15 +131,12 @@ bool Executor::open_path_or_url(std::string_view target) {
 
     if (stdin_fd >= 0) {
         posix_spawn_file_actions_adddup2(&actions, stdin_fd, STDIN_FILENO);
-        close(stdin_fd);
     }
     if (stdout_fd >= 0) {
         posix_spawn_file_actions_adddup2(&actions, stdout_fd, STDOUT_FILENO);
-        close(stdout_fd);
     }
     if (stderr_fd >= 0) {
         posix_spawn_file_actions_adddup2(&actions, stderr_fd, STDERR_FILENO);
-        close(stderr_fd);
     }
 
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID);
@@ -147,6 +144,9 @@ bool Executor::open_path_or_url(std::string_view target) {
     pid_t pid = 0;
     int rc = posix_spawnp(&pid, "xdg-open", &actions, &attr, argv.data(), environ);
 
+    if (stdin_fd >= 0) close(stdin_fd);
+    if (stdout_fd >= 0) close(stdout_fd);
+    if (stderr_fd >= 0) close(stderr_fd);
     posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&actions);
     return rc == 0;
