@@ -1,4 +1,5 @@
 #include "nexus/index/database.hpp"
+#include "nexus/index/database_migrations.hpp"
 #include "nexus/utils/logger.hpp"
 #include <sqlite3.h>
 #include <filesystem>
@@ -54,6 +55,226 @@ std::string Database::default_db_path() {
     return (dir / "nexus.db").string();
 }
 
+bool validate_migrations(const std::vector<Migration>& migrations) {
+    if (migrations.empty()) {
+        NEXUS_LOG_ERROR("Migration list is empty.");
+        return false;
+    }
+    for (size_t i = 0; i < migrations.size(); ++i) {
+        int expected_version = static_cast<int>(i + 1);
+        if (migrations[i].version != expected_version) {
+            NEXUS_LOG_ERROR("Migration list validation failed: migration at index " +
+                            std::to_string(i) + " has version " +
+                            std::to_string(migrations[i].version) +
+                            ", expected " + std::to_string(expected_version));
+            return false;
+        }
+        if (migrations[i].sql.empty() && !migrations[i].step) {
+            NEXUS_LOG_ERROR("Migration list validation failed: migration at index " +
+                            std::to_string(i) + " (version " +
+                            std::to_string(migrations[i].version) +
+                            ") has both empty SQL and null step function.");
+            return false;
+        }
+    }
+    return true;
+}
+
+int get_schema_version(sqlite3* db) {
+    if (!db) return -1;
+    const char* sql = "SELECT COALESCE(MAX(version), 0) FROM schema_version;";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return -1;
+    }
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+    int version = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+    return version;
+}
+
+const std::vector<Migration>& default_migrations() {
+    static const std::vector<Migration> migrations = {
+        {
+            1,
+            "baseline schema",
+            R"(
+                CREATE TABLE IF NOT EXISTS applications (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    generic_name TEXT,
+                    comment TEXT,
+                    exec TEXT NOT NULL,
+                    icon TEXT,
+                    desktop_file TEXT NOT NULL,
+                    categories TEXT,
+                    keywords TEXT,
+                    terminal INTEGER DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS usage_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    app_id TEXT NOT NULL,
+                    query TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS query_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    query TEXT NOT NULL,
+                    selected_id TEXT,
+                    provider_id TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_usage_app_id ON usage_events(app_id);
+            )"
+        }
+    };
+    return migrations;
+}
+
+namespace {
+
+bool bootstrap_schema(sqlite3* db) {
+    const char* bootstrap_sql = R"(
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY
+        );
+    )";
+    char* err_msg = nullptr;
+    int rc = sqlite3_exec(db, bootstrap_sql, nullptr, nullptr, &err_msg);
+    if (rc != SQLITE_OK) {
+        NEXUS_LOG_ERROR("Failed to bootstrap schema_version table: " + std::string(err_msg ? err_msg : "unknown error"));
+        if (err_msg) sqlite3_free(err_msg);
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
+    if (!db) {
+        NEXUS_LOG_ERROR("run_migrations called with null database handle");
+        return false;
+    }
+
+    if (!validate_migrations(migrations)) {
+        return false;
+    }
+
+    if (!bootstrap_schema(db)) {
+        return false;
+    }
+
+    int current_version = get_schema_version(db);
+    if (current_version < 0) {
+        NEXUS_LOG_ERROR("Failed to query schema version from database: " + std::string(sqlite3_errmsg(db)));
+        return false;
+    }
+
+    int max_known_version = migrations.back().version;
+
+    if (current_version > max_known_version) {
+        NEXUS_LOG_ERROR("Database schema version (" + std::to_string(current_version) +
+                        ") is newer than newest supported migration version (" +
+                        std::to_string(max_known_version) + "). Aborting.");
+        return false;
+    }
+
+    for (const auto& migration : migrations) {
+        if (migration.version <= current_version) {
+            continue;
+        }
+
+        char* err_msg = nullptr;
+        int rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", nullptr, nullptr, &err_msg);
+        if (rc != SQLITE_OK) {
+            NEXUS_LOG_ERROR("Failed to begin immediate transaction for migration " +
+                            std::to_string(migration.version) + ": " +
+                            (err_msg ? err_msg : "unknown error"));
+            if (err_msg) sqlite3_free(err_msg);
+            return false;
+        }
+
+        // Re-read current schema version inside transaction to handle races
+        int version_in_tx = get_schema_version(db);
+        if (version_in_tx < 0) {
+            NEXUS_LOG_ERROR("Failed to query schema version inside transaction for migration " +
+                            std::to_string(migration.version) + ": " + std::string(sqlite3_errmsg(db)));
+            sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+            return false;
+        }
+
+        if (version_in_tx >= migration.version) {
+            sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
+            current_version = version_in_tx;
+            continue;
+        }
+
+        if (!migration.sql.empty()) {
+            rc = sqlite3_exec(db, migration.sql.c_str(), nullptr, nullptr, &err_msg);
+            if (rc != SQLITE_OK) {
+                NEXUS_LOG_ERROR("Failed to execute SQL for migration " +
+                                std::to_string(migration.version) + ": " +
+                                (err_msg ? err_msg : "unknown error"));
+                if (err_msg) sqlite3_free(err_msg);
+                sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+                return false;
+            }
+        }
+
+        if (migration.step) {
+            if (!migration.step(db)) {
+                NEXUS_LOG_ERROR("Step function failed for migration " +
+                                std::to_string(migration.version));
+                sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+                return false;
+            }
+        }
+
+        std::string record_sql = "INSERT INTO schema_version (version) VALUES (" +
+                                 std::to_string(migration.version) + ");";
+        rc = sqlite3_exec(db, record_sql.c_str(), nullptr, nullptr, &err_msg);
+        if (rc != SQLITE_OK) {
+            NEXUS_LOG_ERROR("Failed to record schema version " +
+                            std::to_string(migration.version) + ": " +
+                            (err_msg ? err_msg : "unknown error"));
+            if (err_msg) sqlite3_free(err_msg);
+            sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+            return false;
+        }
+
+        rc = sqlite3_exec(db, "COMMIT;", nullptr, nullptr, &err_msg);
+        if (rc != SQLITE_OK) {
+            NEXUS_LOG_ERROR("Failed to commit migration " +
+                            std::to_string(migration.version) + ": " +
+                            (err_msg ? err_msg : "unknown error"));
+            if (err_msg) sqlite3_free(err_msg);
+            sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+            return false;
+        }
+
+        current_version = migration.version;
+        NEXUS_LOG_INFO("Applied database migration " + std::to_string(migration.version) +
+                       (!migration.description.empty() ? (" (" + migration.description + ")") : ""));
+    }
+
+    return true;
+}
+
+namespace internal {
+void set_database_migrations_for_testing(Database& db, std::vector<Migration> migrations) {
+    std::lock_guard<std::mutex> lock(db.mutex_);
+    db.custom_migrations_ = std::move(migrations);
+}
+} // namespace internal
+
 bool Database::open() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (db_) return true;
@@ -69,6 +290,7 @@ bool Database::open() {
         }
         int rc = sqlite3_open(path.c_str(), &db_);
         if (rc == SQLITE_OK) {
+            sqlite3_busy_timeout(db_, 5000);
             db_path_ = path;
             return true;
         }
@@ -79,27 +301,39 @@ bool Database::open() {
         return false;
     };
 
+    auto finish_open = [this]() -> bool {
+        if (!init_schema()) {
+            if (db_) {
+                sqlite3_close(db_);
+                db_ = nullptr;
+            }
+            return false;
+        }
+        sqlite3_busy_timeout(db_, 250);
+        return true;
+    };
+
     if (try_open_path(db_path_)) {
         NEXUS_LOG_DEBUG("Opened database at " + db_path_);
-        return init_schema();
+        return finish_open();
     }
 
     // Fallback 1: Local .nexus.db in current working directory
     if (try_open_path(".nexus.db")) {
         NEXUS_LOG_INFO("Falling back to local database: " + db_path_);
-        return init_schema();
+        return finish_open();
     }
 
     // Fallback 2: /tmp/nexus.db
     if (try_open_path("/tmp/nexus.db")) {
         NEXUS_LOG_INFO("Falling back to temp database: " + db_path_);
-        return init_schema();
+        return finish_open();
     }
 
     // Fallback 3: In-memory
     if (try_open_path(":memory:")) {
         NEXUS_LOG_INFO("Falling back to in-memory database");
-        return init_schema();
+        return finish_open();
     }
 
     NEXUS_LOG_ERROR("Failed to initialize any SQLite database backend.");
@@ -114,54 +348,19 @@ void Database::close() {
     }
 }
 
+int Database::schema_version() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_) return 0;
+    int v = get_schema_version(db_);
+    return v < 0 ? 0 : v;
+}
+
 bool Database::init_schema() {
     if (!db_) return false;
-
-    const char* schema_sql = R"(
-        CREATE TABLE IF NOT EXISTS schema_version (
-            version INTEGER PRIMARY KEY
-        );
-
-        CREATE TABLE IF NOT EXISTS applications (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            generic_name TEXT,
-            comment TEXT,
-            exec TEXT NOT NULL,
-            icon TEXT,
-            desktop_file TEXT NOT NULL,
-            categories TEXT,
-            keywords TEXT,
-            terminal INTEGER DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS usage_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            app_id TEXT NOT NULL,
-            query TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS query_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            query TEXT NOT NULL,
-            selected_id TEXT,
-            provider_id TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_usage_app_id ON usage_events(app_id);
-    )";
-
-    char* err_msg = nullptr;
-    int rc = sqlite3_exec(db_, schema_sql, nullptr, nullptr, &err_msg);
-    if (rc != SQLITE_OK) {
-        NEXUS_LOG_ERROR("Failed to initialize database schema: " + std::string(err_msg ? err_msg : "unknown error"));
-        if (err_msg) sqlite3_free(err_msg);
-        return false;
-    }
-
-    return true;
+    const auto& migrations = custom_migrations_.has_value()
+        ? *custom_migrations_
+        : default_migrations();
+    return run_migrations(db_, migrations);
 }
 
 bool Database::save_applications(const std::vector<DesktopEntry>& entries) {

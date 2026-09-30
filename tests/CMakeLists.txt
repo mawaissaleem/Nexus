@@ -13,6 +13,7 @@ set(TEST_TARGETS
     test_executor
     test_search_engine
     test_async_search_coordinator
+    test_database_migrations
 )
 
 foreach(test_name ${TEST_TARGETS})
