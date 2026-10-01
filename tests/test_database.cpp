@@ -1,6 +1,9 @@
 #include "nexus/index/database.hpp"
 #include <iostream>
 #include <cassert>
+#include <filesystem>
+#include <fstream>
+#include <unistd.h>
 
 int main() {
     using namespace nexus::index;
@@ -38,6 +41,26 @@ int main() {
     assert(db.record_query("app", "app1", "applications"));
 
     db.close();
+
+    // Unwritable primary path must not create ./.nexus.db or /tmp/nexus.db (D-43).
+    namespace fs = std::filesystem;
+    fs::path dir = fs::temp_directory_path() / ("nexus_db_test_" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    std::ofstream(dir / "blocker") << "x";  // a file used as parent dir -> open fails
+    fs::path old_cwd = fs::current_path();
+    fs::current_path(dir);
+    std::error_code ec;
+    bool tmp_existed = fs::exists("/tmp/nexus.db", ec);
+    auto tmp_mtime = tmp_existed ? fs::last_write_time("/tmp/nexus.db", ec) : fs::file_time_type{};
+    {
+        Database bad((dir / "blocker" / "sub" / "nexus.db").string());
+        assert(bad.open());  // in-memory fallback
+    }
+    assert(!fs::exists(dir / ".nexus.db"));
+    assert(fs::exists("/tmp/nexus.db", ec) == tmp_existed);
+    if (tmp_existed) assert(fs::last_write_time("/tmp/nexus.db", ec) == tmp_mtime);
+    fs::current_path(old_cwd);
+    fs::remove_all(dir, ec);
 
     std::cout << "All Database tests passed successfully!\n";
     return 0;
