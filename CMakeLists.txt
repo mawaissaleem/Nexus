@@ -38,6 +38,7 @@ endif()
 set(NEXUS_CORE_SOURCES
     src/utils/logger.cpp
     src/utils/fuzzy.cpp
+    src/utils/shortcut.cpp
     src/core/query.cpp
     src/core/executor.cpp
     src/core/ranking_engine.cpp

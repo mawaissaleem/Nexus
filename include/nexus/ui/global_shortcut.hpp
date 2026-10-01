@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QObject>
+#include <QString>
 #include <atomic>
+#include <string>
 #include <thread>
 
 namespace nexus::ui {
@@ -16,8 +18,14 @@ public:
     bool start();
     void stop();
 
+    // Re-grabs with a new "Ctrl+Alt+Space" style string, no restart needed.
+    // Returns false if the string does not parse (previous grab is kept).
+    // A grab the X server refuses is reported later through grab_failed().
+    bool apply_shortcut(const std::string& shortcut);
+
 signals:
     void activated();
+    void grab_failed(const QString& message);
 
 private:
     void run_x11_listener();
@@ -25,10 +33,7 @@ private:
 
     std::atomic<bool> running_{false};
     std::thread listener_thread_;
-
-#if defined(Q_OS_LINUX)
-    void* x11_display_{nullptr};
-#endif
+    std::string shortcut_{"Alt+Space"};
 };
 
 } // namespace nexus::ui

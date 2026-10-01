@@ -29,6 +29,16 @@ int main() {
     config.load(temp_config_file.string());
     assert(config.is_ctrl_np_navigation_enabled() == true);
 
+    // Test 4: Global shortcut persists; invalid strings are rejected and leave it unchanged
+    assert(config.set_shortcut("Ctrl+Shift+K"));
+    assert(config.get_shortcut() == "Ctrl+Shift+K");
+    assert(!config.set_shortcut("Space"));
+    assert(config.get_shortcut() == "Ctrl+Shift+K");
+    config.load(temp_config_file.string());
+    assert(config.get_shortcut() == "Ctrl+Shift+K");
+    assert(config.is_ctrl_np_navigation_enabled() == true);
+    config.set_shortcut("Alt+Space");
+
     // Cleanup
     std::filesystem::remove(temp_config_file);
 

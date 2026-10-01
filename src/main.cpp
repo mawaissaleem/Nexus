@@ -14,12 +14,14 @@
 #include "nexus/ui/settings_dialog.hpp"
 #include "nexus/ui/global_shortcut.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/shortcut.hpp"
 #include <QApplication>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <QIcon>
+#include <QMessageBox>
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -34,7 +36,7 @@ void print_help() {
               << "Usage:\n"
               << "  nexus [options] [command]\n\n"
               << "Running without arguments starts the GUI launcher in the background.\n"
-              << "Global hotkey: Alt + Space\n\n"
+              << "Global hotkey: " << nexus::core::ConfigManager::instance().get_shortcut() << " (configurable in settings)\n\n"
               << "Options:\n"
               << "  --toggle, -t           Toggle the launcher window (shows or hides running instance)\n"
               << "  --show                 Show the launcher window on the active monitor\n"
@@ -290,7 +292,16 @@ int main(int argc, char* argv[]) {
     QObject::connect(shortcut_mgr.get(), &nexus::ui::GlobalShortcutManager::activated, [&launcher]() {
         launcher->toggle_launcher();
     });
-    shortcut_mgr->start();
+    // On Wayland the single tray notice below covers it; don't stack a second popup for the same cause.
+    const bool wayland = nexus::utils::is_wayland_session();
+    QObject::connect(shortcut_mgr.get(), &nexus::ui::GlobalShortcutManager::grab_failed, [wayland](const QString& msg) {
+        if (wayland) {
+            NEXUS_LOG_WARN("Global shortcut grab failed: " + msg.toStdString());
+            return;
+        }
+        QMessageBox::warning(nullptr, "Nexus global shortcut", msg + "\nChoose another one in Settings.");
+    });
+    shortcut_mgr->apply_shortcut(nexus::core::ConfigManager::instance().get_shortcut());
 
     // 4. System Tray Icon
     QSystemTrayIcon tray_icon;
@@ -299,12 +310,21 @@ int main(int argc, char* argv[]) {
         icon = QIcon::fromTheme("application-x-executable");
     }
     tray_icon.setIcon(icon);
-    tray_icon.setToolTip("Nexus Launcher (Alt + Space)");
+    const auto shortcut_text = []() { return QString::fromStdString(nexus::core::ConfigManager::instance().get_shortcut()); };
+    tray_icon.setToolTip("Nexus Launcher (" + shortcut_text() + ")");
 
     QMenu tray_menu;
-    auto* toggle_action = tray_menu.addAction("Toggle Launcher (Alt + Space)");
+    auto* toggle_action = tray_menu.addAction("Toggle Launcher (" + shortcut_text() + ")");
     QObject::connect(toggle_action, &QAction::triggered, [&launcher]() {
         launcher->toggle_launcher();
+    });
+
+    // Settings dialog applies a new shortcut: persist, re-grab, refresh labels.
+    nexus::ui::SettingsDialog::set_shortcut_applier([&](const std::string& text) {
+        if (!nexus::core::ConfigManager::instance().set_shortcut(text)) return false;
+        tray_icon.setToolTip("Nexus Launcher (" + shortcut_text() + ")");
+        toggle_action->setText("Toggle Launcher (" + shortcut_text() + ")");
+        return shortcut_mgr->apply_shortcut(text);
     });
 
     auto* settings_action = tray_menu.addAction("Settings & Shortcuts...");
@@ -332,8 +352,18 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    if (QSystemTrayIcon::isSystemTrayAvailable()) {
+    const bool tray_available = QSystemTrayIcon::isSystemTrayAvailable();
+    if (tray_available) {
         tray_icon.show();
+    }
+
+    // Once per process start. Without a tray only the log line is shown.
+    if (wayland) {
+        const QString hint = "Global shortcuts don't work on Wayland. Bind `nexus --toggle` to a key in your compositor settings.";
+        NEXUS_LOG_WARN(hint.toStdString());
+        if (tray_available) {
+            tray_icon.showMessage("Nexus", hint, QSystemTrayIcon::Warning, 10000);
+        }
     }
 
     // Show initially so user sees it right away on first run
@@ -343,6 +373,6 @@ int main(int argc, char* argv[]) {
         launcher->show_launcher();
     }
 
-    NEXUS_LOG_INFO("Nexus is running in the background. Press Alt + Space to toggle.");
+    NEXUS_LOG_INFO("Nexus is running in the background. Press " + nexus::core::ConfigManager::instance().get_shortcut() + " to toggle.");
     return app.exec();
 }

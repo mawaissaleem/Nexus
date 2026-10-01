@@ -168,6 +168,7 @@ QString AliasEditDialog::target() const {
 
 namespace {
     SettingsDialog* g_active_settings = nullptr;
+    std::function<bool(const std::string&)> g_shortcut_applier;
 
     class ModernCheckBox : public QCheckBox {
     public:
@@ -239,6 +240,10 @@ void enterEvent(QEvent* event) override {
     };
 }
 
+void SettingsDialog::set_shortcut_applier(std::function<bool(const std::string&)> applier) {
+    g_shortcut_applier = std::move(applier);
+}
+
 void SettingsDialog::show_settings(QWidget* parent) {
     if (!g_active_settings) {
         g_active_settings = new SettingsDialog(parent);
@@ -250,6 +255,9 @@ void SettingsDialog::show_settings(QWidget* parent) {
         );
         g_active_settings->ctrl_np_checkbox_->blockSignals(blocked);
         g_active_settings->ctrl_np_checkbox_->update();
+    }
+    if (g_active_settings->shortcut_edit_) {
+        g_active_settings->shortcut_edit_->setText(QString::fromStdString(core::ConfigManager::instance().get_shortcut()));
     }
     g_active_settings->show();
     g_active_settings->raise();
@@ -499,6 +507,19 @@ void SettingsDialog::setup_ui() {
     desc_label->installEventFilter(this);
     card_layout->addWidget(desc_label);
 
+    auto* shortcut_row = new QHBoxLayout();
+    auto* shortcut_label = new QLabel("Global shortcut:", card);
+    shortcut_label->setStyleSheet("border: none; background: transparent;");
+    shortcut_edit_ = new QLineEdit(QString::fromStdString(core::ConfigManager::instance().get_shortcut()), card);
+    shortcut_edit_->setPlaceholderText("e.g. Alt+Space, Ctrl+Shift+K");
+    auto* shortcut_apply = new QPushButton("Apply", card);
+    connect(shortcut_apply, &QPushButton::clicked, this, &SettingsDialog::on_apply_shortcut);
+    connect(shortcut_edit_, &QLineEdit::returnPressed, this, &SettingsDialog::on_apply_shortcut);
+    shortcut_row->addWidget(shortcut_label);
+    shortcut_row->addWidget(shortcut_edit_, 1);
+    shortcut_row->addWidget(shortcut_apply);
+    card_layout->addLayout(shortcut_row);
+
     nav_layout->addWidget(card);
     nav_layout->addStretch();
 
@@ -662,6 +683,16 @@ void SettingsDialog::on_open_directory() {
 
 void SettingsDialog::on_ctrl_np_toggled(bool checked) {
     core::ConfigManager::instance().set_ctrl_np_navigation_enabled(checked);
+    emit settings_changed();
+}
+
+void SettingsDialog::on_apply_shortcut() {
+    const std::string text = shortcut_edit_->text().toStdString();
+    if (!g_shortcut_applier || !g_shortcut_applier(text)) {
+        QMessageBox::warning(this, "Invalid shortcut",
+                             "Use modifiers plus a key, for example Alt+Space or Ctrl+Shift+K.");
+        return;
+    }
     emit settings_changed();
 }
 

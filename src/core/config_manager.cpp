@@ -1,5 +1,6 @@
 #include "nexus/core/config_manager.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/shortcut.hpp"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -67,6 +68,7 @@ std::string ConfigManager::resolve_config_path() {
 
 void ConfigManager::set_defaults() {
     enable_ctrl_np_navigation_ = true;
+    shortcut_ = "Alt+Space";
     search_directories_.clear();
 
     const char* home = std::getenv("HOME");
@@ -125,6 +127,13 @@ bool ConfigManager::load(const std::string& custom_path) {
             continue;
         }
 
+        if (line.find("\"global_shortcut\"") != std::string::npos) {
+            size_t colon = line.find(':');
+            std::string value = colon == std::string::npos ? "" : trim(line.substr(colon + 1));
+            if (utils::parse_shortcut(value)) shortcut_ = value;
+            continue;
+        }
+
         if (line.find("\"search_directories\"") != std::string::npos) {
             in_search_dirs = true;
             continue;
@@ -162,6 +171,7 @@ bool ConfigManager::save() {
 
     file << "{\n";
     file << "  \"enable_ctrl_np_navigation\": " << (enable_ctrl_np_navigation_ ? "true" : "false") << ",\n";
+    file << "  \"global_shortcut\": \"" << shortcut_ << "\",\n";
     file << "  \"search_directories\": [\n";
     for (size_t i = 0; i < search_directories_.size(); ++i) {
         file << "    \"" << search_directories_[i] << "\"";
@@ -231,6 +241,20 @@ void ConfigManager::set_ctrl_np_navigation_enabled(bool enabled) {
         enable_ctrl_np_navigation_ = enabled;
     }
     save();
+}
+
+std::string ConfigManager::get_shortcut() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return shortcut_;
+}
+
+bool ConfigManager::set_shortcut(const std::string& shortcut) {
+    if (!utils::parse_shortcut(shortcut)) return false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        shortcut_ = shortcut;
+    }
+    return save();
 }
 
 } // namespace nexus::core

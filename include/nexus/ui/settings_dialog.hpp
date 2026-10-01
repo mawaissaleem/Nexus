@@ -8,7 +8,9 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QCheckBox>
+#include <functional>
 #include <memory>
+#include <string>
 
 namespace nexus::ui {
 
@@ -44,6 +46,10 @@ public:
 
     static void show_settings(QWidget* parent = nullptr);
 
+    // Called with the shortcut text when the user applies one; returns false if it is invalid.
+    // The caller owns persisting and re-grabbing it, so the dialog stays UI-only.
+    static void set_shortcut_applier(std::function<bool(const std::string&)> applier);
+
 signals:
     void settings_changed();
 
@@ -64,6 +70,7 @@ private slots:
 
     // Navigation tab slots
     void on_ctrl_np_toggled(bool checked);
+    void on_apply_shortcut();
 
 private:
     void setup_ui();
@@ -89,6 +96,7 @@ private:
 
     // Navigation widgets
     QCheckBox* ctrl_np_checkbox_{nullptr};
+    QLineEdit* shortcut_edit_{nullptr};
 };
 
 } // namespace nexus::ui

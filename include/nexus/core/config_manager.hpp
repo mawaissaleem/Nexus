@@ -21,6 +21,10 @@ public:
     bool is_ctrl_np_navigation_enabled() const;
     void set_ctrl_np_navigation_enabled(bool enabled);
 
+    std::string get_shortcut() const;
+    // Returns false (and changes nothing) if `shortcut` does not parse.
+    bool set_shortcut(const std::string& shortcut);
+
     std::string get_config_path() const { return config_file_path_; }
 
 private:
@@ -34,6 +38,7 @@ private:
     std::string config_file_path_;
     std::vector<std::string> search_directories_;
     bool enable_ctrl_np_navigation_{true};
+    std::string shortcut_{"Alt+Space"};
 };
 
 } // namespace nexus::core
