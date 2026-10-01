@@ -5,6 +5,8 @@
 #include <fstream>
 #include <iostream>
 #include <thread>
+#include <string>
+#include <vector>
 #include <unistd.h>
 #include "nexus/core/executor.hpp"
 
@@ -26,25 +28,27 @@ static bool has_child() {
 }
 
 int main() {
-    // clean_desktop_exec: strips known field codes
-    {
-        std::string in = "/usr/bin/app %f --flag %U --name=%c %z";
-        std::string out = Executor::clean_desktop_exec(in);
-        // According to current implementation, recognized field codes are removed.
-        // Note: implementation's recognized set may not include every spec code;
-        // test asserts the actual observed behavior.
-        assert(out.find("%f") == std::string::npos);
-        assert(out.find("%U") == std::string::npos);
-        // Unrecognized field code (%z) should remain
-        assert(out.find("%z") != std::string::npos);
-    }
+    using V = std::vector<std::string>;
+    auto parse = [](const char* l) { return Executor::parse_desktop_exec(l); };
 
-    // clean_desktop_exec with no field codes returns unchanged (modulo trimming)
-    {
-        std::string in = "/usr/bin/app --flag";
-        std::string out = Executor::clean_desktop_exec(in);
-        assert(out == in);
-    }
+    // Field codes are removed (alone or inside an argument); %% is a literal percent.
+    assert(*parse("/usr/bin/app %f --flag %U --name=%c %i") == (V{"/usr/bin/app", "--flag", "--name="}));
+    assert(*parse("app 100%% %z") == (V{"app", "100%", "%z"}));
+    assert(*parse("/usr/bin/app --flag") == (V{"/usr/bin/app", "--flag"}));
+    // Quoting: spaces kept, quote escapes honoured, empty quoted arg kept.
+    assert(*parse("\"/opt/my app/run\" -x \"a b\" \"\"") == (V{"/opt/my app/run", "-x", "a b", ""}));
+    assert(*parse("app \"q\\\"\\$\\`\\\\\\\\\"") == (V{"app", "q\"$`\\"}));  // file text: "q\"\$\`\\\\"
+    assert(*parse("app \"100%% %f\"") == (V{"app", "100% "}));
+    // String-level escape applied before quoting: \\\\ -> \\ -> literal backslash in quotes.
+    assert(*parse("app \"a\\\\\\\\b\"") == (V{"app", "a\\b"}));
+    assert(*parse("env FOO=bar app") == (V{"env", "FOO=bar", "app"}));
+    // Malformed / empty.
+    assert(!parse("app \"unterminated"));
+    assert(!parse(""));
+    assert(!parse("   "));
+    assert(!parse("%f %U"));
+    // Shell metacharacters stay literal text.
+    assert(*parse("app ; && $(x) `y` | z") == (V{"app", ";", "&&", "$(x)", "`y`", "|", "z"}));
 
     // launch_shell_command with harmless command 'true' should succeed
     {
@@ -52,10 +56,48 @@ int main() {
         assert(ok);
     }
 
-    // launch_desktop_exec should use clean_desktop_exec + shell launch
+    assert(Executor::launch_desktop_exec("/bin/true"));
+    assert(!Executor::launch_desktop_exec("app \"unterminated"));
+    assert(!Executor::launch_desktop_exec("/nonexistent/nexus-no-such-binary"));
+
+    // launch_desktop_exec runs argv directly: a fake program records what it received.
     {
-        bool ok = Executor::launch_desktop_exec("/bin/true");
-        assert(ok);
+        const auto dir = std::filesystem::temp_directory_path() /
+                         ("nexus_test_desktop_" + std::to_string(getpid()));
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        const auto out = dir / "args.txt";
+        for (const char* name : {"fakeapp", "x-terminal-emulator"}) {
+            std::ofstream f(dir / name);
+            f << "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done > '" << out.string() << "'\n";
+            f.close();
+            std::filesystem::permissions(dir / name, std::filesystem::perms::owner_all);
+        }
+        const char* cp = std::getenv("PATH");
+        const std::string saved = cp ? cp : "";
+        setenv("PATH", (dir.string() + ":" + saved).c_str(), 1);
+
+        auto run = [&](const char* exec, bool term) {
+            std::filesystem::remove(out);
+            bool ok = Executor::launch_desktop_exec(exec, term);
+            for (int i = 0; i < 250 && !std::filesystem::exists(out); ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            std::string got;
+            std::getline(std::ifstream(out), got);
+            return std::make_pair(ok, got);
+        };
+
+        auto r = run("fakeapp ; touch PWNED && $(id) `id` | cat \"a b\" %f", false);
+        assert(r.first);
+        assert(r.second == "[;][touch][PWNED][&&][$(id)][`id`][|][cat][a b]");
+        assert(!std::filesystem::exists("PWNED"));
+
+        r = run("fakeapp \"x y\" z", true);
+        assert(r.first);
+        assert(r.second == "[-e][fakeapp][x y][z]");
+
+        setenv("PATH", saved.c_str(), 1);
+        std::filesystem::remove_all(dir);
     }
 
     // open_path_or_url must keep redirected descriptors open until xdg-open starts.

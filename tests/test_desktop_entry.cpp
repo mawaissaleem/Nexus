@@ -44,8 +44,8 @@ int main() {
     assert(parsed->is_valid_application());
 
     // Test exec string cleaning
-    std::string cleaned = Executor::clean_desktop_exec(parsed->exec);
-    assert(cleaned == "test-editor  --new-window");
+    auto argv = Executor::parse_desktop_exec(parsed->exec);
+    assert(argv && *argv == (std::vector<std::string>{"test-editor", "--new-window"}));
 
     // Regression: a malicious filename must not be interpreted by a shell.
     const auto temp_root = std::filesystem::temp_directory_path() / "nexus_test_injection";

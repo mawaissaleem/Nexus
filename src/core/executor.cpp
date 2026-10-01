@@ -12,54 +12,76 @@
 #include <cerrno>
 #include <system_error>
 #include <thread>
+#include <optional>
 
 extern char **environ;
 
 namespace nexus::core {
 
-std::string Executor::clean_desktop_exec(std::string_view exec_line) {
-    std::string result;
-    result.reserve(exec_line.size());
-
-    bool in_quotes = false;
+std::optional<std::vector<std::string>> Executor::parse_desktop_exec(std::string_view exec_line) {
+    // Pass 1: the "string" escapes of the Desktop Entry spec (the file loader keeps values raw).
+    std::string text;
     for (size_t i = 0; i < exec_line.size(); ++i) {
         char c = exec_line[i];
-        if (c == '"') {
-            in_quotes = !in_quotes;
-            result.push_back(c);
-            continue;
+        if (c == '\\' && i + 1 < exec_line.size()) {
+            const char n = exec_line[i + 1];
+            if (n == 's') { text.push_back(' '); ++i; continue; }
+            if (n == 'n') { text.push_back('\n'); ++i; continue; }
+            if (n == 't') { text.push_back('\t'); ++i; continue; }
+            if (n == 'r') { text.push_back('\r'); ++i; continue; }
+            if (n == '\\') { text.push_back('\\'); ++i; continue; }
         }
+        text.push_back(c);
+    }
 
-        if (c == '%' && i + 1 < exec_line.size()) {
-            char next = exec_line[i + 1];
-            // Recognized field codes in Freedesktop Desktop Entry Specification
-            if (strchr("fFuUdDnNikvm", next) != nullptr) {
-                ++i; // skip '%' and code
+    // Pass 2: the Exec quoting rules, plus field-code handling.
+    std::vector<std::string> args;
+    std::string cur;
+    bool has_arg = false;   // a quoted or literal char was seen (field codes alone don't count)
+    bool in_quotes = false;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (in_quotes) {
+            if (c == '"') { in_quotes = false; continue; }
+            if (c == '\\' && i + 1 < text.size() && strchr("\"`$\\", text[i + 1])) {
+                cur.push_back(text[++i]);
+                continue;
+            }
+        } else {
+            if (c == '"') { in_quotes = true; has_arg = true; continue; }
+            if (c == ' ' || c == '\t' || c == '\n') {
+                if (has_arg) args.push_back(std::move(cur));
+                cur.clear();
+                has_arg = false;
                 continue;
             }
         }
-        result.push_back(c);
+        if (c == '%' && i + 1 < text.size()) {
+            const char n = text[i + 1];
+            if (n == '%') { cur.push_back('%'); has_arg = true; ++i; continue; }
+            // Nexus never passes files/URLs, so every known field code expands to nothing.
+            if (strchr("fFuUdDnNikvmc", n) != nullptr) { ++i; continue; }
+        }
+        cur.push_back(c);
+        has_arg = true;
     }
-
-    // Trim trailing whitespace
-    while (!result.empty() && std::isspace(static_cast<unsigned char>(result.back()))) {
-        result.pop_back();
-    }
-    return result;
+    if (in_quotes) return std::nullopt;
+    if (has_arg) args.push_back(std::move(cur));
+    if (args.empty() || args.front().empty()) return std::nullopt;
+    return args;
 }
 
 bool Executor::launch_desktop_exec(std::string_view exec_line, bool terminal) {
-    std::string cleaned = clean_desktop_exec(exec_line);
-    if (cleaned.empty()) {
-        NEXUS_LOG_WARN("Cannot launch empty desktop command");
+    auto args = parse_desktop_exec(exec_line);
+    if (!args) {
+        NEXUS_LOG_WARN("Cannot launch malformed or empty desktop command");
         return false;
     }
-
     if (terminal) {
-        cleaned = "x-terminal-emulator -e " + cleaned;
+        // argv form of -e (no shell); works with xterm-style emulators.
+        args->insert(args->begin(), {"x-terminal-emulator", "-e"});
     }
-
-    return launch_shell_command(cleaned);
+    return spawn_detached(*args);
 }
 
 bool Executor::launch_shell_command(std::string_view command) {
@@ -105,15 +127,12 @@ bool Executor::launch_shell_command(std::string_view command) {
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-bool Executor::open_path_or_url(std::string_view target) {
-    if (target.empty()) return false;
+bool Executor::spawn_detached(const std::vector<std::string>& args) {
+    if (args.empty()) return false;
 
-    std::string target_str(target);
-    std::vector<char*> argv = {
-        const_cast<char*>("xdg-open"),
-        target_str.data(),
-        nullptr
-    };
+    std::vector<char*> argv;
+    for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
 
     posix_spawnattr_t attr;
     posix_spawn_file_actions_t actions;
@@ -145,7 +164,7 @@ bool Executor::open_path_or_url(std::string_view target) {
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID);
 
     pid_t pid = 0;
-    int rc = posix_spawnp(&pid, "xdg-open", &actions, &attr, argv.data(), environ);
+    int rc = posix_spawnp(&pid, argv[0], &actions, &attr, argv.data(), environ);
 
     if (stdin_fd >= 0) close(stdin_fd);
     if (stdout_fd >= 0) close(stdout_fd);
@@ -163,9 +182,14 @@ bool Executor::open_path_or_url(std::string_view target) {
         // No thread available: reap only if already done; never block the UI thread.
         int st = 0;
         waitpid(pid, &st, WNOHANG);
-        NEXUS_LOG_WARN("open_path_or_url: could not start reaper thread; xdg-open child may linger as a zombie");
+        NEXUS_LOG_WARN("spawn_detached: could not start reaper thread; child may linger as a zombie");
     }
     return true;
+}
+
+bool Executor::open_path_or_url(std::string_view target) {
+    if (target.empty()) return false;
+    return spawn_detached({"xdg-open", std::string(target)});
 }
 
 } // namespace nexus::core
