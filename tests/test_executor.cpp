@@ -1,10 +1,29 @@
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
+#include <chrono>
+#include <fstream>
 #include <iostream>
+#include <thread>
+#include <unistd.h>
 #include "nexus/core/executor.hpp"
 
 using namespace nexus::core;
+
+// True if this process has any child (live or zombie; scans /proc/*/stat).
+static bool has_child() {
+    for (const auto& e : std::filesystem::directory_iterator("/proc")) {
+        std::ifstream f(e.path() / "stat");
+        std::string line;
+        if (!std::getline(f, line)) continue;
+        auto p = line.rfind(')');  // comm may contain spaces
+        if (p == std::string::npos) continue;
+        char state = 0; long ppid = 0;
+        if (sscanf(line.c_str() + p + 1, " %c %ld", &state, &ppid) == 2 &&
+            ppid == getpid()) return true;
+    }
+    return false;
+}
 
 int main() {
     // clean_desktop_exec: strips known field codes
@@ -58,6 +77,15 @@ int main() {
 
         std::filesystem::remove_all(fake_bin);
         assert(ok);
+
+        // The finished opener must be reaped: wait until no child (live or zombie)
+        // remains, so the check cannot pass just because it ran before the child exited.
+        bool child = true;
+        for (int i = 0; i < 100 && child; ++i) {
+            child = has_child();
+            if (child) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        assert(!child);
     }
 
     // Do not spawn a real GUI opener in CI; the regression above uses a fake.

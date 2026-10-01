@@ -9,6 +9,9 @@
 #include <vector>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
+#include <system_error>
+#include <thread>
 
 extern char **environ;
 
@@ -149,7 +152,20 @@ bool Executor::open_path_or_url(std::string_view target) {
     if (stderr_fd >= 0) close(stderr_fd);
     posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&actions);
-    return rc == 0;
+    if (rc != 0) return false;
+    // Reap in a detached waiter so the child never lingers as a zombie.
+    try {
+        std::thread([pid] {
+            int st = 0;
+            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
+        }).detach();
+    } catch (const std::system_error&) {
+        // No thread available: reap only if already done; never block the UI thread.
+        int st = 0;
+        waitpid(pid, &st, WNOHANG);
+        NEXUS_LOG_WARN("open_path_or_url: could not start reaper thread; xdg-open child may linger as a zombie");
+    }
+    return true;
 }
 
 } // namespace nexus::core
