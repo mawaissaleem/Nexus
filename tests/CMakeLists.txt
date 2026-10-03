@@ -15,6 +15,8 @@ set(TEST_TARGETS
     test_async_search_coordinator
     test_database_migrations
     test_shortcut
+    test_app_indexer
+    test_app_provider
 )
 
 foreach(test_name ${TEST_TARGETS})

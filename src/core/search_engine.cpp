@@ -7,9 +7,7 @@ namespace nexus::core {
 SearchEngine::SearchEngine(RankingEngine ranking_engine)
     : ranking_engine_(std::move(ranking_engine)) {}
 
-SearchEngine::~SearchEngine() {
-    cancel();
-}
+SearchEngine::~SearchEngine() = default;
 
 void SearchEngine::register_provider(SearchProviderPtr provider) {
     if (!provider) return;
@@ -30,7 +28,8 @@ void SearchEngine::unregister_provider(const std::string& provider_id) {
 }
 
 std::vector<SearchResult> SearchEngine::search(const Query& query, size_t max_results) {
-    return search(query, current_cancel_token_, max_results);
+    std::atomic<bool> never_cancelled{false};
+    return search(query, never_cancelled, max_results);
 }
 
 std::vector<SearchResult> SearchEngine::search(const Query& query, std::atomic<bool>& cancel_token, size_t max_results) {
@@ -78,19 +77,6 @@ std::vector<SearchResult> SearchEngine::search(const Query& query, std::atomic<b
     }
 
     return combined_results;
-}
-
-std::future<std::vector<SearchResult>> SearchEngine::search_async(const Query& query, size_t max_results) {
-    cancel();
-    current_cancel_token_.store(false);
-
-    return std::async(std::launch::async, [this, query, max_results]() {
-        return this->search(query, max_results);
-    });
-}
-
-void SearchEngine::cancel() {
-    current_cancel_token_.store(true);
 }
 
 } // namespace nexus::core
