@@ -2,7 +2,9 @@
 #include <cassert>
 #include <cstdlib>
 #include <fstream>
+#include <atomic>
 #include <string>
+#include <thread>
 #include <unistd.h>
 
 namespace fs = std::filesystem;
@@ -46,9 +48,10 @@ int main() {
     // Indexed, no DB: rebuild scans the filesystem
     AppIndexer indexer;
     size_t n = indexer.rebuild_index();
-    auto apps = indexer.get_applications();
+    auto snap = indexer.get_applications();
+    const auto& apps = *snap;
     assert(n == apps.size());
-    // Not asserting an exact count: the indexer also scans hardcoded snap/flatpak dirs the env can't redirect.
+    // Env redirects only some dirs (the indexer also scans hardcoded snap/flatpak ones), so just a lower bound.
     assert(n >= 3);
     assert(find(apps, "plain"));
     assert(find(apps, "useronly"));
@@ -65,7 +68,32 @@ int main() {
     fs::remove_all(sys);
     fs::remove_all(user);
     indexer.rebuild_index();
-    assert(!find(indexer.get_applications(), "plain") && !find(indexer.get_applications(), "dup"));
+    assert(!find(*indexer.get_applications(), "plain") && !find(*indexer.get_applications(), "dup"));
+    // A snapshot taken before the rebuild is unchanged by it.
+    assert(find(apps, "plain") && find(apps, "dup") && apps.size() == n);
+
+    // Searches during a rebuild: concurrent rebuild_index() + get_applications() stay consistent.
+    write_desktop(sys, "concurrent", "Concurrent App");
+    indexer.rebuild_index();
+    std::atomic<bool> done{false};
+    std::thread rebuilder([&] {
+        for (int i = 0; i < 20; ++i) assert(indexer.rebuild_index() >= 1);
+        done = true;
+    });
+    while (!done) assert(find(*indexer.get_applications(), "concurrent"));
+    rebuilder.join();
+
+    // Explicit directory list (seam): exactly these dirs, hermetic regardless of host snap/flatpak.
+    {
+        write_desktop(sys, "plain", "Plain App");
+        write_desktop(user, "dup", "User Dup");
+        write_desktop(sys, "dup", "System Dup");
+        AppIndexer exact(nullptr, std::vector<fs::path>{user, sys});
+        assert(exact.rebuild_index() == 3);  // plain, dup, concurrent
+        assert(find(*exact.get_applications(), "dup")->name == "User Dup");
+        AppIndexer none(nullptr, std::vector<fs::path>{root / "missing"});
+        assert(none.rebuild_index() == 0);
+    }
 
     // restore env
     old_home ? setenv("HOME", s_home.c_str(), 1) : unsetenv("HOME");

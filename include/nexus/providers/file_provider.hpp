@@ -1,6 +1,8 @@
 #pragma once
 
 #include "nexus/core/search_provider.hpp"
+#include "nexus/index/database.hpp"
+#include <memory>
 #include <vector>
 #include <string>
 
@@ -8,7 +10,8 @@ namespace nexus::providers {
 
 class FileProvider : public core::ISearchProvider {
 public:
-    explicit FileProvider(size_t max_depth = 3);
+    // Reads the file index only (built by index::FileIndexer); never touches the filesystem.
+    explicit FileProvider(std::shared_ptr<index::Database> db);
 
     [[nodiscard]] std::string id() const override { return "files"; }
     [[nodiscard]] std::string name() const override { return "Files & Directories"; }
@@ -20,10 +23,8 @@ public:
         const std::atomic<bool>& cancel_token
     ) override;
 
-    void set_max_depth(size_t depth) { max_depth_ = depth; }
-
 private:
-    size_t max_depth_{3};
+    std::shared_ptr<index::Database> db_;
 };
 
 } // namespace nexus::providers

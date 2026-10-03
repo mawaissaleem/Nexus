@@ -31,11 +31,16 @@ int main() {
     assert(loaded.size() == 2);
 
     // Test usage tracking
+    assert(db.get_usage_counts().empty());
     assert(db.get_usage_count("app1") == 0);
     assert(db.record_usage("app1", "app"));
     assert(db.record_usage("app1", "one"));
     assert(db.get_usage_count("app1") == 2);
     assert(db.get_usage_count("app2") == 0);
+
+    // Bulk counts: one entry per used app, unused apps absent
+    auto counts = db.get_usage_counts();
+    assert(counts.size() == 1 && counts.at("app1") == 2);
 
     // Test query history
     assert(db.record_query("app", "app1", "applications"));

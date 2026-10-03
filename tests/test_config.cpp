@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cassert>
 #include <filesystem>
+#include <fstream>
 
 int main() {
     using namespace nexus::core;
@@ -38,6 +39,26 @@ int main() {
     assert(config.get_shortcut() == "Ctrl+Shift+K");
     assert(config.is_ctrl_np_navigation_enabled() == true);
     config.set_shortcut("Alt+Space");
+
+    // Test 5: file exclusions default to the built-in list and survive a save/load round trip
+    assert(config.get_file_exclusions() == ConfigManager::default_file_exclusions());
+    assert(config.get_file_exclusions().size() == 10);
+    config.set_ctrl_np_navigation_enabled(true);  // forces a save
+    config.load(temp_config_file.string());
+    assert(config.get_file_exclusions() == ConfigManager::default_file_exclusions());
+
+    // Test 6: custom list is read; entries the writer could not round-trip (quote, backslash, slash) are dropped
+    {
+        std::ofstream(temp_config_file) << "{\n  \"file_exclusions\": [\n    \"vendor\",\n    \"bad\\\\name\",\n"
+                                           "    \"a/b\",\n    \"x\"y\",\n    \"tmp\"\n  ]\n}\n";
+    }
+    config.load(temp_config_file.string());
+    assert((config.get_file_exclusions() == std::vector<std::string>{"vendor", "tmp"}));
+
+    // Test 7: an explicit empty list means "exclude nothing"
+    std::ofstream(temp_config_file) << "{\n  \"file_exclusions\": []\n}\n";
+    config.load(temp_config_file.string());
+    assert(config.get_file_exclusions().empty());
 
     // Cleanup
     std::filesystem::remove(temp_config_file);

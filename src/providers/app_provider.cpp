@@ -24,8 +24,11 @@ std::vector<core::SearchResult> ApplicationProvider::search(
     }
 
     auto apps = indexer_->get_applications();
+    // One usage query per search, not one per matched app.
+    const auto usage_counts = (db_ && db_->is_open()) ? db_->get_usage_counts()
+                                                       : std::unordered_map<std::string, int>{};
 
-    for (const auto& app : apps) {
+    for (const auto& app : *apps) {
         if (cancel_token.load()) {
             return {};
         }
@@ -84,11 +87,8 @@ std::vector<core::SearchResult> ApplicationProvider::search(
                 return core::Executor::launch_desktop_exec(exec_cmd, terminal);
             };
 
-            if (db_ && db_->is_open()) {
-                int usage = db_->get_usage_count(app.id);
-                if (usage > 0) {
-                    res.metadata["usage_count"] = std::to_string(usage);
-                }
+            if (auto it = usage_counts.find(app.id); it != usage_counts.end() && it->second > 0) {
+                res.metadata["usage_count"] = std::to_string(it->second);
             }
 
             res.metadata["desktop_file"] = app.desktop_file;

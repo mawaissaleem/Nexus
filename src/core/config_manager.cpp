@@ -33,6 +33,11 @@ std::string expand_home(std::string_view path) {
     return std::string(path);
 }
 
+// Entries are written back without escaping (D-51), so reject what the writer cannot round-trip.
+bool valid_exclusion(const std::string& name) {
+    return !name.empty() && name.find_first_of("\"\\/") == std::string::npos;
+}
+
 } // namespace
 
 ConfigManager& ConfigManager::instance() {
@@ -66,7 +71,13 @@ std::string ConfigManager::resolve_config_path() {
     return (dir / "config.json").string();
 }
 
+std::vector<std::string> ConfigManager::default_file_exclusions() {
+    return {"node_modules", "build", "target", "__pycache__", "venv", ".venv",
+            "CMakeFiles", "Testing", "dist", "out"};
+}
+
 void ConfigManager::set_defaults() {
+    file_exclusions_ = default_file_exclusions();
     enable_ctrl_np_navigation_ = true;
     shortcut_ = "Alt+Space";
     search_directories_.clear();
@@ -115,7 +126,10 @@ bool ConfigManager::load(const std::string& custom_path) {
 
     std::vector<std::string> loaded_dirs;
     std::string line;
+    std::vector<std::string> loaded_exclusions;
     bool in_search_dirs = false;
+    bool in_exclusions = false;
+    bool have_exclusions = false;  // an explicit empty list means "exclude nothing"
 
     while (std::getline(file, line)) {
         if (line.find("\"enable_ctrl_np_navigation\"") != std::string::npos) {
@@ -131,6 +145,22 @@ bool ConfigManager::load(const std::string& custom_path) {
             size_t colon = line.find(':');
             std::string value = colon == std::string::npos ? "" : trim(line.substr(colon + 1));
             if (utils::parse_shortcut(value)) shortcut_ = value;
+            continue;
+        }
+
+        if (line.find("\"file_exclusions\"") != std::string::npos) {
+            have_exclusions = true;
+            in_exclusions = line.find(']') == std::string::npos;
+            continue;
+        }
+
+        if (in_exclusions) {
+            if (line.find(']') != std::string::npos) {
+                in_exclusions = false;
+                continue;
+            }
+            std::string item = trim(line);
+            if (valid_exclusion(item)) loaded_exclusions.push_back(item);
             continue;
         }
 
@@ -154,6 +184,9 @@ bool ConfigManager::load(const std::string& custom_path) {
 
     if (!loaded_dirs.empty()) {
         search_directories_ = std::move(loaded_dirs);
+    }
+    if (have_exclusions) {
+        file_exclusions_ = std::move(loaded_exclusions);
     }
 
     return true;
@@ -179,6 +212,11 @@ bool ConfigManager::save() {
             file << ",";
         }
         file << "\n";
+    }
+    file << "  ],\n";
+    file << "  \"file_exclusions\": [\n";
+    for (size_t i = 0; i < file_exclusions_.size(); ++i) {
+        file << "    \"" << file_exclusions_[i] << "\"" << (i + 1 < file_exclusions_.size() ? "," : "") << "\n";
     }
     file << "  ]\n";
     file << "}\n";
@@ -228,6 +266,11 @@ bool ConfigManager::remove_search_directory(const std::string& path) {
         }
     }
     return save();
+}
+
+std::vector<std::string> ConfigManager::get_file_exclusions() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return file_exclusions_;
 }
 
 bool ConfigManager::is_ctrl_np_navigation_enabled() const {

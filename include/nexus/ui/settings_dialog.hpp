@@ -50,6 +50,9 @@ public:
     // The caller owns persisting and re-grabbing it, so the dialog stays UI-only.
     static void set_shortcut_applier(std::function<bool(const std::string&)> applier);
 
+    // Called after the user adds or removes a search directory; the caller re-indexes.
+    static void set_directories_changed_handler(std::function<void()> handler);
+
 signals:
     void settings_changed();
 

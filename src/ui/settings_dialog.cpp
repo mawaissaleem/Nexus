@@ -169,6 +169,7 @@ QString AliasEditDialog::target() const {
 namespace {
     SettingsDialog* g_active_settings = nullptr;
     std::function<bool(const std::string&)> g_shortcut_applier;
+    std::function<void()> g_directories_changed;
 
     class ModernCheckBox : public QCheckBox {
     public:
@@ -242,6 +243,10 @@ void enterEvent(QEvent* event) override {
 
 void SettingsDialog::set_shortcut_applier(std::function<bool(const std::string&)> applier) {
     g_shortcut_applier = std::move(applier);
+}
+
+void SettingsDialog::set_directories_changed_handler(std::function<void()> handler) {
+    g_directories_changed = std::move(handler);
 }
 
 void SettingsDialog::show_settings(QWidget* parent) {
@@ -653,6 +658,7 @@ void SettingsDialog::on_add_directory() {
     if (!dir.isEmpty()) {
         if (core::ConfigManager::instance().add_search_directory(dir.toStdString())) {
             reload_directories();
+            if (g_directories_changed) g_directories_changed();
             emit settings_changed();
         } else {
             QMessageBox::warning(this, "Failed to Add Directory", "Directory could not be added or already exists.");
@@ -671,6 +677,7 @@ void SettingsDialog::on_remove_directory() {
     if (res == QMessageBox::Yes) {
         core::ConfigManager::instance().remove_search_directory(path.toStdString());
         reload_directories();
+        if (g_directories_changed) g_directories_changed();
         emit settings_changed();
     }
 }

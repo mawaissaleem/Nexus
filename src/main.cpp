@@ -3,6 +3,8 @@
 #include "nexus/core/query.hpp"
 #include "nexus/index/database.hpp"
 #include "nexus/index/app_indexer.hpp"
+#include "nexus/index/file_indexer.hpp"
+#include "nexus/index/file_watcher.hpp"
 #include "nexus/providers/app_provider.hpp"
 #include "nexus/providers/calc_provider.hpp"
 #include "nexus/providers/shell_provider.hpp"
@@ -22,6 +24,10 @@
 #include <QMenu>
 #include <QIcon>
 #include <QMessageBox>
+#include <atomic>
+#include <functional>
+#include <utility>
+#include <thread>
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -41,7 +47,7 @@ void print_help() {
               << "  --toggle, -t           Toggle the launcher window (shows or hides running instance)\n"
               << "  --show                 Show the launcher window on the active monitor\n"
               << "  --hide                 Hide the launcher window\n"
-              << "  --rebuild-index        Rescan system directories and rebuild desktop application index\n"
+              << "  --rebuild-index        Rescan system directories and search directories; rebuild the application and file indexes\n"
               << "  --list-apps            List all currently indexed desktop applications\n"
               << "  settings, config       Open Nexus Settings GUI (manage shortcuts & directories)\n"
               << "  --settings             Open Nexus Settings GUI\n"
@@ -143,11 +149,18 @@ int main(int argc, char* argv[]) {
     auto app_indexer = std::make_shared<nexus::index::AppIndexer>(db);
     app_indexer->initialize();
 
+    auto file_indexer = std::make_shared<nexus::index::FileIndexer>(db);
+    // Read config on the calling thread so worker threads never race the Settings dialog.
+    const auto file_options = []() {
+        auto& cfg = nexus::core::ConfigManager::instance();
+        return nexus::index::FileIndexOptions{cfg.get_search_directories(), cfg.get_file_exclusions()};
+    };
+
     // Setup SearchEngine and Providers
     auto engine = std::make_shared<nexus::core::SearchEngine>();
     engine->register_provider(std::make_shared<nexus::providers::AliasProvider>());
     engine->register_provider(std::make_shared<nexus::providers::ApplicationProvider>(app_indexer, db));
-    engine->register_provider(std::make_shared<nexus::providers::FileProvider>());
+    engine->register_provider(std::make_shared<nexus::providers::FileProvider>(db));
     engine->register_provider(std::make_shared<nexus::providers::CalculatorProvider>());
     engine->register_provider(std::make_shared<nexus::providers::ShellProvider>());
 
@@ -159,7 +172,8 @@ int main(int argc, char* argv[]) {
         if (arg1 == "dir") {
             if (argc >= 3 && std::string(argv[2]) == "add" && argc >= 4) {
                 if (nexus::core::ConfigManager::instance().add_search_directory(argv[3])) {
-                    std::cout << "Added search directory: " << argv[3] << '\n';
+                    std::cout << "Added search directory: " << argv[3]
+                              << "\nRun `nexus --rebuild-index` (or restart Nexus) to index it.\n";
                 } else {
                     std::cerr << "Failed: directory does not exist or is invalid: " << argv[3] << '\n';
                     return 1;
@@ -167,7 +181,8 @@ int main(int argc, char* argv[]) {
                 return 0;
             } else if (argc >= 3 && std::string(argv[2]) == "remove" && argc >= 4) {
                 if (nexus::core::ConfigManager::instance().remove_search_directory(argv[3])) {
-                    std::cout << "Removed search directory: " << argv[3] << '\n';
+                    std::cout << "Removed search directory: " << argv[3]
+                              << "\nRun `nexus --rebuild-index` (or restart Nexus) to drop its files from search.\n";
                 } else {
                     std::cerr << "Directory not found in search list: " << argv[3] << '\n';
                     return 1;
@@ -225,13 +240,22 @@ int main(int argc, char* argv[]) {
             double dur = std::chrono::duration<double, std::milli>(end - start).count();
             std::cout << "Indexed " << count << " applications in "
                       << std::fixed << std::setprecision(2) << dur << " ms.\n";
+
+            std::cout << "Rebuilding file index...\n";
+            start = std::chrono::high_resolution_clock::now();
+            const std::atomic<bool> never_cancel{false};
+            size_t files = file_indexer->rebuild(file_options(), never_cancel);
+            end = std::chrono::high_resolution_clock::now();
+            dur = std::chrono::duration<double, std::milli>(end - start).count();
+            std::cout << "Indexed " << files << " files and folders in "
+                      << std::fixed << std::setprecision(2) << dur << " ms.\n";
             return 0;
         }
 
         if (arg1 == "--list-apps") {
             auto apps = app_indexer->get_applications();
-            std::cout << "Indexed applications (" << apps.size() << "):\n";
-            for (const auto& a : apps) {
+            std::cout << "Indexed applications (" << apps->size() << "):\n";
+            for (const auto& a : *apps) {
                 std::cout << " - " << a.name << " [" << a.id << "] -> " << a.exec << '\n';
             }
             return 0;
@@ -258,6 +282,34 @@ int main(int argc, char* argv[]) {
             return 0;
         }
     }
+
+    // New/removed .desktop files update the app index on the watcher's own thread (a rebuild is ~5 ms, so a
+    // full app rescan per change; the file index is left alone). Stopped (joined) on quit below.
+    app_indexer->start_watching();
+
+    // First (and every startup) file index build runs off the UI thread. Until the very first build lands,
+    // `file ` queries return nothing; afterwards they keep serving the previous index while a rebuild runs.
+    std::atomic<bool> quitting{false};
+    // One index build at a time (UI-thread state): a request during a build is remembered and run once it finishes,
+    // so a build with an older directory list can never overwrite a newer one.
+    bool rebuilding = true;
+    bool rebuild_requested = false;
+    std::function<void()> start_rebuild;  // set once the tray menu exists, before the event loop runs
+    const auto rebuild_finished = [&]() {
+        rebuilding = false;
+        if (std::exchange(rebuild_requested, false)) start_rebuild();
+    };
+    // Live updates between rebuilds. Every rebuild is bracketed by arm()/resume() (see FileWatcher); the rebuild
+    // threads are serialised above, so arm/resume never overlap. A kernel event overflow asks for a full rebuild.
+    nexus::index::FileWatcher file_watcher(db, [&]() {
+        QMetaObject::invokeMethod(&app, [&]() { start_rebuild(); }, Qt::QueuedConnection);
+    });
+    std::thread startup_index_thread([&, options = file_options()]() {
+        file_watcher.arm(options, quitting);
+        file_indexer->rebuild(options, quitting);
+        file_watcher.resume();
+        QMetaObject::invokeMethod(&app, rebuild_finished, Qt::QueuedConnection);
+    });
 
     // Initialize GUI Launcher Window
     auto launcher = std::make_shared<nexus::ui::LauncherWindow>(engine);
@@ -332,10 +384,32 @@ int main(int argc, char* argv[]) {
         nexus::ui::SettingsDialog::show_settings();
     });
 
-    auto* rebuild_action = tray_menu.addAction("Rebuild Application Index");
-    QObject::connect(rebuild_action, &QAction::triggered, [&app_indexer]() {
-        app_indexer->rebuild_index();
-    });
+    auto* rebuild_action = tray_menu.addAction("Rebuild Indexes");
+    // Rescan off the UI thread; see `rebuilding` above for how overlapping requests are serialised.
+    std::thread rebuild_thread;
+    start_rebuild = [&]() {
+        if (rebuilding) {
+            rebuild_requested = true;
+            return;
+        }
+        rebuilding = true;
+        if (rebuild_thread.joinable()) rebuild_thread.join();  // previous worker already finished
+        tray_icon.showMessage("Nexus", "Rebuilding application and file indexes...", QSystemTrayIcon::Information, 3000);
+        rebuild_thread = std::thread([&, indexer = app_indexer, options = file_options()]() {
+            size_t count = indexer->rebuild_index();
+            file_watcher.arm(options, quitting);
+            size_t files = file_indexer->rebuild(options, quitting);
+            file_watcher.resume();
+            QMetaObject::invokeMethod(&tray_icon, [&, count, files]() {
+                tray_icon.showMessage("Nexus", QString("Indexes rebuilt (%1 apps, %2 files)").arg(count).arg(files),
+                                      QSystemTrayIcon::Information, 3000);
+                rebuild_finished();
+            }, Qt::QueuedConnection);
+        });
+    };
+    QObject::connect(rebuild_action, &QAction::triggered, [&]() { start_rebuild(); });
+    // Search directories added/removed in Settings take effect without a restart.
+    nexus::ui::SettingsDialog::set_directories_changed_handler([&]() { start_rebuild(); });
 
     tray_menu.addSeparator();
 
@@ -374,5 +448,11 @@ int main(int argc, char* argv[]) {
     }
 
     NEXUS_LOG_INFO("Nexus is running in the background. Press " + nexus::core::ConfigManager::instance().get_shortcut() + " to toggle.");
-    return app.exec();
+    const int rc = app.exec();
+    quitting = true;  // walkers poll this, so quit mid-build returns within one directory entry
+    if (startup_index_thread.joinable()) startup_index_thread.join();
+    if (rebuild_thread.joinable()) rebuild_thread.join();  // quit during a rebuild: wait, never destroy a joinable thread
+    file_watcher.stop();
+    app_indexer->stop_watching();
+    return rc;
 }

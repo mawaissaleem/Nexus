@@ -3,11 +3,18 @@
 #include <unordered_set>
 #include <cstdlib>
 #include <sstream>
+#include <sys/inotify.h>
 
 namespace nexus::index {
 
-AppIndexer::AppIndexer(std::shared_ptr<Database> db)
-    : db_(std::move(db)) {}
+AppIndexer::AppIndexer(std::shared_ptr<Database> db, std::optional<std::vector<std::filesystem::path>> directories)
+    : db_(std::move(db)), directories_(std::move(directories)) {}
+
+AppIndexer::~AppIndexer() { stop_watching(); }
+
+std::vector<std::filesystem::path> AppIndexer::directories() const {
+    return directories_ ? *directories_ : get_default_app_directories();
+}
 
 std::vector<std::filesystem::path> AppIndexer::get_default_app_directories() {
     std::vector<std::filesystem::path> dirs;
@@ -63,10 +70,11 @@ std::vector<std::filesystem::path> AppIndexer::get_default_app_directories() {
 }
 
 size_t AppIndexer::rebuild_index() {
+    std::lock_guard<std::mutex> rebuild_lock(rebuild_mutex_);
     std::vector<DesktopEntry> new_apps;
     std::unordered_set<std::string> seen_ids;
 
-    auto dirs = get_default_app_directories();
+    auto dirs = directories();
     NEXUS_LOG_INFO("Scanning " + std::to_string(dirs.size()) + " application directories...");
 
     for (const auto& dir : dirs) {
@@ -96,10 +104,57 @@ size_t AppIndexer::rebuild_index() {
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        applications_ = std::move(new_apps);
+        applications_ = std::make_shared<const std::vector<DesktopEntry>>(std::move(new_apps));
+        return applications_->size();
     }
+}
 
-    return applications_.size();
+// Watches every app directory and all directories below it (rebuild_index() scans recursively, and
+// applications/kde/foo.desktop has id kde-foo). Failed/limit-hit watches just mean slower pickup via rebuild.
+void AppIndexer::watch_directories() {
+    for (const auto& configured : directories()) {
+        std::error_code ec;
+        // FsWatcher never follows symlinks, but the scan does: watch the real directory (dotfiles-linked app dirs).
+        auto dir = std::filesystem::canonical(configured, ec);
+        if (ec) dir = configured;
+        ec.clear();
+        if (watcher_->add_watch(dir.string()) != utils::FsWatcher::AddResult::Ok) continue;
+        for (std::filesystem::recursive_directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            if (it->is_directory(ec) && !it->is_symlink(ec)) watcher_->add_watch(it->path().string());
+        }
+    }
+}
+
+bool AppIndexer::start_watching() {
+    stop_watching();
+    auto rebuild = [this]() {
+        // Watch first, scan second: a directory created while we scan raises another event instead of being missed.
+        watch_directories();
+        rebuild_index();
+    };
+    watcher_ = std::make_unique<utils::FsWatcher>(
+        [rebuild](const std::vector<utils::FsEvent>& events) {
+            for (const auto& ev : events) {
+                // Installers write via rename (IN_MOVED_TO); directory events cover moved-in/new subdirectories.
+                if ((ev.mask & IN_ISDIR) || (ev.name.size() > 8 && ev.name.compare(ev.name.size() - 8, 8, ".desktop") == 0)) {
+                    rebuild();
+                    return;
+                }
+            }
+        },
+        rebuild);
+    if (!watcher_->start(false)) {
+        watcher_.reset();
+        return false;
+    }
+    watch_directories();
+    return true;
+}
+
+void AppIndexer::stop_watching() {
+    if (watcher_) watcher_->stop();  // join before release: the thread calls back into this object
+    watcher_.reset();
 }
 
 size_t AppIndexer::initialize() {
@@ -108,15 +163,15 @@ size_t AppIndexer::initialize() {
         if (!cached.empty()) {
             NEXUS_LOG_INFO("Loaded " + std::to_string(cached.size()) + " applications from database cache.");
             std::lock_guard<std::mutex> lock(mutex_);
-            applications_ = std::move(cached);
-            return applications_.size();
+            applications_ = std::make_shared<const std::vector<DesktopEntry>>(std::move(cached));
+            return applications_->size();
         }
     }
 
     return rebuild_index();
 }
 
-std::vector<DesktopEntry> AppIndexer::get_applications() const {
+std::shared_ptr<const std::vector<DesktopEntry>> AppIndexer::get_applications() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return applications_;
 }

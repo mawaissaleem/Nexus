@@ -1,5 +1,6 @@
 #include "nexus/index/database.hpp"
 #include "nexus/index/database_migrations.hpp"
+#include "nexus/utils/fuzzy.hpp"
 #include "nexus/utils/logger.hpp"
 #include <sqlite3.h>
 #include <filesystem>
@@ -132,6 +133,19 @@ const std::vector<Migration>& default_migrations() {
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_usage_app_id ON usage_events(app_id);
+            )"
+        },
+        {
+            2,
+            "file index",
+            R"(
+                CREATE TABLE IF NOT EXISTS files (
+                    path TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    name_lower TEXT NOT NULL,
+                    is_dir INTEGER NOT NULL DEFAULT 0,
+                    is_root INTEGER NOT NULL DEFAULT 0
+                );
             )"
         }
     };
@@ -357,6 +371,12 @@ bool Database::save_applications(const std::vector<DesktopEntry>& entries) {
     if (!db_) return false;
 
     sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    // A full snapshot: apps uninstalled since the last save must not come back from the cache at next start.
+    if (sqlite3_exec(db_, "DELETE FROM applications;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        NEXUS_LOG_ERROR("Failed to clear applications table: " + std::string(sqlite3_errmsg(db_)));
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        return false;
+    }
 
     const char* insert_sql = R"(
         INSERT OR REPLACE INTO applications (
@@ -439,6 +459,117 @@ std::vector<DesktopEntry> Database::load_applications() {
     return results;
 }
 
+namespace {
+
+bool step_file_entry(sqlite3_stmt* stmt, const FileEntry& e) {
+    const std::string lower = utils::FuzzyMatcher::to_lower(e.name);
+    sqlite3_bind_text(stmt, 1, e.path.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, e.name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, lower.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 4, e.is_dir ? 1 : 0);
+    sqlite3_bind_int(stmt, 5, e.is_root ? 1 : 0);
+    const bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_reset(stmt);
+    return ok;
+}
+
+} // namespace
+
+bool Database::replace_files(const std::vector<FileEntry>& entries) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_) return false;
+
+    if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        NEXUS_LOG_ERROR("Failed to start file index transaction: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+    sqlite3_stmt* stmt = nullptr;
+    bool ok = sqlite3_exec(db_, "DELETE FROM files;", nullptr, nullptr, nullptr) == SQLITE_OK &&
+              sqlite3_prepare_v2(db_,
+                  "INSERT OR IGNORE INTO files (path, name, name_lower, is_dir, is_root) VALUES (?, ?, ?, ?, ?);",
+                  -1, &stmt, nullptr) == SQLITE_OK;
+    for (size_t i = 0; ok && i < entries.size(); ++i) {
+        ok = step_file_entry(stmt, entries[i]);
+    }
+    if (stmt) sqlite3_finalize(stmt);
+
+    if (ok && sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) == SQLITE_OK) return true;
+    NEXUS_LOG_ERROR("Failed to replace file index: " + std::string(sqlite3_errmsg(db_)));
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+}
+
+bool Database::apply_file_changes(const std::vector<std::string>& removed_trees, const std::vector<FileEntry>& upserts) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_) return false;
+
+    if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        NEXUS_LOG_ERROR("Failed to start file update transaction: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+    sqlite3_stmt* del = nullptr;
+    sqlite3_stmt* ins = nullptr;
+    // Subtree = the path itself plus keys in ["path/", "path0"): '0' is the character after '/', so no LIKE escaping.
+    bool ok = sqlite3_prepare_v2(db_,
+                  "DELETE FROM files WHERE path = ?1 OR (path >= ?1 || '/' AND path < ?1 || '0');",
+                  -1, &del, nullptr) == SQLITE_OK &&
+              sqlite3_prepare_v2(db_,
+                  "INSERT INTO files (path, name, name_lower, is_dir, is_root) VALUES (?1, ?2, ?3, ?4, ?5) "
+                  "ON CONFLICT(path) DO UPDATE SET name = ?2, name_lower = ?3, is_dir = ?4;",
+                  -1, &ins, nullptr) == SQLITE_OK;
+    for (size_t i = 0; ok && i < removed_trees.size(); ++i) {
+        sqlite3_bind_text(del, 1, removed_trees[i].c_str(), -1, SQLITE_TRANSIENT);
+        ok = sqlite3_step(del) == SQLITE_DONE;
+        sqlite3_reset(del);
+    }
+    for (size_t i = 0; ok && i < upserts.size(); ++i) ok = step_file_entry(ins, upserts[i]);
+    if (del) sqlite3_finalize(del);
+    if (ins) sqlite3_finalize(ins);
+
+    if (ok && sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) == SQLITE_OK) return true;
+    NEXUS_LOG_ERROR("Failed to update file index: " + std::string(sqlite3_errmsg(db_)));
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+}
+
+std::vector<FileEntry> Database::find_files(const std::string& pattern) {
+    std::vector<FileEntry> results;
+    if (pattern.empty()) return results;
+
+    // "abc" -> %a%b%c% (with LIKE wildcards escaped): a subsequence test, evaluated inside SQLite.
+    // '%' goes after each whole UTF-8 character, never between its bytes: SQLite reads LIKE patterns per code point.
+    const std::string lower = utils::FuzzyMatcher::to_lower(pattern);
+    std::string like = "%";
+    for (size_t i = 0; i < lower.size(); ++i) {
+        const char c = lower[i];
+        if (c == '%' || c == '_' || c == '\\') like.push_back('\\');
+        like.push_back(c);
+        const bool next_is_continuation = i + 1 < lower.size() && (static_cast<unsigned char>(lower[i + 1]) & 0xC0) == 0x80;
+        if (!next_is_continuation) like.push_back('%');
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_) return results;
+
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_,
+            "SELECT path, name, is_dir, is_root FROM files WHERE name_lower LIKE ?1 ESCAPE '\\';",
+            -1, &stmt, nullptr) != SQLITE_OK) {
+        NEXUS_LOG_ERROR("Failed to query file index: " + std::string(sqlite3_errmsg(db_)));
+        return results;
+    }
+    sqlite3_bind_text(stmt, 1, like.c_str(), -1, SQLITE_TRANSIENT);
+    auto text = [&](int col) {
+        const unsigned char* v = sqlite3_column_text(stmt, col);
+        return v ? std::string(reinterpret_cast<const char*>(v)) : std::string();
+    };
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        results.push_back({text(0), text(1), sqlite3_column_int(stmt, 2) != 0, sqlite3_column_int(stmt, 3) != 0});
+    }
+    sqlite3_finalize(stmt);
+    return results;
+}
+
 bool Database::record_usage(const std::string& app_id, const std::string& query_text) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!db_) return false;
@@ -471,6 +602,23 @@ int Database::get_usage_count(const std::string& app_id) {
     }
     sqlite3_finalize(stmt);
     return count;
+}
+
+std::unordered_map<std::string, int> Database::get_usage_counts() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::unordered_map<std::string, int> counts;
+    if (!db_) return counts;
+
+    const char* sql = "SELECT app_id, COUNT(*) FROM usage_events GROUP BY app_id;";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return counts;
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char* id = sqlite3_column_text(stmt, 0);
+        if (id) counts[reinterpret_cast<const char*>(id)] = sqlite3_column_int(stmt, 1);
+    }
+    sqlite3_finalize(stmt);
+    return counts;
 }
 
 bool Database::record_query(const std::string& query_text, const std::string& selected_id, const std::string& provider_id) {

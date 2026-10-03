@@ -39,6 +39,7 @@ set(NEXUS_CORE_SOURCES
     src/utils/logger.cpp
     src/utils/fuzzy.cpp
     src/utils/shortcut.cpp
+    src/utils/fs_watcher.cpp
     src/core/query.cpp
     src/core/executor.cpp
     src/core/ranking_engine.cpp
@@ -47,6 +48,8 @@ set(NEXUS_CORE_SOURCES
     src/index/desktop_entry.cpp
     src/index/database.cpp
     src/index/app_indexer.cpp
+    src/index/file_indexer.cpp
+    src/index/file_watcher.cpp
     src/providers/app_provider.cpp
     src/providers/calc_provider.cpp
     src/providers/shell_provider.cpp
@@ -110,6 +113,14 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(nexus PRIVATE X11::X11)
 elseif(WIN32)
     target_link_libraries(nexus PRIVATE user32 shell32)
+endif()
+
+# Benchmarks: built by default so they keep compiling, but never registered with ctest.
+option(NEXUS_BUILD_BENCH "Build bench/bench_nexus" ON)
+if(NEXUS_BUILD_BENCH)
+    add_executable(bench_nexus bench/bench_nexus.cpp)
+    target_compile_options(bench_nexus PRIVATE -UNDEBUG)
+    target_link_libraries(bench_nexus PRIVATE nexus_core)
 endif()
 
 # Testing

@@ -18,6 +18,10 @@ public:
     bool add_search_directory(const std::string& path);
     bool remove_search_directory(const std::string& path);
 
+    // Names (not paths) the file indexer skips. Edited by hand in config.json ("file_exclusions").
+    std::vector<std::string> get_file_exclusions() const;
+    static std::vector<std::string> default_file_exclusions();
+
     bool is_ctrl_np_navigation_enabled() const;
     void set_ctrl_np_navigation_enabled(bool enabled);
 
@@ -37,6 +41,7 @@ private:
     mutable std::mutex mutex_;
     std::string config_file_path_;
     std::vector<std::string> search_directories_;
+    std::vector<std::string> file_exclusions_;
     bool enable_ctrl_np_navigation_{true};
     std::string shortcut_{"Alt+Space"};
 };

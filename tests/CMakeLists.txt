@@ -17,6 +17,9 @@ set(TEST_TARGETS
     test_shortcut
     test_app_indexer
     test_app_provider
+    test_file_indexer
+    test_file_watcher
+    test_app_watcher
 )
 
 foreach(test_name ${TEST_TARGETS})

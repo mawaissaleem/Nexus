@@ -1,4 +1,6 @@
 #include "nexus/core/config_manager.hpp"
+#include "nexus/index/database.hpp"
+#include "nexus/index/file_indexer.hpp"
 #include "nexus/providers/file_provider.hpp"
 #include "nexus/core/query.hpp"
 #include <iostream>
@@ -6,12 +8,13 @@
 #include <cassert>
 #include <atomic>
 #include <filesystem>
+#include <unistd.h>
 
 int main() {
     using namespace nexus::core;
     using namespace nexus::providers;
 
-    std::filesystem::path test_base = std::filesystem::temp_directory_path() / "nexus_test_file_search";
+    std::filesystem::path test_base = std::filesystem::temp_directory_path() / ("nexus_test_file_search_" + std::to_string(getpid()));
 
     // Clean any leftover state from a previous crashed/aborted run before
     // setting up fresh fixtures. Without this, an earlier assertion failure
@@ -28,30 +31,16 @@ int main() {
         std::ofstream(test_base / "docs_folder" / "thesis.pdf") << "%PDF";
     }
 
-    auto& cfg = ConfigManager::instance();
-
-    // ConfigManager is a singleton backed by the REAL, persistent user config
-    // file (~/.config/nexus/config.json), loaded automatically the moment
-    // this singleton is first constructed. If the person running this test
-    // has ever configured real search directories (e.g. via `nexus dir add`,
-    // as the README itself demonstrates), those directories are already
-    // loaded here — and FileProvider would search them too, alongside the
-    // test fixture, making results non-deterministic and dependent on
-    // whatever happens to exist on the developer's real machine.
-    //
-    // To keep this test fully isolated, save whatever real directories are
-    // currently configured, remove them for the duration of this test, and
-    // restore them exactly afterward — so the test never permanently alters
-    // the person's actual Nexus configuration.
-    const std::vector<std::string> original_dirs = cfg.get_search_directories();
-    for (const auto& dir : original_dirs) {
-        cfg.remove_search_directory(dir);
-    }
-
-    cfg.add_search_directory(test_base.string());
-
-    FileProvider provider;
+    // FileProvider now reads only the DB index. Build it straight from the fixture dir with
+    // explicit options, so the real user config (~/.config/nexus) is never read or modified.
+    auto db = std::make_shared<nexus::index::Database>((test_base / "test.db").string());
+    assert(db->open());
     std::atomic<bool> cancel{false};
+    nexus::index::FileIndexer indexer(db);
+    assert(indexer.rebuild({{test_base.string()},
+                            ConfigManager::default_file_exclusions(), 3}, cancel) > 0);
+
+    FileProvider provider(db);
 
     // Test 1: Search directory name (explicit "file " prefix required —
     // FileProvider no longer responds to General-mode queries, see file_provider.cpp)
@@ -89,12 +78,7 @@ int main() {
         assert(results[0].title == "main.cpp");
     }
 
-    // Clean up: remove the test fixture and restore the real search
-    // directories exactly as they were before this test ran.
-    cfg.remove_search_directory(test_base.string());
-    for (const auto& dir : original_dirs) {
-        cfg.add_search_directory(dir);
-    }
+    // Clean up the fixture.
     std::filesystem::remove_all(test_base);
 
     std::cout << "All File/Directory search tests passed successfully!\n";
