@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.2.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: the plugin system, web search, and clipboard history are not built yet, and Wayland is not supported. See [Not implemented yet](#not-implemented-yet) before installing.
+> **Version 0.3.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: the plugin system, web search, and clipboard history are not built yet, and Wayland is not supported. See [Not implemented yet](#not-implemented-yet) before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -48,17 +48,18 @@ Nexus collapses those into a single keystroke. It is built around four ideas:
 | Fuzzy matching | `vsc` → Visual Studio Code |
 | Usage-aware ranking | Frequently launched apps rise over time |
 | Calculator | `calc 125 * 37`, `calc sqrt(144)`, `calc 2^10`, or type a bare expression |
-| File & folder search | `file thesis.pdf` searches your configured directories |
+| File & folder search | `file thesis.pdf` searches an index of your configured directories, kept current as files change |
 | Shell commands | `> docker ps` — the `>` prefix is required, never implicit |
 | Aliases | `alias gh https://github.com`, then type `gh` |
 | Settings | Type `settings`, or run `nexus settings` |
-| Tray icon | Toggle, open settings, rebuild index, quit |
+| Tray icon | Toggle, open settings, rebuild indexes, quit |
+| New apps appear automatically | Installing or removing an application updates search within seconds |
 | Single instance | Launching Nexus again toggles the running window instead of starting a second copy |
 
 **Keys**
 
 ```
-Alt + Space     Show / hide the launcher
+Alt + Space     Show / hide the launcher (configurable in Settings)
 ↑ / ↓           Navigate results
 Ctrl + N / P    Navigate results (optional, on by default)
 Enter           Execute the selected result
@@ -75,10 +76,8 @@ Listed honestly so you know what you are getting. These are planned — see the 
 - **Clipboard history.** Same — `clip ` is parsed but unimplemented.
 - **System actions.** No shutdown, lock, logout or sleep entries.
 - **URL handling.** Pasting a bare URL does nothing unless you have made an alias for it.
-- **Wayland.** The global hotkey uses an X11 key grab. Under a Wayland session it will silently fail. See [Wayland](#wayland).
-- **Configurable shortcut.** `Alt + Space` is currently hardcoded.
+- **Wayland hotkey.** The global hotkey uses an X11 key grab, which does not work under a Wayland session. See [Wayland](#wayland).
 - **Themes.** Dark only.
-- **File index.** File search walks the filesystem live rather than using an index, so it is only enabled behind the explicit `file ` prefix.
 - **History controls.** Usage and query history are recorded locally with no way to disable or clear them yet. Nothing leaves your machine; you can delete the database manually (see [Where your data lives](#where-your-data-lives)).
 - **Unit conversion.** The calculator does arithmetic and functions only — no `120 km in miles`.
 
@@ -171,7 +170,7 @@ nexus --toggle            Toggle the window (bind this to your own hotkey)
 nexus --show              Show the window on the active monitor
 nexus --hide              Hide the window
 nexus settings            Open the settings dialog
-nexus --rebuild-index     Rescan .desktop directories and rebuild the app index
+nexus --rebuild-index     Rebuild the application and file indexes
 nexus --list-apps         Print every indexed application
 nexus query <term>        Run one search and print ranked results with latency
 nexus --help              Full usage
@@ -185,6 +184,10 @@ nexus dir add ~/projects
 nexus dir list
 nexus dir remove ~/Documents
 ```
+
+Files in these directories are indexed in the background when Nexus starts, and the index follows creates, deletes and renames while it runs. After `nexus dir add` or `dir remove` from the command line, run `nexus --rebuild-index` or restart Nexus. Changes made in Settings re-index on their own. Directory names in the `file_exclusions` list in `config.json` (by default `node_modules`, `build`, `venv` and similar) are skipped.
+
+On very large trees you may hit the kernel's inotify watch limit. Nexus logs a warning when that happens. Raise the limit with `sudo sysctl fs.inotify.max_user_watches=524288`.
 
 **Aliases**
 
@@ -202,7 +205,7 @@ Aliases resolve to URLs, directories, files or commands; the type is detected fr
 
 The global hotkey is implemented as an X11 `XGrabKey` on the root window. Under a Wayland session this will not receive key events and **the hotkey will silently do nothing**.
 
-Nexus itself runs fine under XWayland. Until a portal-based implementation lands, bind the toggle yourself through your compositor's own shortcut settings:
+Nexus itself runs fine under XWayland, and shows a tray notice about this when it starts in a Wayland session. Until a portal-based implementation lands, bind the toggle yourself through your compositor's own shortcut settings:
 
 ```
 Command: nexus --toggle
@@ -219,11 +222,11 @@ Nexus targets Qt 5.15.3 in day-to-day development. CI builds against Qt 6 to cat
 Everything stays on your machine. Nexus makes no network requests and requires no account.
 
 ```
-~/.local/share/nexus/nexus.db     Application index, usage events, query history
-~/.config/nexus/config.json       Search directories, aliases, navigation settings
+~/.local/share/nexus/nexus.db     Application and file indexes, usage events, query history
+~/.config/nexus/config.json       Search directories, file exclusions, aliases, shortcut, navigation settings
 ```
 
-Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe all history, delete `nexus.db` — it will be rebuilt on next launch. A proper clear-history command is planned for 0.4.0.
+Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe all history, delete `nexus.db`. It is rebuilt on the next launch, and schema upgrades between versions are applied automatically. A proper clear-history command is planned for 0.4.0.
 
 
 ## Architecture
@@ -249,10 +252,10 @@ Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe all history, delete `
 ```
 include/nexus/ , src/
 ├── core/        Query parsing, search engine, ranking, executor, config, aliases
-├── index/       Desktop-entry parsing, application indexer, SQLite layer
+├── index/       Desktop-entry parsing, application and file indexers, watchers, SQLite layer
 ├── providers/   Application, file, calculator, shell, alias
 ├── ui/          Launcher window, result widget, settings dialog, X11 hotkey
-└── utils/       Fuzzy matcher, logger
+└── utils/       Fuzzy matcher, logger, inotify wrapper, shortcut parsing
 ```
 
 Two rules hold throughout: the core never depends on Qt, and OS-level calls are confined to `Executor`. Every provider implements `ISearchProvider` and returns the same `SearchResult`, so the UI never needs to know where a result came from.
@@ -268,7 +271,32 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
-Twelve suites cover fuzzy matching, desktop-entry parsing, ranking, the calculator, the database layer, aliases, file search, configuration, query parsing, OS-integration (`Executor`), the search engine, and async search cancellation. Integration and performance suites are not yet started — see the [roadmap](#roadmap).
+Nineteen suites cover fuzzy matching, desktop-entry parsing, ranking, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, and async search cancellation. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
+
+
+## Performance
+
+`bench_nexus` (built with the project, not run by `ctest`) measures search latency in a throwaway temp directory, so it never touches your real config or data:
+
+```bash
+cmake -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel -j$(nproc) --target bench_nexus
+./build-rel/bench_nexus --apps 300 --files 50000 --iters 500
+```
+
+Results on an Intel i5-1235U with 16 GB RAM, a Release build and a warm page cache, using synthetic files. Search runs through the same path as `nexus query`, ranking included.
+
+| Measurement | p50 | p95 |
+|---|---|---|
+| App query (empty usage history) | 0.12 ms | 0.13 ms |
+| App query (50 000 launch events) | 1.86 ms | 1.90 ms |
+| File query, few or no hits, 20 000 files | 1.1 ms (was 16.5 ms in 0.2.0) | 1.2 ms |
+| File query, few or no hits, 50 000 files | 3.4 ms (was ~38 ms in 0.2.0) | 3.4 ms |
+| File query, short term matching a third of 50 000 files | 13.4 ms | 14.0 ms |
+| File index build, 50 000 files (background) | 140 ms | |
+| Startup, warm database (core only, no window) | 0.35 ms | |
+
+The specification targets under 50 ms per query and under 20 ms for cached queries. Every case above meets both. Numbers on your machine will differ. Run the benchmark yourself before comparing, and never compare against a Debug build.
 
 
 ## Roadmap
@@ -277,16 +305,15 @@ Twelve suites cover fuzzy matching, desktop-entry parsing, ranking, the calculat
 |---|---|
 | ~~0.1.0~~ | **Shipped.** Apps, calculator, shell, files, aliases on X11 |
 | ~~0.2.0~~ | **Shipped.** Search moved off the UI thread, search cancellation fixed, ranking no longer distorted by inconsistent provider score scales |
-| 0.3.0 | Real file index with inotify watching, schema migrations, published benchmarks |
-| 0.4.0 | Configurable shortcut, themes, full settings coverage, history controls, query-aware ranking |
+| ~~0.3.0~~ | **Shipped.** File index with live inotify watching, automatic app indexing, schema migrations, configurable shortcut, published benchmarks |
+| 0.4.0 | Themes, full settings coverage, history controls, query-aware ranking |
 | 0.5.0 | Plugin API, discovery, lifecycle and isolation; web, clipboard and system actions built as plugins |
 | 0.6.0 | Wayland support, packaging, tested across GNOME / KDE / XFCE |
 | 1.0.0 | Stable plugin API, accessibility, security review |
 
-Revised after 0.2.0: the file index, schema migrations, and benchmarks
-originally planned for 0.2.0 didn't ship in it — that release ended up
-scoped entirely to fixing how search runs internally instead. They're
-carried forward to 0.3.0 rather than pretended-done here.
+The file index, schema migrations and benchmarks were first planned for
+0.2.0. That release ended up being only about how search runs internally,
+so they moved to 0.3.0 and shipped there.
 
 
 The full specification lives in [`nexus-SRS.md`](nexus-SRS.md).

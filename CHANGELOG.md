@@ -8,6 +8,100 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
+## [0.3.0] — 2026-11-04
+
+Closes out Phase 3 (persistent index). File search now uses a real index
+that stays current while Nexus runs. Newly installed applications show up
+without a manual rebuild. The database has a migration system, and there
+is a benchmark harness with published numbers.
+
+### Added
+
+- **File index.** Files under your search directories are indexed into a
+  new `files` table in SQLite. The index is built in the background at
+  startup, so the window never waits for it. `file ` queries now read only
+  from the database and no longer walk the disk. Results are ranked across
+  every match, not just the first 30 found. Until the first build
+  finishes, `file ` queries return nothing.
+- **Live file watching.** Creating, deleting or renaming a file in a
+  watched directory updates the index immediately, with no rebuild. This
+  uses raw `inotify` on its own thread. If the kernel's
+  `fs.inotify.max_user_watches` limit runs out, Nexus logs a warning with
+  the `sysctl` command to raise it. Directories it could not watch are
+  picked up by the next **Rebuild Indexes**.
+- **Configurable file exclusions.** A new `file_exclusions` list in
+  `config.json` controls which directory names are skipped. It defaults
+  to the old hardcoded ignore list. An explicit empty list excludes
+  nothing.
+- **Incremental application indexing.** Adding or removing a `.desktop`
+  file in any XDG application directory updates the app index within
+  seconds. You no longer need `--rebuild-index` after installing an app.
+- **Configurable global shortcut.** Set it in Settings or with
+  `global_shortcut` in `config.json` (default `Alt+Space`). If the key
+  combination is already grabbed by another program, Nexus tells you.
+- **Wayland session notice.** Under Wayland, the tray shows one notice
+  explaining that global shortcuts don't work there and how to bind
+  `nexus --toggle` in your compositor instead.
+- **Schema migrations (D-17).** The database now records its schema
+  version and applies numbered migrations in a transaction at startup.
+  Future schema changes no longer require deleting `nexus.db`.
+- **Benchmark harness (D-16).** `bench_nexus` (in `bench/`, not run by
+  `ctest`) measures app and file query p50/p95, index build time and
+  startup time in an isolated temp directory. See
+  [Performance](README.md#performance) for the numbers.
+- Tests for `ApplicationProvider`, `AppIndexer`, the file indexer, both
+  watchers, migrations and shortcut parsing. Test count: 12 → 19.
+
+### Changed
+
+- `--rebuild-index` and the tray's **Rebuild Indexes** action now rebuild
+  both the application and file indexes.
+- Adding or removing a search directory in Settings re-indexes files
+  automatically.
+
+### Fixed
+
+- **Tray rebuild froze the window.** "Rebuild Indexes" ran the rescan on
+  the UI thread. It now runs on a worker thread and shows a tray message
+  when it finishes. A click while a rebuild is running is queued instead
+  of starting a second one.
+- **Per-result usage queries (D-15, partial).** App search ran one SQL
+  query per matched application to fetch its launch count, and copied
+  the whole application list on every keystroke. It now runs one grouped
+  query per search and reads from a shared snapshot. Query cost still
+  grows with the size of the usage history; that is tracked for a later
+  release.
+- **Applications launched through `sh -c`.** `.desktop` `Exec` lines are
+  now tokenized into an argument vector and spawned directly, so no shell
+  sees the command line. Shell execution remains only behind the `>`
+  prefix.
+- **Opening files, folders and web links.** `xdg-open` was spawned with
+  broken file-descriptor handling, so some targets failed to open. The
+  child process is now also reaped, so it no longer stays behind as a
+  zombie.
+- **Unsafe database fallback paths (security).** When the XDG data
+  directory was unusable, Nexus fell back to `./.nexus.db` in the current
+  directory, then to `/tmp/nexus.db`. Another local user could pre-plant
+  that `/tmp` file with a malicious `Exec`. Nexus now falls back straight
+  to an in-memory database and logs a warning.
+
+### Removed
+
+- The unused `SearchEngine::search_async()` and `cancel()` methods, which
+  `AsyncSearchCoordinator` replaced in 0.2.0.
+
+### Known issues
+
+- Query cost grows with the usage history (about 1.9 ms at 50 000 launch
+  events). This is still well inside the target, but it is not fixed.
+- Short file queries that match a large share of names are the slowest
+  case: about 13 ms with 50 000 indexed files.
+- The file index is rebuilt fully on every start. Live watching keeps it
+  current between starts.
+- No plugin system, no web/clipboard providers, no system actions, no URL
+  detection, no Wayland hotkey, no history controls, no unit conversion,
+  dark theme only, no accessibility pass. All unchanged from 0.2.0.
+
 ## [0.2.0] — 2026-09-27
 
 Closes out Phase 2 (search architecture) from `nexus-SRS.md`. No new
@@ -71,7 +165,7 @@ Carried forward from 0.1.0 except where noted resolved below. See
   conversion, minimal settings coverage, dark theme only, no accessibility
   pass — all unchanged from 0.1.0.
 
-
+## [0.1.0] — 2026-09-20
 
 First tagged release. Nexus is a working, daily-usable launcher on X11. It is
 not feature-complete against its own specification — see **Known issues**
@@ -179,4 +273,6 @@ See `nexus-SRS.md` for full detail and `docs/` (once written) for tracking.
 | Dependencies | Qt (`Core`, `Gui`, `Widgets`, `Network`), SQLite3, libX11 |
 | Desktop environments tested | Whatever the maintainer runs daily (X11-based). Not yet verified across GNOME, KDE, and XFCE independently |
 
+[0.3.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.3.0
+[0.2.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.2.0
 [0.1.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.1.0
