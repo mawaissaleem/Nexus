@@ -85,12 +85,7 @@ void ConfigManager::set_defaults() {
     const char* home = std::getenv("HOME");
     if (home) {
         std::filesystem::path home_path(home);
-        // Current directory / workspace
         std::error_code ec;
-        auto cwd = std::filesystem::current_path(ec);
-        if (!ec) {
-            search_directories_.push_back(cwd.string());
-        }
 
         std::vector<std::string> standard_dirs = {
             (home_path / "Documents").string(),
