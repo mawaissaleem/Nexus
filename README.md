@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.3.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: the plugin system, web search, and clipboard history are not built yet, and Wayland is not supported. See [Not implemented yet](#not-implemented-yet) before installing.
+> **Version 0.4.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: the plugin system, web search, and clipboard history are not built yet, and Wayland is not supported. See [Not implemented yet](#not-implemented-yet) before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -46,14 +46,16 @@ Nexus collapses those into a single keystroke. It is built around four ideas:
 |---|---|
 | Application search | Type any part of a name, generic name, keyword or comment |
 | Fuzzy matching | `vsc` → Visual Studio Code |
-| Usage-aware ranking | Frequently launched apps rise over time |
+| Usage-aware ranking | Apps you launch rise for that search and similar ones; recent launches count a little more; an exact name match always stays on top |
 | Calculator | `calc 125 * 37`, `calc sqrt(144)`, `calc 2^10`, or type a bare expression |
 | File & folder search | `file thesis.pdf` searches an index of your configured directories, kept current as files change |
 | Shell commands | `> docker ps` — the `>` prefix is required, never implicit |
 | Aliases | `alias gh https://github.com`, then type `gh` |
-| Settings | Type `settings`, or run `nexus settings` |
+| Settings | Type `settings`, or run `nexus settings`: aliases, directories and exclusions, result count, search sources, shortcut, theme, history |
+| Themes | Dark (default), light, or follow the desktop |
+| History controls | Turn history off in Settings, or wipe it with `nexus history clear` |
 | Tray icon | Toggle, open settings, rebuild indexes, quit |
-| New apps appear automatically | Installing or removing an application updates search within seconds |
+| New apps appear automatically | While Nexus runs, installing or removing an application updates search within seconds. Apps installed while it was off appear after **Rebuild Indexes** in the tray or `nexus --rebuild-index` |
 | Single instance | Launching Nexus again toggles the running window instead of starting a second copy |
 
 **Keys**
@@ -225,7 +227,15 @@ Everything stays on your machine. Nexus makes no network requests and requires n
 ~/.config/nexus/config.json       Search directories, file exclusions, result count, disabled providers, aliases, shortcut, theme, navigation settings
 ```
 
-Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe usage events and query history, run `nexus history clear` (the application and file indexes are kept). The number of results shown is `"result_count"` (1 to 15, default 7; Settings > Search). Search sources can be switched off in Settings > Search or by listing their ids (`alias`, `applications`, `files`, `calculator`, `shell`) in `"disabled_providers"`; both apply immediately. The theme is chosen in Settings (Navigation tab) or with `"theme": "dark"`, `"light"` or `"system"` in `config.json` (default `dark`; `system` follows the desktop colour scheme and switches live when the desktop does; an unknown value falls back to dark). To stop recording, untick the history option in Settings or set `"history_enabled": false` in `config.json`; existing history stays until you clear it. Deleting `nexus.db` also works: it is rebuilt on the next launch, and schema upgrades between versions are applied automatically.
+Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. Everything below can be set in Settings or edited in `config.json`; changes apply immediately.
+
+- **History.** Untick history in Settings or set `"history_enabled": false` to stop recording. Existing history stays until you run `nexus history clear`, which deletes usage events and query history and keeps the application and file indexes.
+- **Result count.** `"result_count"`, 1 to 15, default 7 (Settings > Search).
+- **Search sources.** Switch them off in Settings > Search, or list their ids (`alias`, `applications`, `files`, `calculator`, `shell`) in `"disabled_providers"`.
+- **Theme.** `"theme"`: `"dark"` (default), `"light"` or `"system"` (Settings > Navigation). `system` follows the desktop on Qt 6.5+, or when a Qt platform theme such as qgnomeplatform or qt5ct reports the desktop palette; on a stock GNOME session with Qt 5 it stays light. An unknown value falls back to dark.
+- **Broken config files.** If `config.json` or `aliases.json` can't be read, Nexus copies it to `<file>.malformed` and starts with defaults, so nothing is silently lost.
+
+Deleting `nexus.db` also works: it is rebuilt on the next launch, and schema upgrades between versions are applied automatically.
 
 
 ## Architecture
@@ -270,7 +280,7 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
-Twenty-two suites cover fuzzy matching, desktop-entry parsing, ranking, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, and async search cancellation. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
+Twenty-two suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, and async search cancellation. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
 
 
 ## Performance
@@ -288,7 +298,7 @@ Results on an Intel i5-1235U with 16 GB RAM, a Release build and a warm page cac
 | Measurement | p50 | p95 |
 |---|---|---|
 | App query (empty usage history) | 0.12 ms | 0.13 ms |
-| App query (50 000 launch events) | 1.86 ms | 1.90 ms |
+| App query (50 000 launch events matching the search) | 2.9 ms | 5.1 ms |
 | File query, few or no hits, 20 000 files | 1.1 ms (was 16.5 ms in 0.2.0) | 1.2 ms |
 | File query, few or no hits, 50 000 files | 3.4 ms (was ~38 ms in 0.2.0) | 3.4 ms |
 | File query, short term matching a third of 50 000 files | 13.4 ms | 14.0 ms |
@@ -305,7 +315,7 @@ The specification targets under 50 ms per query and under 20 ms for cached queri
 | ~~0.1.0~~ | **Shipped.** Apps, calculator, shell, files, aliases on X11 |
 | ~~0.2.0~~ | **Shipped.** Search moved off the UI thread, search cancellation fixed, ranking no longer distorted by inconsistent provider score scales |
 | ~~0.3.0~~ | **Shipped.** File index with live inotify watching, automatic app indexing, schema migrations, configurable shortcut, published benchmarks |
-| 0.4.0 | Themes, full settings coverage, history controls, query-aware ranking |
+| ~~0.4.0~~ | **Shipped.** Themes, settings coverage, history controls, query-aware ranking with recency |
 | 0.5.0 | Plugin API, discovery, lifecycle and isolation; web, clipboard and system actions built as plugins |
 | 0.6.0 | Wayland support, packaging, tested across GNOME / KDE / XFCE |
 | 1.0.0 | Stable plugin API, accessibility, security review |

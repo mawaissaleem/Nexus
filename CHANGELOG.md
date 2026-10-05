@@ -8,6 +8,84 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
+## [0.4.0] — 2026-11-07
+
+Closes out Phase 5 (personalisation) and the settings work planned for
+0.4.0. Ranking now learns from what you type, not just what you launch.
+You can turn history off and clear it. There are light, dark and system
+themes, and most options are now in the Settings dialog.
+
+### Added
+
+- **Query-aware ranking.** A launch now boosts an app only for searches
+  related to the one you used. Launching an app from `co` raises it for
+  `co` and `cod`, not for `fi`. Before, every launch boosted the app for
+  every search.
+- **Recency.** Recent launches count a little more. The boost halves every
+  7 days and only breaks near-ties; it never outranks a better text match.
+- **Exact matches always win over personalisation.** Usage and recency
+  together are capped, so no amount of launches can push another result
+  above one whose title exactly matches your search.
+- **History controls.** Untick history in Settings, or set
+  `"history_enabled": false` in `config.json`, and nothing more is
+  recorded. It applies immediately. `nexus history clear` deletes usage
+  events and query history and keeps the application and file indexes.
+- **Themes.** Light, dark and system, chosen in Settings or with `"theme"`
+  in `config.json`. Dark is the default and looks exactly as before. The
+  theme changes live, without a restart.
+- **Settings coverage.** A new Search tab sets how many results are listed
+  (`"result_count"`, 1 to 15, default 7) and switches individual search
+  sources off (`"disabled_providers"`). File exclusions can now be edited
+  in Settings. All changes apply immediately.
+- **Ranking evaluation suite.** A test runs fixed queries through the real
+  search engine and fails if the expected top result changes, so future
+  ranking changes are measured rather than guessed.
+- Test count: 19 → 22.
+
+### Changed
+
+- `config.json` and `aliases.json` are read by a real JSON parser instead
+  of line matching. Files written by 0.3.0 still load. One-line lists and
+  values containing `"` or `\` now work.
+- The tray menu item is now "Settings..." and `--help` lists `query, -q`
+  and the history command.
+- The default search directories no longer include the directory Nexus was
+  started from. They are Documents, Downloads, Desktop and Projects when
+  present, otherwise your home folder.
+
+### Fixed
+
+- **Config writer didn't escape strings.** A search directory or alias
+  containing `"` or `\` produced an invalid file.
+- **A broken config file could be overwritten with defaults.** If
+  `config.json` or `aliases.json` can't be read, Nexus now copies it to
+  `<file>.malformed` before falling back to defaults, so your settings are
+  never silently lost.
+
+### Known issues
+
+- An alias with the same name as a command wins in shell mode: `>gh` opens
+  the `gh` alias instead of running `gh`. Aliases also appear in `file `
+  searches.
+- `nexus history clear` deletes the rows, but the old data can still be
+  recovered from the database file until SQLite reuses or compacts that
+  space.
+- The `system` theme follows the desktop on Qt 6.5+, or when a Qt platform
+  theme (for example qgnomeplatform or qt5ct) reports the desktop palette.
+  On a stock GNOME session with Qt 5 it stays light.
+- Applications installed while Nexus was not running don't appear until
+  you run `nexus --rebuild-index` or use **Rebuild Indexes** in the tray.
+  Changes made while Nexus runs still show up within seconds.
+- A calculator result can rank below an app whose name contains the
+  expression, and an acronym such as `vsc` can rank below an app whose name
+  starts with those letters.
+- Browser, search engine, ranking weights and plugin settings from the
+  specification are not built yet. They arrive with web search and the
+  plugin system in 0.5.0.
+- No plugin system, no web/clipboard providers, no system actions, no URL
+  detection, no Wayland hotkey, no unit conversion, no accessibility pass.
+  All unchanged from 0.3.0.
+
 ## [0.3.0] — 2026-11-04
 
 Closes out Phase 3 (persistent index). File search now uses a real index
@@ -273,6 +351,7 @@ See `nexus-SRS.md` for full detail and `docs/` (once written) for tracking.
 | Dependencies | Qt (`Core`, `Gui`, `Widgets`, `Network`), SQLite3, libX11 |
 | Desktop environments tested | Whatever the maintainer runs daily (X11-based). Not yet verified across GNOME, KDE, and XFCE independently |
 
+[0.4.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.2.0
 [0.1.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.1.0
