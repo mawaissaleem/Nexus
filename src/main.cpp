@@ -49,7 +49,7 @@ void print_help() {
               << "  --hide                 Hide the launcher window\n"
               << "  --rebuild-index        Rescan system directories and search directories; rebuild the application and file indexes\n"
               << "  --list-apps            List all currently indexed desktop applications\n"
-              << "  settings, config       Open Nexus Settings GUI (manage shortcuts & directories)\n"
+              << "  settings, config       Open Nexus Settings GUI (aliases, search directories, global shortcut)\n"
               << "  --settings             Open Nexus Settings GUI\n"
               << "  --help, -h             Show this help message\n\n"
               << "Directory Search Management:\n"
@@ -61,7 +61,7 @@ void print_help() {
               << "  alias list                  List configured aliases\n"
               << "  alias remove <name>         Remove an alias\n\n"
               << "CLI Search:\n"
-              << "  query <search-term>    Execute single search query and print ranked results\n";
+              << "  query, -q <search-term>  Execute single search query and print ranked results\n";
 }
 
 void print_results(const std::vector<nexus::core::SearchResult>& results, double latency_ms) {
@@ -379,7 +379,7 @@ int main(int argc, char* argv[]) {
         return shortcut_mgr->apply_shortcut(text);
     });
 
-    auto* settings_action = tray_menu.addAction("Settings & Shortcuts...");
+    auto* settings_action = tray_menu.addAction("Settings...");
     QObject::connect(settings_action, &QAction::triggered, []() {
         nexus::ui::SettingsDialog::show_settings();
     });
