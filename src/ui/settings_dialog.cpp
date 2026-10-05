@@ -19,6 +19,8 @@
 #include <QFontMetrics>
 #include <QEvent>
 #include <QPalette>
+#include <QComboBox>
+#include <algorithm>
 
 namespace nexus::ui {
 
@@ -26,10 +28,11 @@ namespace nexus::ui {
 // AliasEditDialog
 // ============================================================================
 
-AliasEditDialog::AliasEditDialog(QWidget* parent,
+AliasEditDialog::AliasEditDialog(const Palette& palette,
+                                 QWidget* parent,
                                  const QString& initial_name,
                                  const QString& initial_target)
-    : QDialog(parent) {
+    : QDialog(parent), palette_(palette) {
     if (parent) {
         setPalette(parent->palette());
     }
@@ -126,31 +129,24 @@ void AliasEditDialog::on_browse_file() {
 }
 
 void AliasEditDialog::update_preview() {
+    const auto badge = [this](const QString& text, const Palette::Badge& colours, const char* extra) {
+        type_badge_->setText(text);
+        type_badge_->setStyleSheet("background-color: " + colours.bg + "; color: " + colours.fg +
+                                   "; border-radius: 4px; padding: 2px 8px;" + extra);
+    };
+
     QString t = target_edit_->text().trimmed();
     if (t.isEmpty()) {
-        type_badge_->setText("Empty");
-        type_badge_->setStyleSheet("background-color: #383844; color: #888894; border-radius: 4px; padding: 2px 8px;");
+        badge("Empty", palette_.badge_empty, "");
         return;
     }
 
     auto type = core::AliasManager::detect_type(t.toStdString());
     switch (type) {
-        case core::AliasType::Url:
-            type_badge_->setText("🌐 Web Link");
-            type_badge_->setStyleSheet("background-color: #0d47a1; color: #90caf9; border-radius: 4px; padding: 2px 8px; font-weight: bold;");
-            break;
-        case core::AliasType::Directory:
-            type_badge_->setText("📁 Directory");
-            type_badge_->setStyleSheet("background-color: #1b5e20; color: #a5d6a7; border-radius: 4px; padding: 2px 8px; font-weight: bold;");
-            break;
-        case core::AliasType::File:
-            type_badge_->setText("📄 File");
-            type_badge_->setStyleSheet("background-color: #4a148c; color: #ce93d8; border-radius: 4px; padding: 2px 8px; font-weight: bold;");
-            break;
-        case core::AliasType::Command:
-            type_badge_->setText("⚡ Command / App");
-            type_badge_->setStyleSheet("background-color: #e65100; color: #ffcc80; border-radius: 4px; padding: 2px 8px; font-weight: bold;");
-            break;
+        case core::AliasType::Url: badge("🌐 Web Link", palette_.badge_url, " font-weight: bold;"); break;
+        case core::AliasType::Directory: badge("📁 Directory", palette_.badge_dir, " font-weight: bold;"); break;
+        case core::AliasType::File: badge("📄 File", palette_.badge_file, " font-weight: bold;"); break;
+        case core::AliasType::Command: badge("⚡ Command / App", palette_.badge_cmd, " font-weight: bold;"); break;
     }
 }
 
@@ -170,11 +166,13 @@ namespace {
     SettingsDialog* g_active_settings = nullptr;
     std::function<bool(const std::string&)> g_shortcut_applier;
     std::function<void()> g_directories_changed;
+    std::vector<std::pair<std::string, std::string>> g_providers;
+    ThemeController* g_theme = nullptr;
 
     class ModernCheckBox : public QCheckBox {
     public:
-        explicit ModernCheckBox(const QString& text, QWidget* parent = nullptr)
-            : QCheckBox(text, parent) {
+        ModernCheckBox(const QString& text, const Palette& palette, QWidget* parent = nullptr)
+            : QCheckBox(text, parent), palette_(palette) {
             setCursor(Qt::PointingHandCursor);
             setAttribute(Qt::WA_Hover, true);
         }
@@ -197,12 +195,12 @@ namespace {
             QRect box_rect(0, box_y, box_size, box_size);
 
             if (isChecked()) {
-                painter.setBrush(QColor(0, 122, 255)); // #007AFF
+                painter.setBrush(QColor(palette_.accent));
                 painter.setPen(Qt::NoPen);
                 painter.drawRoundedRect(box_rect, 5, 5);
 
                 // Draw crisp white checkmark
-                QPen pen(Qt::white, 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+                QPen pen(QColor(palette_.on_accent), 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
                 painter.setPen(pen);
                 QPainterPath path;
                 path.moveTo(box_rect.x() + 5, box_rect.y() + 10);
@@ -210,14 +208,14 @@ namespace {
                 path.lineTo(box_rect.x() + 15, box_rect.y() + 6.5);
                 painter.drawPath(path);
             } else {
-                painter.setBrush(QColor(22, 22, 28));
-                QColor border_color = underMouse() ? QColor(0, 122, 255) : QColor(255, 255, 255, 75);
+                painter.setBrush(palette_.check_bg);
+                QColor border_color = underMouse() ? QColor(palette_.accent) : palette_.check_border;
                 painter.setPen(QPen(border_color, 1.5));
                 painter.drawRoundedRect(box_rect, 5, 5);
             }
 
             // Draw label text
-            painter.setPen(underMouse() ? QColor(255, 255, 255) : QColor(240, 240, 245));
+            painter.setPen(underMouse() ? palette_.check_text_hover : QColor(palette_.text));
             QFont f = font();
             f.setPointSize(10);
             f.setWeight(QFont::DemiBold);
@@ -238,6 +236,9 @@ void enterEvent(QEvent* event) override {
             QCheckBox::leaveEvent(event);
             update();
         }
+
+    private:
+        const Palette& palette_;  // the owning dialog's, updated in place on theme change
     };
 }
 
@@ -245,8 +246,16 @@ void SettingsDialog::set_shortcut_applier(std::function<bool(const std::string&)
     g_shortcut_applier = std::move(applier);
 }
 
+void SettingsDialog::set_theme_controller(ThemeController* theme) {
+    g_theme = theme;
+}
+
 void SettingsDialog::set_directories_changed_handler(std::function<void()> handler) {
     g_directories_changed = std::move(handler);
+}
+
+void SettingsDialog::set_providers(std::vector<std::pair<std::string, std::string>> providers) {
+    g_providers = std::move(providers);
 }
 
 void SettingsDialog::show_settings(QWidget* parent) {
@@ -269,7 +278,8 @@ void SettingsDialog::show_settings(QWidget* parent) {
     g_active_settings->activateWindow();
 }
 
-SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
+SettingsDialog::SettingsDialog(QWidget* parent)
+    : QDialog(parent), palette_(g_theme ? g_theme->palette() : Palette::dark()) {
     setWindowTitle("Nexus Settings & Configuration");
     resize(640, 480);
     setMinimumSize(540, 400);
@@ -278,42 +288,55 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     setup_ui();
     reload_aliases();
     reload_directories();
+    reload_exclusions();
+    if (g_theme) {
+        connect(g_theme, &ThemeController::palette_changed, this, [this]() {
+            palette_ = g_theme->palette();
+            apply_theme();
+            for (int r = 0; r < alias_table_->rowCount(); ++r) {
+                if (auto* item = alias_table_->item(r, 2)) item->setForeground(palette_.target_text);
+            }
+            ctrl_np_checkbox_->update();
+            history_checkbox_->update();
+        });
+    }
 }
 
 void SettingsDialog::apply_theme() {
+    const Palette& p = palette_;
     QPalette pal = palette();
-    pal.setColor(QPalette::Window, QColor(24, 24, 30));
-    pal.setColor(QPalette::WindowText, QColor(240, 240, 245));
-    pal.setColor(QPalette::Base, QColor(20, 20, 24));
-    pal.setColor(QPalette::Text, QColor(240, 240, 245));
-    pal.setColor(QPalette::Button, QColor(45, 45, 56));
-    pal.setColor(QPalette::ButtonText, QColor(255, 255, 255));
-    pal.setColor(QPalette::Highlight, QColor(0, 122, 255));
-    pal.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+    pal.setColor(QPalette::Window, QColor(p.window));
+    pal.setColor(QPalette::WindowText, QColor(p.text));
+    pal.setColor(QPalette::Base, QColor(p.field));
+    pal.setColor(QPalette::Text, QColor(p.text));
+    pal.setColor(QPalette::Button, QColor(p.button));
+    pal.setColor(QPalette::ButtonText, QColor(p.text_strong));
+    pal.setColor(QPalette::Highlight, QColor(p.accent));
+    pal.setColor(QPalette::HighlightedText, QColor(p.on_accent));
     setPalette(pal);
 
     setStyleSheet(
         "QDialog, QMessageBox {"
-        "  background-color: #18181E;"
-        "  color: #F0F0F5;"
+        "  background-color: " + p.window + ";"
+        "  color: " + p.text + ";"
         "  font-family: system-ui, -apple-system, sans-serif;"
         "}"
         "QLabel {"
-        "  color: #F0F0F5;"
+        "  color: " + p.text + ";"
         "}"
         "QMessageBox QLabel {"
-        "  color: #F0F0F5;"
+        "  color: " + p.text + ";"
         "  font-size: 13px;"
         "}"
         "QTabWidget::pane {"
-        "  border: 1px solid rgba(255, 255, 255, 0.1);"
-        "  background-color: #202028;"
+        "  border: 1px solid " + p.overlay("0.1") + ";"
+        "  background-color: " + p.panel + ";"
         "  border-radius: 8px;"
         "  padding: 10px;"
         "}"
         "QTabBar::tab {"
-        "  background: #18181E;"
-        "  color: #9A9AA4;"
+        "  background: " + p.window + ";"
+        "  color: " + p.text_dim + ";"
         "  padding: 8px 20px;"
         "  font-size: 13px;"
         "  font-weight: 600;"
@@ -322,52 +345,87 @@ void SettingsDialog::apply_theme() {
         "  margin-right: 2px;"
         "}"
         "QTabBar::tab:selected {"
-        "  background: #202028;"
-        "  color: #FFFFFF;"
-        "  border-bottom: 2px solid #007AFF;"
+        "  background: " + p.panel + ";"
+        "  color: " + p.text_strong + ";"
+        "  border-bottom: 2px solid " + p.accent + ";"
         "}"
         "QTableWidget, QListWidget {"
-        "  background-color: #141418;"
-        "  color: #F0F0F5;"
-        "  border: 1px solid rgba(255, 255, 255, 0.08);"
+        "  background-color: " + p.field + ";"
+        "  color: " + p.text + ";"
+        "  border: 1px solid " + p.overlay("0.08") + ";"
         "  border-radius: 6px;"
-        "  gridline-color: rgba(255, 255, 255, 0.05);"
-        "  selection-background-color: rgba(0, 122, 255, 0.35);"
-        "  selection-color: #FFFFFF;"
+        "  gridline-color: " + p.overlay("0.05") + ";"
+        "  selection-background-color: " + p.selection_bg + ";"
+        "  selection-color: " + p.selection_text + ";"
         "}"
         "QHeaderView::section {"
-        "  background-color: #1C1C24;"
-        "  color: #A0A0B0;"
+        "  background-color: " + p.header + ";"
+        "  color: " + p.text_soft + ";"
         "  padding: 6px 10px;"
         "  border: none;"
         "  font-weight: 600;"
         "  font-size: 12px;"
         "}"
         "QPushButton {"
-        "  background-color: #2D2D38;"
-        "  color: #FFFFFF;"
-        "  border: 1px solid rgba(255, 255, 255, 0.12);"
+        "  background-color: " + p.button + ";"
+        "  color: " + p.text_strong + ";"
+        "  border: 1px solid " + p.overlay("0.12") + ";"
         "  border-radius: 6px;"
         "  padding: 6px 14px;"
         "  font-weight: 600;"
         "  font-size: 12px;"
         "}"
         "QPushButton:hover {"
-        "  background-color: #383846;"
-        "  border-color: #007AFF;"
+        "  background-color: " + p.button_hover + ";"
+        "  border-color: " + p.accent + ";"
         "}"
         "QPushButton:pressed {"
-        "  background-color: #007AFF;"
+        "  background-color: " + p.accent + ";"
         "}"
-        "QLineEdit {"
-        "  background-color: #141418;"
-        "  color: #FFFFFF;"
-        "  border: 1px solid rgba(255, 255, 255, 0.15);"
+        "QPushButton#primaryBtn {"
+        "  background-color: " + p.accent + ";"
+        "  color: " + p.on_accent + ";"
+        "  border: none;"
+        "  padding: 6px 16px;"
+        "}"
+        "QPushButton#dangerBtn:hover {"
+        "  background-color: " + p.danger + ";"
+        "  border-color: " + p.danger_border + ";"
+        "}"
+        "QLabel#softLabel {"
+        "  color: " + p.text_soft + ";"
+        "  font-size: 12px;"
+        "}"
+        "QLabel#hintLabel {"
+        "  color: " + p.alias_hint + ";"
+        "  font-size: 11px;"
+        "}"
+        "QLabel#infoLabel {"
+        "  color: " + p.config_info + ";"
+        "  font-size: 11px;"
+        "}"
+        "QLabel#optionDesc {"
+        "  color: " + p.text_dim + ";"
+        "  font-size: 12px;"
+        "  line-height: 1.4;"
+        "  border: none;"
+        "  background: transparent;"
+        "  padding-left: 30px;"
+        "}"
+        "#navCard {"
+        "  background-color: " + p.field + ";"
+        "  border: 1px solid " + p.overlay("0.08") + ";"
+        "  border-radius: 8px;"
+        "}"
+        "QLineEdit, QSpinBox {"
+        "  background-color: " + p.field + ";"
+        "  color: " + p.text_strong + ";"
+        "  border: 1px solid " + p.overlay("0.15") + ";"
         "  border-radius: 6px;"
         "  padding: 6px 10px;"
         "}"
         "QLineEdit:focus {"
-        "  border: 1px solid #007AFF;"
+        "  border: 1px solid " + p.accent + ";"
         "}"
     );
 }
@@ -395,7 +453,7 @@ void SettingsDialog::setup_ui() {
     alias_header_layout->addWidget(alias_search_, 1);
 
     add_alias_btn_ = new QPushButton("+ Add New Alias", alias_tab);
-    add_alias_btn_->setStyleSheet("background-color: #007AFF; border: none; padding: 6px 16px;");
+    add_alias_btn_->setObjectName("primaryBtn");
     add_alias_btn_->setCursor(Qt::PointingHandCursor);
     connect(add_alias_btn_, &QPushButton::clicked, this, &SettingsDialog::on_add_alias);
     alias_header_layout->addWidget(add_alias_btn_);
@@ -424,13 +482,13 @@ void SettingsDialog::setup_ui() {
 
     delete_alias_btn_ = new QPushButton("Delete", alias_tab);
     delete_alias_btn_->setCursor(Qt::PointingHandCursor);
-    delete_alias_btn_->setStyleSheet("QPushButton:hover { background-color: #c92a2a; border-color: #ff6b6b; }");
+    delete_alias_btn_->setObjectName("dangerBtn");
     connect(delete_alias_btn_, &QPushButton::clicked, this, &SettingsDialog::on_delete_alias);
     alias_actions->addWidget(delete_alias_btn_);
 
     alias_actions->addStretch();
     auto* alias_hint = new QLabel("Tip: Double-click an item to edit it", alias_tab);
-    alias_hint->setStyleSheet("color: #72727E; font-size: 11px;");
+    alias_hint->setObjectName("hintLabel");
     alias_actions->addWidget(alias_hint);
     alias_layout->addLayout(alias_actions);
 
@@ -445,7 +503,7 @@ void SettingsDialog::setup_ui() {
     dir_layout->setContentsMargins(8, 8, 8, 8);
 
     auto* dir_desc = new QLabel("Nexus searches these directories for files and folders when you type in the search bar:", dir_tab);
-    dir_desc->setStyleSheet("color: #A0A0B0; font-size: 12px;");
+    dir_desc->setObjectName("softLabel");
     dir_layout->addWidget(dir_desc);
 
     dir_list_ = new QListWidget(dir_tab);
@@ -453,14 +511,14 @@ void SettingsDialog::setup_ui() {
 
     auto* dir_actions = new QHBoxLayout();
     add_dir_btn_ = new QPushButton("+ Add Directory...", dir_tab);
-    add_dir_btn_->setStyleSheet("background-color: #007AFF; border: none; padding: 6px 16px;");
+    add_dir_btn_->setObjectName("primaryBtn");
     add_dir_btn_->setCursor(Qt::PointingHandCursor);
     connect(add_dir_btn_, &QPushButton::clicked, this, &SettingsDialog::on_add_directory);
     dir_actions->addWidget(add_dir_btn_);
 
     remove_dir_btn_ = new QPushButton("Remove Selected", dir_tab);
     remove_dir_btn_->setCursor(Qt::PointingHandCursor);
-    remove_dir_btn_->setStyleSheet("QPushButton:hover { background-color: #c92a2a; border-color: #ff6b6b; }");
+    remove_dir_btn_->setObjectName("dangerBtn");
     connect(remove_dir_btn_, &QPushButton::clicked, this, &SettingsDialog::on_remove_directory);
     dir_actions->addWidget(remove_dir_btn_);
 
@@ -471,6 +529,28 @@ void SettingsDialog::setup_ui() {
 
     dir_actions->addStretch();
     dir_layout->addLayout(dir_actions);
+
+    auto* excl_desc = new QLabel("Folders and files with these names are skipped when indexing (names only, no paths):", dir_tab);
+    excl_desc->setObjectName("softLabel");
+    dir_layout->addWidget(excl_desc);
+
+    exclusion_list_ = new QListWidget(dir_tab);
+    exclusion_list_->setMaximumHeight(110);
+    dir_layout->addWidget(exclusion_list_);
+
+    auto* excl_actions = new QHBoxLayout();
+    exclusion_edit_ = new QLineEdit(dir_tab);
+    exclusion_edit_->setPlaceholderText("e.g. node_modules");
+    connect(exclusion_edit_, &QLineEdit::returnPressed, this, &SettingsDialog::on_add_exclusion);
+    excl_actions->addWidget(exclusion_edit_, 1);
+    auto* add_excl_btn = new QPushButton("Add", dir_tab);
+    connect(add_excl_btn, &QPushButton::clicked, this, &SettingsDialog::on_add_exclusion);
+    excl_actions->addWidget(add_excl_btn);
+    auto* remove_excl_btn = new QPushButton("Remove Selected", dir_tab);
+    remove_excl_btn->setObjectName("dangerBtn");
+    connect(remove_excl_btn, &QPushButton::clicked, this, &SettingsDialog::on_remove_exclusion);
+    excl_actions->addWidget(remove_excl_btn);
+    dir_layout->addLayout(excl_actions);
 
     tab_widget_->addTab(dir_tab, "📁 Search Directories");
 
@@ -484,18 +564,11 @@ void SettingsDialog::setup_ui() {
 
     auto* card = new QWidget(nav_tab);
     card->setObjectName("navCard");
-    card->setStyleSheet(
-        "#navCard {"
-        "  background-color: #141418;"
-        "  border: 1px solid rgba(255, 255, 255, 0.08);"
-        "  border-radius: 8px;"
-        "}"
-    );
     auto* card_layout = new QVBoxLayout(card);
     card_layout->setSpacing(8);
     card_layout->setContentsMargins(18, 16, 18, 16);
 
-    ctrl_np_checkbox_ = new ModernCheckBox("Enable Ctrl+N / Ctrl+P navigation for search results", card);
+    ctrl_np_checkbox_ = new ModernCheckBox("Enable Ctrl+N / Ctrl+P navigation for search results", palette_, card);
     ctrl_np_checkbox_->setChecked(core::ConfigManager::instance().is_ctrl_np_navigation_enabled());
     connect(ctrl_np_checkbox_, &QCheckBox::toggled, this, &SettingsDialog::on_ctrl_np_toggled);
     card_layout->addWidget(ctrl_np_checkbox_);
@@ -508,9 +581,27 @@ void SettingsDialog::setup_ui() {
     );
     desc_label->setWordWrap(true);
     desc_label->setCursor(Qt::PointingHandCursor);
-    desc_label->setStyleSheet("color: #9A9AA4; font-size: 12px; line-height: 1.4; border: none; background: transparent; padding-left: 30px;");
+    desc_label->setObjectName("optionDesc");
     desc_label->installEventFilter(this);
     card_layout->addWidget(desc_label);
+
+    history_checkbox_ = new ModernCheckBox("Record usage and query history (used to rank results)", palette_, card);
+    history_checkbox_->setChecked(core::ConfigManager::instance().is_history_enabled());
+    connect(history_checkbox_, &QCheckBox::toggled, this, &SettingsDialog::on_history_toggled);
+    card_layout->addWidget(history_checkbox_);
+
+    auto* theme_row = new QHBoxLayout();
+    auto* theme_label = new QLabel("Theme:", card);
+    theme_label->setStyleSheet("border: none; background: transparent;");
+    theme_combo_ = new QComboBox(card);
+    theme_combo_->addItem("Dark", static_cast<int>(utils::ThemeMode::Dark));
+    theme_combo_->addItem("Light", static_cast<int>(utils::ThemeMode::Light));
+    theme_combo_->addItem("System", static_cast<int>(utils::ThemeMode::System));
+    theme_combo_->setCurrentIndex(theme_combo_->findData(static_cast<int>(core::ConfigManager::instance().get_theme())));
+    connect(theme_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsDialog::on_theme_changed);
+    theme_row->addWidget(theme_label);
+    theme_row->addWidget(theme_combo_, 1);
+    card_layout->addLayout(theme_row);
 
     auto* shortcut_row = new QHBoxLayout();
     auto* shortcut_label = new QLabel("Global shortcut:", card);
@@ -530,12 +621,58 @@ void SettingsDialog::setup_ui() {
 
     tab_widget_->addTab(nav_tab, "⌨ Navigation");
 
+    // ========================================================================
+    // Tab 4: Search (result count, providers on/off)
+    // ========================================================================
+    auto* search_tab = new QWidget();
+    auto* search_layout = new QVBoxLayout(search_tab);
+    search_layout->setSpacing(14);
+    search_layout->setContentsMargins(12, 12, 12, 12);
+
+    auto* search_card = new QWidget(search_tab);
+    search_card->setObjectName("navCard");
+    auto* search_card_layout = new QVBoxLayout(search_card);
+    search_card_layout->setSpacing(8);
+    search_card_layout->setContentsMargins(18, 16, 18, 16);
+
+    auto* count_row = new QHBoxLayout();
+    auto* count_label = new QLabel("Results shown:", search_card);
+    count_label->setStyleSheet("border: none; background: transparent;");
+    auto* count_spin = new QSpinBox(search_card);
+    count_spin->setRange(core::ConfigManager::kMinResultCount, core::ConfigManager::kMaxResultCount);
+    count_spin->setValue(core::ConfigManager::instance().get_result_count());
+    connect(count_spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int n) {
+        core::ConfigManager::instance().set_result_count(n);
+        emit settings_changed();
+    });
+    count_row->addWidget(count_label);
+    count_row->addWidget(count_spin);
+    count_row->addStretch();
+    search_card_layout->addLayout(count_row);
+
+    auto* providers_label = new QLabel("Search sources (untick to turn one off):", search_card);
+    providers_label->setStyleSheet("border: none; background: transparent;");
+    search_card_layout->addWidget(providers_label);
+    for (const auto& [id, name] : g_providers) {
+        auto* box = new ModernCheckBox(QString::fromStdString(name), palette_, search_card);
+        box->setChecked(core::ConfigManager::instance().is_provider_enabled(id));
+        connect(box, &QCheckBox::toggled, this, [this, id = id](bool on) {
+            core::ConfigManager::instance().set_provider_enabled(id, on);
+            emit settings_changed();
+        });
+        search_card_layout->addWidget(box);
+    }
+
+    search_layout->addWidget(search_card);
+    search_layout->addStretch();
+    tab_widget_->addTab(search_tab, "🔎 Search");
+
     main_layout->addWidget(tab_widget_, 1);
 
     // Bottom bar
     auto* bottom_layout = new QHBoxLayout();
     auto* config_info = new QLabel("Changes are saved automatically to ~/.config/nexus/", this);
-    config_info->setStyleSheet("color: #666675; font-size: 11px;");
+    config_info->setObjectName("infoLabel");
     bottom_layout->addWidget(config_info);
 
     bottom_layout->addStretch();
@@ -573,7 +710,7 @@ void SettingsDialog::reload_aliases() {
         auto* type_item = new QTableWidgetItem(type_str);
 
         auto* target_item = new QTableWidgetItem(QString::fromStdString(a.target));
-        target_item->setForeground(QColor(180, 200, 230));
+        target_item->setForeground(palette_.target_text);
 
         alias_table_->setItem(row, 0, name_item);
         alias_table_->setItem(row, 1, type_item);
@@ -597,7 +734,7 @@ void SettingsDialog::on_filter_aliases(const QString& text) {
 }
 
 void SettingsDialog::on_add_alias() {
-    AliasEditDialog dlg(this);
+    AliasEditDialog dlg(palette_, this);
     if (dlg.exec() == QDialog::Accepted) {
         core::AliasManager::instance().add_alias(dlg.name().toStdString(), dlg.target().toStdString());
         reload_aliases();
@@ -612,7 +749,7 @@ void SettingsDialog::on_edit_alias() {
     QString current_name = alias_table_->item(row, 0)->text();
     QString current_target = alias_table_->item(row, 2)->text();
 
-    AliasEditDialog dlg(this, current_name, current_target);
+    AliasEditDialog dlg(palette_, this, current_name, current_target);
     if (dlg.exec() == QDialog::Accepted) {
         if (dlg.name() != current_name) {
             core::AliasManager::instance().remove_alias(current_name.toStdString());
@@ -682,6 +819,43 @@ void SettingsDialog::on_remove_directory() {
     }
 }
 
+void SettingsDialog::reload_exclusions() {
+    exclusion_list_->clear();
+    for (const auto& n : core::ConfigManager::instance().get_file_exclusions()) {
+        exclusion_list_->addItem(QString::fromStdString(n));
+    }
+}
+
+void SettingsDialog::on_add_exclusion() {
+    const std::string name = exclusion_edit_->text().trimmed().toStdString();
+    if (name.empty()) return;
+    auto& cfg = core::ConfigManager::instance();
+    auto names = cfg.get_file_exclusions();
+    names.push_back(name);
+    cfg.set_file_exclusions(names);
+    const auto after = cfg.get_file_exclusions();
+    if (std::find(after.begin(), after.end(), name) == after.end()) {
+        QMessageBox::warning(this, "Invalid name", "Use a bare file or folder name without slashes, quotes or backslashes.");
+        return;
+    }
+    exclusion_edit_->clear();
+    reload_exclusions();
+    if (g_directories_changed) g_directories_changed();  // exclusions only apply when the index is rebuilt
+    emit settings_changed();
+}
+
+void SettingsDialog::on_remove_exclusion() {
+    auto* item = exclusion_list_->currentItem();
+    if (!item) return;
+    auto& cfg = core::ConfigManager::instance();
+    auto names = cfg.get_file_exclusions();
+    names.erase(std::remove(names.begin(), names.end(), item->text().toStdString()), names.end());
+    cfg.set_file_exclusions(names);
+    reload_exclusions();
+    if (g_directories_changed) g_directories_changed();
+    emit settings_changed();
+}
+
 void SettingsDialog::on_open_directory() {
     auto* item = dir_list_->currentItem();
     if (!item) return;
@@ -690,6 +864,17 @@ void SettingsDialog::on_open_directory() {
 
 void SettingsDialog::on_ctrl_np_toggled(bool checked) {
     core::ConfigManager::instance().set_ctrl_np_navigation_enabled(checked);
+    emit settings_changed();
+}
+
+void SettingsDialog::on_theme_changed(int index) {
+    const auto mode = static_cast<utils::ThemeMode>(theme_combo_->itemData(index).toInt());
+    core::ConfigManager::instance().set_theme(mode);
+    if (g_theme) g_theme->set_mode(mode);
+}
+
+void SettingsDialog::on_history_toggled(bool checked) {
+    core::ConfigManager::instance().set_history_enabled(checked);
     emit settings_changed();
 }
 

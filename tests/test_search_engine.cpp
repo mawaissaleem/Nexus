@@ -104,6 +104,36 @@ int main() {
         assert(res.size() <= 2);
     }
 
+    // provider filter: disabled providers are skipped, and the filter is read per search (live)
+    {
+        SearchEngine engine;
+        engine.register_provider(std::make_shared<FakeProvider>("a", "A", 0));
+        engine.register_provider(std::make_shared<FakeProvider>("b", "B", 0));
+        Query q("hello");
+        assert(engine.search(q).size() == 2);  // no filter -> all enabled
+
+        bool b_enabled = false;
+        engine.set_provider_filter([&](const std::string& id) { return id != "b" || b_enabled; });
+        auto res = engine.search(q);
+        assert(res.size() == 1 && res[0].provider_id == "a");
+        b_enabled = true;  // toggled without touching the engine
+        assert(engine.search(q).size() == 2);
+        engine.set_provider_filter(nullptr);
+        assert(engine.search(q).size() == 2);
+
+        engine.set_provider_filter([](const std::string&) { return false; });  // all off -> empty, no crash
+        assert(engine.search(q).empty());
+    }
+
+    // max_results: different limits on the same engine apply per call
+    {
+        SearchEngine engine;
+        engine.register_provider(std::make_shared<FakeProvider>("many", "Many", 0, false, 9));
+        Query q("hello");
+        assert(engine.search(q, 3).size() == 3);
+        assert(engine.search(q, 8).size() == 8);
+    }
+
     std::cout << "All SearchEngine tests passed successfully!\n";
     return 0;
 }

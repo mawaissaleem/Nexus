@@ -80,9 +80,13 @@ static void set_usage_rows(const std::string& db_path, int rows, int n_apps) {
     assert(rc == SQLITE_OK);
     (void)rc;
     std::ostringstream sql;
+    // Queries spread over prefixes of the benchmark's app queries, so rows actually match (P5.1).
+    // query_norm is filled directly: the strings are already lower-case and trimmed.
     sql << "BEGIN; DELETE FROM usage_events; WITH RECURSIVE c(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM c WHERE i<" << rows - 1
-        << ") INSERT INTO usage_events(app_id, query) SELECT 'app' || ((i*i) % " << n_apps << "), 'q' FROM c;"
-        << " COMMIT;";
+        << "), q(k, s) AS (VALUES (0,'c'),(1,'co'),(2,'cod'),(3,'code'),(4,'codium'),(5,'fire'),(6,'firefox'),"
+           "(7,'term'),(8,'terminal'),(9,'pho'),(10,'photos'))"
+        << " INSERT INTO usage_events(app_id, query, query_norm) SELECT 'app' || ((i*i) % " << n_apps
+        << "), q.s, q.s FROM c JOIN q ON q.k = i % 11; COMMIT;";
     char* err = nullptr;
     if (rows > 0) rc = sqlite3_exec(h, sql.str().c_str(), nullptr, nullptr, &err);
     else rc = sqlite3_exec(h, "DELETE FROM usage_events;", nullptr, nullptr, &err);

@@ -8,9 +8,14 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QCheckBox>
+#include <QComboBox>
+#include <QSpinBox>
+#include "nexus/ui/theme.hpp"
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace nexus::ui {
 
@@ -18,7 +23,8 @@ class AliasEditDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit AliasEditDialog(QWidget* parent = nullptr,
+    explicit AliasEditDialog(const Palette& palette,
+                            QWidget* parent = nullptr,
                             const QString& initial_name = "",
                             const QString& initial_target = "");
 
@@ -36,6 +42,7 @@ private:
     QLineEdit* name_edit_{nullptr};
     QLineEdit* target_edit_{nullptr};
     QLabel* type_badge_{nullptr};
+    Palette palette_;
 };
 
 class SettingsDialog : public QDialog {
@@ -50,8 +57,14 @@ public:
     // The caller owns persisting and re-grabbing it, so the dialog stays UI-only.
     static void set_shortcut_applier(std::function<bool(const std::string&)> applier);
 
+    // The theme the dialog follows and changes (set once at startup; not owned).
+    static void set_theme_controller(ThemeController* theme);
+
     // Called after the user adds or removes a search directory; the caller re-indexes.
     static void set_directories_changed_handler(std::function<void()> handler);
+
+    // (id, display name) of every registered provider, for the on/off list. Set once at startup.
+    static void set_providers(std::vector<std::pair<std::string, std::string>> providers);
 
 signals:
     void settings_changed();
@@ -71,8 +84,14 @@ private slots:
     void on_remove_directory();
     void on_open_directory();
 
+    // Exclusion slots (Search Directories tab)
+    void on_add_exclusion();
+    void on_remove_exclusion();
+
     // Navigation tab slots
     void on_ctrl_np_toggled(bool checked);
+    void on_history_toggled(bool checked);
+    void on_theme_changed(int index);
     void on_apply_shortcut();
 
 private:
@@ -80,6 +99,7 @@ private:
     void apply_theme();
     void reload_aliases();
     void reload_directories();
+    void reload_exclusions();
 
     // Tabs
     QTabWidget* tab_widget_{nullptr};
@@ -97,9 +117,15 @@ private:
     QPushButton* remove_dir_btn_{nullptr};
     QPushButton* open_dir_btn_{nullptr};
 
+    QListWidget* exclusion_list_{nullptr};
+    QLineEdit* exclusion_edit_{nullptr};
+
     // Navigation widgets
     QCheckBox* ctrl_np_checkbox_{nullptr};
+    QCheckBox* history_checkbox_{nullptr};
+    QComboBox* theme_combo_{nullptr};
     QLineEdit* shortcut_edit_{nullptr};
+    Palette palette_;
 };
 
 } // namespace nexus::ui

@@ -2,6 +2,8 @@
 
 #include "nexus/core/query.hpp"
 #include "nexus/core/result.hpp"
+#include <cstdint>
+#include <ctime>
 #include <vector>
 
 namespace nexus::core {
@@ -23,7 +25,10 @@ struct RankingWeights {
     double provider_relevance_weight{400.0};
     double token_match{50.0};
     double usage_boost{5.0};
+    // Added on top of the usage boost for apps launched from a similar query: recency_boost at
+    // "just used", halving every recency_half_life_days.
     double recency_boost{2.0};
+    double recency_half_life_days{7.0};
 };
 
 class RankingEngine {
@@ -31,7 +36,9 @@ public:
     explicit RankingEngine(RankingWeights weights = RankingWeights{});
 
     // Re-score and sort results in-place in descending score order
-    void rank(const Query& query, std::vector<SearchResult>& results) const;
+    // `now` (Unix seconds) is a parameter so recency decay is testable without the wall clock.
+    void rank(const Query& query, std::vector<SearchResult>& results,
+              std::int64_t now = static_cast<std::int64_t>(std::time(nullptr))) const;
 
     void set_weights(const RankingWeights& weights) { weights_ = weights; }
     [[nodiscard]] const RankingWeights& get_weights() const noexcept { return weights_; }

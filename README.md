@@ -77,8 +77,6 @@ Listed honestly so you know what you are getting. These are planned — see the 
 - **System actions.** No shutdown, lock, logout or sleep entries.
 - **URL handling.** Pasting a bare URL does nothing unless you have made an alias for it.
 - **Wayland hotkey.** The global hotkey uses an X11 key grab, which does not work under a Wayland session. See [Wayland](#wayland).
-- **Themes.** Dark only.
-- **History controls.** Usage and query history are recorded locally with no way to disable or clear them yet. Nothing leaves your machine; you can delete the database manually (see [Where your data lives](#where-your-data-lives)).
 - **Unit conversion.** The calculator does arithmetic and functions only — no `120 km in miles`.
 
 
@@ -173,6 +171,7 @@ nexus settings            Open the settings dialog
 nexus --rebuild-index     Rebuild the application and file indexes
 nexus --list-apps         Print every indexed application
 nexus query <term>        Run one search and print ranked results with latency
+nexus history clear       Delete usage events and query history
 nexus --help              Full usage
 ```
 
@@ -185,7 +184,7 @@ nexus dir list
 nexus dir remove ~/Documents
 ```
 
-Files in these directories are indexed in the background when Nexus starts, and the index follows creates, deletes and renames while it runs. After `nexus dir add` or `dir remove` from the command line, run `nexus --rebuild-index` or restart Nexus. Changes made in Settings re-index on their own. Directory names in the `file_exclusions` list in `config.json` (by default `node_modules`, `build`, `venv` and similar) are skipped.
+Files in these directories are indexed in the background when Nexus starts, and the index follows creates, deletes and renames while it runs. After `nexus dir add` or `dir remove` from the command line, run `nexus --rebuild-index` or restart Nexus. Changes made in Settings re-index on their own. Names in the exclusion list (Settings > Search Directories, or `file_exclusions` in `config.json`; by default `node_modules`, `build`, `venv` and similar) are skipped; editing the list re-indexes.
 
 On very large trees you may hit the kernel's inotify watch limit. Nexus logs a warning when that happens. Raise the limit with `sudo sysctl fs.inotify.max_user_watches=524288`.
 
@@ -223,10 +222,10 @@ Everything stays on your machine. Nexus makes no network requests and requires n
 
 ```
 ~/.local/share/nexus/nexus.db     Application and file indexes, usage events, query history
-~/.config/nexus/config.json       Search directories, file exclusions, aliases, shortcut, navigation settings
+~/.config/nexus/config.json       Search directories, file exclusions, result count, disabled providers, aliases, shortcut, theme, navigation settings
 ```
 
-Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe all history, delete `nexus.db`. It is rebuilt on the next launch, and schema upgrades between versions are applied automatically. A proper clear-history command is planned for 0.4.0.
+Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. To wipe usage events and query history, run `nexus history clear` (the application and file indexes are kept). The number of results shown is `"result_count"` (1 to 15, default 7; Settings > Search). Search sources can be switched off in Settings > Search or by listing their ids (`alias`, `applications`, `files`, `calculator`, `shell`) in `"disabled_providers"`; both apply immediately. The theme is chosen in Settings (Navigation tab) or with `"theme": "dark"`, `"light"` or `"system"` in `config.json` (default `dark`; `system` follows the desktop colour scheme and switches live when the desktop does; an unknown value falls back to dark). To stop recording, untick the history option in Settings or set `"history_enabled": false` in `config.json`; existing history stays until you clear it. Deleting `nexus.db` also works: it is rebuilt on the next launch, and schema upgrades between versions are applied automatically.
 
 
 ## Architecture
@@ -271,7 +270,7 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
-Nineteen suites cover fuzzy matching, desktop-entry parsing, ranking, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, and async search cancellation. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
+Twenty-two suites cover fuzzy matching, desktop-entry parsing, ranking, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, and async search cancellation. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
 
 
 ## Performance

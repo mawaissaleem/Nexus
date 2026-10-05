@@ -27,6 +27,11 @@ void SearchEngine::unregister_provider(const std::string& provider_id) {
     providers_.erase(it, providers_.end());
 }
 
+void SearchEngine::set_provider_filter(std::function<bool(const std::string&)> is_enabled) {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    provider_filter_ = std::move(is_enabled);
+}
+
 std::vector<SearchResult> SearchEngine::search(const Query& query, size_t max_results) {
     std::atomic<bool> never_cancelled{false};
     return search(query, never_cancelled, max_results);
@@ -40,9 +45,16 @@ std::vector<SearchResult> SearchEngine::search(const Query& query, std::atomic<b
     }
 
     std::vector<SearchProviderPtr> current_providers;
+    std::function<bool(const std::string&)> filter;
     {
         std::lock_guard<std::mutex> lock(search_mutex_);
         current_providers = providers_;
+        filter = provider_filter_;
+    }
+    if (filter) {
+        current_providers.erase(std::remove_if(current_providers.begin(), current_providers.end(),
+                                               [&](const auto& p) { return !filter(p->id()); }),
+                                current_providers.end());
     }
 
     for (const auto& provider : current_providers) {

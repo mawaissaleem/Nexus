@@ -6,8 +6,8 @@
 
 namespace nexus::ui {
 
-ResultWidget::ResultWidget(const core::SearchResult& result, QWidget* parent)
-    : QWidget(parent), result_(result) {
+ResultWidget::ResultWidget(const core::SearchResult& result, const Palette& palette, QWidget* parent)
+    : QWidget(parent), result_(result), palette_(palette) {
     setup_ui();
 }
 
@@ -70,10 +70,8 @@ void ResultWidget::setup_ui() {
     text_layout->setSpacing(2);
 
     title_label_ = new QLabel(QString::fromStdString(result_.title), this);
-    title_label_->setStyleSheet("color: #FFFFFF; font-weight: 600; font-size: 14px;");
 
     subtitle_label_ = new QLabel(QString::fromStdString(result_.subtitle), this);
-    subtitle_label_->setStyleSheet("color: #9A9AA0; font-size: 12px;");
 
     text_layout->addWidget(title_label_);
     if (!result_.subtitle.empty()) {
@@ -90,21 +88,28 @@ void ResultWidget::setup_ui() {
     set_selected(false);
 }
 
+void ResultWidget::set_palette(const Palette& palette) {
+    palette_ = palette;
+    set_selected(selected_);
+}
+
 void ResultWidget::set_selected(bool selected) {
+    selected_ = selected;
+    const Palette& p = palette_;
     if (selected) {
-        indicator_bar_->setStyleSheet("background-color: #007AFF; border-radius: 2px;");
+        indicator_bar_->setStyleSheet("background-color: " + p.accent + "; border-radius: 2px;");
         setStyleSheet(
             "#resultWidget {"
-            "  background-color: rgba(0, 122, 255, 0.32);"
-            "  border: 1px solid rgba(0, 140, 255, 0.85);"
+            "  background-color: " + p.row_selected_bg + ";"
+            "  border: 1px solid " + p.row_selected_border + ";"
             "  border-radius: 8px;"
             "}"
         );
-        title_label_->setStyleSheet("color: #FFFFFF; font-weight: 700; font-size: 14px;");
-        subtitle_label_->setStyleSheet("color: #CBE2FF; font-size: 12px;");
+        title_label_->setStyleSheet("color: " + p.text_strong + "; font-weight: 700; font-size: 14px;");
+        subtitle_label_->setStyleSheet("color: " + p.subtitle_selected + "; font-size: 12px;");
         badge_label_->setStyleSheet(
-            "background-color: #007AFF;"
-            "color: #FFFFFF;"
+            "background-color: " + p.accent + ";"
+            "color: " + p.on_accent + ";"
             "border-radius: 4px;"
             "padding: 3px 8px;"
             "font-size: 11px;"
@@ -119,11 +124,11 @@ void ResultWidget::set_selected(bool selected) {
             "  border-radius: 8px;"
             "}"
         );
-        title_label_->setStyleSheet("color: #D8D8DC; font-weight: 500; font-size: 14px;");
-        subtitle_label_->setStyleSheet("color: #8C8C94; font-size: 12px;");
+        title_label_->setStyleSheet("color: " + p.title + "; font-weight: 500; font-size: 14px;");
+        subtitle_label_->setStyleSheet("color: " + p.subtitle_dim + "; font-size: 12px;");
         badge_label_->setStyleSheet(
-            "background-color: rgba(255, 255, 255, 0.08);"
-            "color: #9A9AA4;"
+            "background-color: " + p.overlay("0.08") + ";"
+            "color: " + p.text_dim + ";"
             "border-radius: 4px;"
             "padding: 2px 8px;"
             "font-size: 11px;"
@@ -133,4 +138,3 @@ void ResultWidget::set_selected(bool selected) {
 }
 
 } // namespace nexus::ui
-

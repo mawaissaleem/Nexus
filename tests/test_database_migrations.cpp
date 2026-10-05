@@ -87,7 +87,7 @@ void test_fresh_db() {
         nexus::index::Database db(temp_file.string());
         assert(db.open());
         assert(db.is_open());
-        assert(db.schema_version() == 2);
+        assert(db.schema_version() == 4);
         db.close();
         assert(!db.is_open());
         assert(db.schema_version() == 0);
@@ -98,8 +98,8 @@ void test_fresh_db() {
     assert(raw_table_exists(temp_file.string(), "usage_events"));
     assert(raw_table_exists(temp_file.string(), "query_history"));
     assert(raw_table_exists(temp_file.string(), "files"));
-    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 2);
-    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 2);
+    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 4);
+    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 4);
 }
 
 void test_legacy_db() {
@@ -173,7 +173,7 @@ void test_legacy_db() {
         nexus::index::Database db(temp_file.string());
         assert(db.open());
         assert(db.is_open());
-        assert(db.schema_version() == 2);
+        assert(db.schema_version() == 4);
 
         // Verify data intact
         auto apps = db.load_applications();
@@ -201,8 +201,8 @@ void test_legacy_db() {
 
     assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM query_history;") == 2);
     assert(raw_query_text(temp_file.string(), "SELECT query FROM query_history WHERE selected_id='legacy.app.1';") == "legacy");
-    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 2);
-    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 2);
+    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 4);
+    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 4);
 }
 
 void test_idempotence() {
@@ -211,19 +211,19 @@ void test_idempotence() {
     {
         nexus::index::Database db(temp_file.string());
         assert(db.open());
-        assert(db.schema_version() == 2);
+        assert(db.schema_version() == 4);
         db.close();
     }
 
     {
         nexus::index::Database db(temp_file.string());
         assert(db.open());
-        assert(db.schema_version() == 2);
+        assert(db.schema_version() == 4);
         db.close();
     }
 
-    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 2);
-    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 2);
+    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 4);
+    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 4);
 }
 
 void test_multistep_migrations() {
@@ -468,19 +468,19 @@ void test_two_instances_sequential() {
     {
         nexus::index::Database db1(temp_file.string());
         assert(db1.open());
-        assert(db1.schema_version() == 2);
+        assert(db1.schema_version() == 4);
         db1.close();
     }
 
     {
         nexus::index::Database db2(temp_file.string());
         assert(db2.open());
-        assert(db2.schema_version() == 2);
+        assert(db2.schema_version() == 4);
         db2.close();
     }
 
-    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 2);
-    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 2);
+    assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 4);
+    assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 4);
 }
 
 // Migration 2 on a real v1 database: files table appears, v1 data survives, and it is usable.
@@ -498,17 +498,24 @@ void test_files_migration_from_v1() {
         entry.exec = "v1";
         entry.desktop_file = "/v1.desktop";
         assert(db.save_applications({entry}));
-        assert(db.record_usage("v1.app", "v1"));
         db.close();
+    }
+    {   // v1 schema has no query_norm column, so insert the usage row directly
+        sqlite3* raw = nullptr;
+        assert(sqlite3_open(temp_file.string().c_str(), &raw) == SQLITE_OK);
+        assert(sqlite3_exec(raw, "INSERT INTO usage_events (app_id, query, timestamp) VALUES ('v1.app', ' V1 ', '2020-01-01 00:00:00'), ('v1.app', 'v1', '2021-01-01 00:00:10');", nullptr, nullptr, nullptr) == SQLITE_OK);
+        sqlite3_close(raw);
     }
     assert(!raw_table_exists(temp_file.string(), "files"));
 
     nexus::index::Database db(temp_file.string());
     assert(db.open());
-    assert(db.schema_version() == 2);
+    assert(db.schema_version() == 4);
     assert(raw_table_exists(temp_file.string(), "files"));
     assert(db.load_applications().size() == 1);
-    assert(db.get_usage_count("v1.app") == 1);
+    assert(db.get_usage_count("v1.app") == 2);
+    assert(db.get_usage_counts("v1").at("v1.app").count == 2);  // migration 3 backfilled query_norm
+    assert(db.get_usage_counts("v1").at("v1.app").last_used == 1609459210);  // newest of the two: 2021-01-01 00:00:10 UTC
 
     assert(db.replace_files({{"/x/Report.txt", "Report.txt", false, false}}));
     auto rows = db.find_files("rpt");

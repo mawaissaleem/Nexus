@@ -2,6 +2,8 @@
 #include "nexus/index/database_migrations.hpp"
 #include "nexus/utils/fuzzy.hpp"
 #include "nexus/utils/logger.hpp"
+#include <algorithm>
+#include <cctype>
 #include <sqlite3.h>
 #include <filesystem>
 #include <cstdlib>
@@ -146,6 +148,23 @@ const std::vector<Migration>& default_migrations() {
                     is_dir INTEGER NOT NULL DEFAULT 0,
                     is_root INTEGER NOT NULL DEFAULT 0
                 );
+            )"
+        },
+        {
+            3,
+            "normalized usage query for query-conditioned ranking",
+            R"(
+                ALTER TABLE usage_events ADD COLUMN query_norm TEXT NOT NULL DEFAULT '';
+                UPDATE usage_events SET query_norm = lower(trim(query));
+                CREATE INDEX IF NOT EXISTS idx_usage_query_norm ON usage_events(query_norm, app_id);
+            )"
+        },
+        {
+            4,
+            "covering usage index including timestamp for recency lookups",
+            R"(
+                CREATE INDEX IF NOT EXISTS idx_usage_query_norm_ts ON usage_events(query_norm, app_id, timestamp);
+                DROP INDEX IF EXISTS idx_usage_query_norm;
             )"
         }
     };
@@ -574,12 +593,20 @@ bool Database::record_usage(const std::string& app_id, const std::string& query_
     std::lock_guard<std::mutex> lock(mutex_);
     if (!db_) return false;
 
-    const char* sql = "INSERT INTO usage_events (app_id, query) VALUES (?, ?);";
+    // Same normalisation as core::Query::normalized() (trim every isspace, then lower-case), so the
+    // stored key matches what get_usage_counts() is later called with. SQL trim() strips only ' '.
+    const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+    const auto first = std::find_if_not(query_text.begin(), query_text.end(), is_space);
+    const auto last = std::find_if_not(query_text.rbegin(), query_text.rend(), is_space).base();
+    const std::string norm = utils::FuzzyMatcher::to_lower(first < last ? std::string(first, last) : std::string());
+
+    const char* sql = "INSERT INTO usage_events (app_id, query, query_norm) VALUES (?, ?, ?);";
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
 
     sqlite3_bind_text(stmt, 1, app_id.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, query_text.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, norm.c_str(), -1, SQLITE_TRANSIENT);
 
     bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
     sqlite3_finalize(stmt);
@@ -604,18 +631,31 @@ int Database::get_usage_count(const std::string& app_id) {
     return count;
 }
 
-std::unordered_map<std::string, int> Database::get_usage_counts() {
+std::unordered_map<std::string, Database::UsageStat> Database::get_usage_counts(const std::string& query) {
     std::lock_guard<std::mutex> lock(mutex_);
-    std::unordered_map<std::string, int> counts;
+    std::unordered_map<std::string, UsageStat> counts;
     if (!db_) return counts;
 
-    const char* sql = "SELECT app_id, COUNT(*) FROM usage_events GROUP BY app_id;";
+    // A past query counts if it is a prefix of `query` or starts with it. Both halves use the
+    // (query_norm, app_id) index: a range scan for the second, an IN list of prefixes for the first.
+    // shortcut: `query` must already be lower-case/trimmed (Query::normalized); only the first 64 bytes
+    // are checked as prefixes.
+    const size_t n = std::min<size_t>(query.size(), 64);
+    std::string sql = "SELECT app_id, COUNT(*), CAST(strftime('%s', MAX(timestamp)) AS INTEGER) FROM usage_events WHERE (query_norm >= ?1 AND query_norm < ?1 || char(1114111))";
+    if (n > 0) {
+        sql += " OR query_norm IN (?2";
+        for (size_t i = 1; i < n; ++i) sql += ",?" + std::to_string(i + 2);
+        sql += ")";
+    }
+    sql += " GROUP BY app_id;";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return counts;
+    if (query.empty() || sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) return counts;
+    sqlite3_bind_text(stmt, 1, query.c_str(), -1, SQLITE_TRANSIENT);
+    for (size_t i = 1; i <= n; ++i) sqlite3_bind_text(stmt, static_cast<int>(i + 1), query.c_str(), static_cast<int>(i), SQLITE_TRANSIENT);
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         const unsigned char* id = sqlite3_column_text(stmt, 0);
-        if (id) counts[reinterpret_cast<const char*>(id)] = sqlite3_column_int(stmt, 1);
+        if (id) counts[reinterpret_cast<const char*>(id)] = {sqlite3_column_int(stmt, 1), sqlite3_column_int64(stmt, 2)};
     }
     sqlite3_finalize(stmt);
     return counts;
@@ -636,6 +676,27 @@ bool Database::record_query(const std::string& query_text, const std::string& se
     bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
     sqlite3_finalize(stmt);
     return ok;
+}
+
+} // namespace nexus::index
+
+namespace nexus::index {
+
+std::optional<Database::ClearedHistory> Database::clear_history() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!db_) return std::nullopt;
+
+    if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) return std::nullopt;
+    ClearedHistory cleared;
+    bool ok = sqlite3_exec(db_, "DELETE FROM usage_events;", nullptr, nullptr, nullptr) == SQLITE_OK;
+    if (ok) cleared.usage_events = sqlite3_changes(db_);
+    ok = ok && sqlite3_exec(db_, "DELETE FROM query_history;", nullptr, nullptr, nullptr) == SQLITE_OK;
+    if (ok) cleared.queries = sqlite3_changes(db_);
+    if (!ok || sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        return std::nullopt;
+    }
+    return cleared;
 }
 
 } // namespace nexus::index

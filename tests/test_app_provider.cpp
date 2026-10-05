@@ -1,5 +1,6 @@
 #include "nexus/providers/app_provider.hpp"
 #include <atomic>
+#include <ctime>
 #include <cassert>
 #include <cstdlib>
 #include <fstream>
@@ -60,20 +61,54 @@ int main() {
     assert(find(results, "bygeneric")->subtitle == "frobnicate");
 
     // Zero usage: metadata key absent
-    assert(find(results, "byname")->metadata.count("usage_count") == 0);
+    assert(find(results, "byname")->metadata.count("query_usage_count") == 0);
     assert(find(results, "byname")->metadata.count("desktop_file") == 1);
 
     // Recorded usage: key present with the right count (action() is never called)
     assert(db->record_usage("byname", "frobnicate"));
     assert(db->record_usage("byname", "frob"));
     results = provider.search(core::Query("frobnicate"), cancel);
-    assert(find(results, "byname")->metadata.at("usage_count") == "2");
-    assert(find(results, "bykeyword")->metadata.count("usage_count") == 0);
+    assert(find(results, "byname")->metadata.at("query_usage_count") == "2");
+    assert(find(results, "bykeyword")->metadata.count("query_usage_count") == 0);
+    assert(find(results, "bykeyword")->metadata.count("query_last_used") == 0);
+    {
+        const long long last = std::stoll(find(results, "byname")->metadata.at("query_last_used"));
+        const long long now = static_cast<long long>(std::time(nullptr));
+        assert(last >= now - 5 && last <= now + 5);
+    }
+    // Unrelated query: "frobnicate"/"frob" launches don't boost for a query that shares no prefix
+    results = provider.search(core::Query("nicate"), cancel);
+    assert(find(results, "byname") && find(results, "byname")->metadata.count("query_usage_count") == 0);
 
     // Non-general mode and cancelled token yield nothing
     assert(provider.search(core::Query("> frobnicate"), cancel).empty());
     cancel = true;
     assert(provider.search(core::Query("frobnicate"), cancel).empty());
+
+    // History switch: executing a result records only while the switch is on, and flips take effect at once.
+    // Exec points at a missing binary so no real application starts.
+    std::ofstream(dir / "histapp.desktop") << "[Desktop Entry]\nType=Application\nName=histapp\nExec=/nonexistent/nexus_test_no_such_binary\n";
+    assert(indexer->rebuild_index() >= 6);
+    std::atomic<bool> hist_on{false};
+    providers::ApplicationProvider hist_provider(indexer, db, [&] { return hist_on.load(); });
+    std::atomic<bool> go{false};
+    const auto run_histapp = [&] {
+        auto rs = hist_provider.search(core::Query("histapp"), go);
+        const auto* r = find(rs, "histapp");
+        assert(r && r->action);
+        r->action();
+    };
+    run_histapp();  // off: nothing written
+    assert(db->get_usage_count("histapp") == 0);
+    hist_on = true;
+    run_histapp();  // on
+    assert(db->get_usage_count("histapp") == 1);
+    hist_on = false;
+    run_histapp();  // switched off again at runtime
+    assert(db->get_usage_count("histapp") == 1);
+    // query_history is written next to usage_events: clearing reports both
+    const auto cleared = db->clear_history();
+    assert(cleared && cleared->queries == 1);
 
     old_home ? setenv("HOME", s_home.c_str(), 1) : unsetenv("HOME");
     old_xdh ? setenv("XDG_DATA_HOME", s_xdh.c_str(), 1) : unsetenv("XDG_DATA_HOME");

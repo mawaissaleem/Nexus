@@ -39,6 +39,8 @@ set(NEXUS_CORE_SOURCES
     src/utils/logger.cpp
     src/utils/fuzzy.cpp
     src/utils/shortcut.cpp
+    src/utils/json.cpp
+    src/utils/theme.cpp
     src/utils/fs_watcher.cpp
     src/core/query.cpp
     src/core/executor.cpp
@@ -80,6 +82,7 @@ set(NEXUS_UI_HEADERS
     include/nexus/ui/launcher_window.hpp
     include/nexus/ui/settings_dialog.hpp
     include/nexus/ui/query_manager.hpp
+    include/nexus/ui/theme.hpp
 )
 
 set(NEXUS_UI_SOURCES
@@ -88,6 +91,7 @@ set(NEXUS_UI_SOURCES
     src/ui/launcher_window.cpp
     src/ui/settings_dialog.cpp
     src/ui/query_manager.cpp
+    src/ui/theme.cpp
 )
 
 # Main Application Executable (GUI + CLI fallback)

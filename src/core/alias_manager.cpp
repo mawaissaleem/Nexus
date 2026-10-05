@@ -1,4 +1,5 @@
 #include "nexus/core/alias_manager.hpp"
+#include "nexus/utils/json.hpp"
 #include "nexus/utils/logger.hpp"
 #include <fstream>
 #include <sstream>
@@ -9,18 +10,6 @@
 namespace nexus::core {
 
 namespace {
-
-std::string trim(std::string_view s) {
-    size_t start = 0;
-    while (start < s.size() && (std::isspace(static_cast<unsigned char>(s[start])) || s[start] == '"' || s[start] == ',')) {
-        ++start;
-    }
-    size_t end = s.size();
-    while (end > start && (std::isspace(static_cast<unsigned char>(s[end - 1])) || s[end - 1] == '"' || s[end - 1] == ',')) {
-        --end;
-    }
-    return std::string(s.substr(start, end - start));
-}
 
 std::string expand_home(std::string_view path) {
     if (path.empty()) return "";
@@ -112,35 +101,29 @@ bool AliasManager::load(const std::string& custom_path) {
         return false;
     }
 
+    std::stringstream buf;
+    buf << file.rdbuf();
+    utils::JsonValue root;
+    std::string error;
+    if (!utils::parse_json(buf.str(), root, &error) || !root.is_array()) {
+        const std::string backup = utils::preserve_malformed_file(file_path_, buf.str());
+        NEXUS_LOG_ERROR("Malformed aliases file " + file_path_ + ": " +
+                        (error.empty() ? "top level is not an array" : error) + "; using defaults, original kept at " +
+                        (backup.empty() ? "nowhere (backup failed)" : backup));
+        return false;
+    }
+
     std::vector<AliasEntry> loaded;
-    std::string line;
-    std::string current_name;
-    std::string current_target;
-
-    while (std::getline(file, line)) {
-        size_t name_pos = line.find("\"name\":");
-        if (name_pos != std::string::npos) {
-            std::string val = line.substr(name_pos + 7);
-            current_name = trim(val);
-        }
-
-        size_t target_pos = line.find("\"target\":");
-        if (target_pos != std::string::npos) {
-            std::string val = line.substr(target_pos + 9);
-            current_target = trim(val);
-        }
-
-        if (line.find('}') != std::string::npos) {
-            if (!current_name.empty() && !current_target.empty()) {
-                AliasEntry entry;
-                entry.name = current_name;
-                entry.target = current_target;
-                entry.type = detect_type(entry.target);
-                loaded.push_back(std::move(entry));
-            }
-            current_name.clear();
-            current_target.clear();
-        }
+    for (const auto& item : root.array) {
+        const auto* name = item.is_object() ? item.find("name") : nullptr;
+        const auto* target = item.is_object() ? item.find("target") : nullptr;
+        if (!name || !target || !name->is_string() || !target->is_string()) continue;
+        if (name->string.empty() || target->string.empty()) continue;
+        AliasEntry entry;
+        entry.name = name->string;
+        entry.target = target->string;
+        entry.type = detect_type(entry.target);
+        loaded.push_back(std::move(entry));
     }
 
     if (!loaded.empty()) {
@@ -161,8 +144,8 @@ bool AliasManager::save() {
     file << "[\n";
     for (size_t i = 0; i < aliases_.size(); ++i) {
         file << "  {\n";
-        file << "    \"name\": \"" << aliases_[i].name << "\",\n";
-        file << "    \"target\": \"" << aliases_[i].target << "\"\n";
+        file << "    \"name\": " << utils::json_quote(aliases_[i].name) << ",\n";
+        file << "    \"target\": " << utils::json_quote(aliases_[i].target) << "\n";
         file << "  }";
         if (i + 1 < aliases_.size()) {
             file << ",";

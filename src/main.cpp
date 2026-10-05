@@ -56,6 +56,8 @@ void print_help() {
               << "  dir add <path>         Add a directory to file/folder search\n"
               << "  dir list               List configured search directories\n"
               << "  dir remove <path>      Remove a directory from search list\n\n"
+              << "History:\n"
+              << "  history clear          Delete recorded usage events and query history (indexes are kept)\n\n"
               << "Custom Aliases / Nicknames:\n"
               << "  alias add <name> <target>   Add nickname for URL, folder, or app\n"
               << "  alias list                  List configured aliases\n"
@@ -159,10 +161,21 @@ int main(int argc, char* argv[]) {
     // Setup SearchEngine and Providers
     auto engine = std::make_shared<nexus::core::SearchEngine>();
     engine->register_provider(std::make_shared<nexus::providers::AliasProvider>());
-    engine->register_provider(std::make_shared<nexus::providers::ApplicationProvider>(app_indexer, db));
+    engine->register_provider(std::make_shared<nexus::providers::ApplicationProvider>(
+        app_indexer, db, [] { return nexus::core::ConfigManager::instance().is_history_enabled(); }));
     engine->register_provider(std::make_shared<nexus::providers::FileProvider>(db));
     engine->register_provider(std::make_shared<nexus::providers::CalculatorProvider>());
     engine->register_provider(std::make_shared<nexus::providers::ShellProvider>());
+
+    // Providers switched off in Settings are skipped per search, so the toggle needs no restart.
+    engine->set_provider_filter([](const std::string& id) {
+        return nexus::core::ConfigManager::instance().is_provider_enabled(id);
+    });
+    {
+        std::vector<std::pair<std::string, std::string>> provider_names;
+        for (const auto& p : engine->providers()) provider_names.emplace_back(p->id(), p->name());
+        nexus::ui::SettingsDialog::set_providers(std::move(provider_names));
+    }
 
     // CLI indexing / search / config commands
     if (argc > 1) {
@@ -199,6 +212,22 @@ int main(int argc, char* argv[]) {
                 std::cout << "Usage: nexus dir [add <path> | remove <path> | list]\n";
                 return 0;
             }
+        }
+
+        // --- History ---
+        if (arg1 == "history") {
+            if (argc >= 3 && std::string(argv[2]) == "clear") {
+                const auto cleared = db->clear_history();
+                if (!cleared) {
+                    std::cerr << "Failed to clear history.\n";
+                    return 1;
+                }
+                std::cout << "Cleared " << cleared->usage_events << " usage events and " << cleared->queries
+                          << " query history entries.\n";
+                return 0;
+            }
+            std::cout << "Usage: nexus history clear\n";
+            return 0;
         }
 
         // --- Aliases / Nicknames Configuration ---
@@ -312,7 +341,9 @@ int main(int argc, char* argv[]) {
     });
 
     // Initialize GUI Launcher Window
-    auto launcher = std::make_shared<nexus::ui::LauncherWindow>(engine);
+    nexus::ui::ThemeController theme(nexus::core::ConfigManager::instance().get_theme());
+    nexus::ui::SettingsDialog::set_theme_controller(&theme);
+    auto launcher = std::make_shared<nexus::ui::LauncherWindow>(engine, theme);
 
     // 2. Start Single-Instance IPC Server for instant toggle from shortcuts
     auto ipc_server = std::make_unique<QLocalServer>(&app);

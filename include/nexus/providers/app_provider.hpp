@@ -3,6 +3,7 @@
 #include "nexus/core/search_provider.hpp"
 #include "nexus/index/app_indexer.hpp"
 #include "nexus/index/database.hpp"
+#include <functional>
 #include <memory>
 
 namespace nexus::providers {
@@ -11,7 +12,9 @@ class ApplicationProvider : public core::ISearchProvider {
 public:
     ApplicationProvider(
         std::shared_ptr<index::AppIndexer> indexer,
-        std::shared_ptr<index::Database> db = nullptr
+        std::shared_ptr<index::Database> db = nullptr,
+        // Asked each time a result is executed, so a Settings change applies without a restart.
+        std::function<bool()> history_enabled = [] { return true; }
     );
 
     [[nodiscard]] std::string id() const override { return "applications"; }
@@ -27,6 +30,7 @@ public:
 private:
     std::shared_ptr<index::AppIndexer> indexer_;
     std::shared_ptr<index::Database> db_;
+    std::function<bool()> history_enabled_;
 };
 
 } // namespace nexus::providers

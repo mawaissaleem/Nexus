@@ -8,7 +8,7 @@ namespace nexus::core {
 RankingEngine::RankingEngine(RankingWeights weights)
     : weights_(weights) {}
 
-void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results) const {
+void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results, std::int64_t now) const {
     const std::string& query_norm = query.normalized();
 
     for (auto& res : results) {
@@ -34,16 +34,27 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results)
 
         // 4. Usage boost from metadata (if available)
         double usage_score = 0.0;
-        auto usage_it = res.metadata.find("usage_count");
+        auto usage_it = res.metadata.find("query_usage_count");
         if (usage_it != res.metadata.end()) {
             try {
                 int count = std::stoi(usage_it->second);
                 if (count > 0) {
                     usage_score = std::log1p(count) * weights_.usage_boost;
+                    // 5. Recency: exponential decay from the last launch for a similar query
+                    auto last_it = res.metadata.find("query_last_used");
+                    if (last_it != res.metadata.end() && weights_.recency_half_life_days > 0.0) {
+                        const double age_days = std::max<std::int64_t>(0, now - std::stoll(last_it->second)) / 86400.0;
+                        usage_score += weights_.recency_boost * std::exp2(-age_days / weights_.recency_half_life_days);
+                    }
                 }
             } catch (...) {
             }
         }
+
+        // An exact title beats any non-exact one by at least exact_match - provider_relevance_weight
+        // (lexical gap minus the largest provider-score difference); personalisation may use only half
+        // of it, so no usage/recency value can close the gap (SRS 11). Unused when the gap is <= 0.
+        usage_score = std::min(usage_score, 0.5 * std::max(0.0, weights_.exact_match - weights_.provider_relevance_weight));
 
         // Combine scores: normalize raw provider score into [0.0, 1.0], scale by provider_relevance_weight,
         // and add lexical and usage boosts

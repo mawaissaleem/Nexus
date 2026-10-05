@@ -1,26 +1,16 @@
 #include "nexus/core/config_manager.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/json.hpp"
 #include "nexus/utils/shortcut.hpp"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
 #include <cstdlib>
+#include <charconv>
 
 namespace nexus::core {
 
 namespace {
-
-std::string trim(std::string_view s) {
-    size_t start = 0;
-    while (start < s.size() && (std::isspace(static_cast<unsigned char>(s[start])) || s[start] == '"' || s[start] == ',')) {
-        ++start;
-    }
-    size_t end = s.size();
-    while (end > start && (std::isspace(static_cast<unsigned char>(s[end - 1])) || s[end - 1] == '"' || s[end - 1] == ',')) {
-        --end;
-    }
-    return std::string(s.substr(start, end - start));
-}
 
 std::string expand_home(std::string_view path) {
     if (path.empty()) return "";
@@ -33,7 +23,7 @@ std::string expand_home(std::string_view path) {
     return std::string(path);
 }
 
-// Entries are written back without escaping (D-51), so reject what the writer cannot round-trip.
+// Exclusions are bare entry names, never paths.
 bool valid_exclusion(const std::string& name) {
     return !name.empty() && name.find_first_of("\"\\/") == std::string::npos;
 }
@@ -78,7 +68,11 @@ std::vector<std::string> ConfigManager::default_file_exclusions() {
 
 void ConfigManager::set_defaults() {
     file_exclusions_ = default_file_exclusions();
+    result_count_ = kDefaultResultCount;
+    disabled_providers_.clear();
     enable_ctrl_np_navigation_ = true;
+    history_enabled_ = true;
+    theme_ = utils::ThemeMode::Dark;
     shortcut_ = "Alt+Space";
     search_directories_.clear();
 
@@ -113,75 +107,64 @@ bool ConfigManager::load(const std::string& custom_path) {
         config_file_path_ = custom_path;
     }
 
+    set_defaults();  // keys missing from the file must not keep values from a previous load (D-60)
+
     std::ifstream file(config_file_path_);
     if (!file.is_open()) {
-        // Create initial config file with defaults
+        return false;
+    }
+    std::stringstream buf;
+    buf << file.rdbuf();
+
+    utils::JsonValue root;
+    std::string error;
+    if (!utils::parse_json(buf.str(), root, &error) || !root.is_object()) {
+        const std::string backup = utils::preserve_malformed_file(config_file_path_, buf.str());
+        NEXUS_LOG_ERROR("Malformed config " + config_file_path_ + ": " +
+                        (error.empty() ? "top level is not an object" : error) + "; using defaults, original kept at " +
+                        (backup.empty() ? "nowhere (backup failed)" : backup));
         return false;
     }
 
-    std::vector<std::string> loaded_dirs;
-    std::string line;
-    std::vector<std::string> loaded_exclusions;
-    bool in_search_dirs = false;
-    bool in_exclusions = false;
-    bool have_exclusions = false;  // an explicit empty list means "exclude nothing"
-
-    while (std::getline(file, line)) {
-        if (line.find("\"enable_ctrl_np_navigation\"") != std::string::npos) {
-            if (line.find("false") != std::string::npos) {
-                enable_ctrl_np_navigation_ = false;
-            } else if (line.find("true") != std::string::npos) {
-                enable_ctrl_np_navigation_ = true;
-            }
-            continue;
-        }
-
-        if (line.find("\"global_shortcut\"") != std::string::npos) {
-            size_t colon = line.find(':');
-            std::string value = colon == std::string::npos ? "" : trim(line.substr(colon + 1));
-            if (utils::parse_shortcut(value)) shortcut_ = value;
-            continue;
-        }
-
-        if (line.find("\"file_exclusions\"") != std::string::npos) {
-            have_exclusions = true;
-            in_exclusions = line.find(']') == std::string::npos;
-            continue;
-        }
-
-        if (in_exclusions) {
-            if (line.find(']') != std::string::npos) {
-                in_exclusions = false;
-                continue;
-            }
-            std::string item = trim(line);
-            if (valid_exclusion(item)) loaded_exclusions.push_back(item);
-            continue;
-        }
-
-        if (line.find("\"search_directories\"") != std::string::npos) {
-            in_search_dirs = true;
-            continue;
-        }
-
-        if (in_search_dirs) {
-            if (line.find(']') != std::string::npos) {
-                in_search_dirs = false;
-                continue;
-            }
-
-            std::string item = trim(line);
-            if (!item.empty()) {
-                loaded_dirs.push_back(expand_home(item));
-            }
+    if (const auto* v = root.find("enable_ctrl_np_navigation"); v && v->is_bool()) {
+        enable_ctrl_np_navigation_ = v->boolean;
+    }
+    if (const auto* v = root.find("history_enabled"); v && v->is_bool()) {
+        history_enabled_ = v->boolean;
+    }
+    if (const auto* v = root.find("theme"); v && v->is_string()) {
+        if (const auto mode = utils::parse_theme_mode(v->string)) theme_ = *mode;
+    }
+    if (const auto* v = root.find("global_shortcut"); v && v->is_string() && utils::parse_shortcut(v->string)) {
+        shortcut_ = v->string;
+    }
+    if (const auto* v = root.find("file_exclusions"); v && v->is_array()) {  // an empty list means "exclude nothing"
+        file_exclusions_.clear();
+        for (const auto& item : v->array) {
+            if (item.is_string() && valid_exclusion(item.string)) file_exclusions_.push_back(item.string);
         }
     }
-
-    if (!loaded_dirs.empty()) {
-        search_directories_ = std::move(loaded_dirs);
+    if (const auto* v = root.find("result_count"); v && v->type == utils::JsonValue::Type::Number) {
+        int n = 0;
+        const auto& t = v->string;  // raw number text; "7.5" or "1e1" are not integers -> default
+        const auto r = std::from_chars(t.data(), t.data() + t.size(), n);
+        if (r.ec == std::errc() && r.ptr == t.data() + t.size()) {
+            result_count_ = std::clamp(n, kMinResultCount, kMaxResultCount);
+        } else if (r.ec == std::errc::result_out_of_range && !t.empty()) {
+            result_count_ = t[0] == '-' ? kMinResultCount : kMaxResultCount;
+        }
     }
-    if (have_exclusions) {
-        file_exclusions_ = std::move(loaded_exclusions);
+    if (const auto* v = root.find("disabled_providers"); v && v->is_array()) {
+        for (const auto& item : v->array) {
+            if (item.is_string() && !item.string.empty()) disabled_providers_.push_back(item.string);
+        }
+    }
+    if (const auto* v = root.find("search_directories"); v && v->is_array()) {
+        std::vector<std::string> dirs;
+        for (const auto& item : v->array) {
+            if (item.is_string() && !item.string.empty()) dirs.push_back(expand_home(item.string));
+        }
+        if (!dirs.empty()) search_directories_ = std::move(dirs);
     }
 
     return true;
@@ -199,10 +182,18 @@ bool ConfigManager::save() {
 
     file << "{\n";
     file << "  \"enable_ctrl_np_navigation\": " << (enable_ctrl_np_navigation_ ? "true" : "false") << ",\n";
-    file << "  \"global_shortcut\": \"" << shortcut_ << "\",\n";
+    file << "  \"history_enabled\": " << (history_enabled_ ? "true" : "false") << ",\n";
+    file << "  \"theme\": " << utils::json_quote(utils::theme_mode_name(theme_)) << ",\n";
+    file << "  \"global_shortcut\": " << utils::json_quote(shortcut_) << ",\n";
+    file << "  \"result_count\": " << result_count_ << ",\n";
+    file << "  \"disabled_providers\": [";
+    for (size_t i = 0; i < disabled_providers_.size(); ++i) {
+        file << (i ? ", " : "") << utils::json_quote(disabled_providers_[i]);
+    }
+    file << "],\n";
     file << "  \"search_directories\": [\n";
     for (size_t i = 0; i < search_directories_.size(); ++i) {
-        file << "    \"" << search_directories_[i] << "\"";
+        file << "    " << utils::json_quote(search_directories_[i]);
         if (i + 1 < search_directories_.size()) {
             file << ",";
         }
@@ -211,7 +202,7 @@ bool ConfigManager::save() {
     file << "  ],\n";
     file << "  \"file_exclusions\": [\n";
     for (size_t i = 0; i < file_exclusions_.size(); ++i) {
-        file << "    \"" << file_exclusions_[i] << "\"" << (i + 1 < file_exclusions_.size() ? "," : "") << "\n";
+        file << "    " << utils::json_quote(file_exclusions_[i]) << (i + 1 < file_exclusions_.size() ? "," : "") << "\n";
     }
     file << "  ]\n";
     file << "}\n";
@@ -268,6 +259,47 @@ std::vector<std::string> ConfigManager::get_file_exclusions() const {
     return file_exclusions_;
 }
 
+void ConfigManager::set_file_exclusions(const std::vector<std::string>& names) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        file_exclusions_.clear();
+        for (const auto& n : names) {
+            if (valid_exclusion(n) && std::find(file_exclusions_.begin(), file_exclusions_.end(), n) == file_exclusions_.end()) {
+                file_exclusions_.push_back(n);
+            }
+        }
+    }
+    save();
+}
+
+int ConfigManager::get_result_count() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return result_count_;
+}
+
+void ConfigManager::set_result_count(int count) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        result_count_ = std::clamp(count, kMinResultCount, kMaxResultCount);
+    }
+    save();
+}
+
+bool ConfigManager::is_provider_enabled(const std::string& provider_id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return std::find(disabled_providers_.begin(), disabled_providers_.end(), provider_id) == disabled_providers_.end();
+}
+
+void ConfigManager::set_provider_enabled(const std::string& provider_id, bool enabled) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it = std::find(disabled_providers_.begin(), disabled_providers_.end(), provider_id);
+        if (enabled && it != disabled_providers_.end()) disabled_providers_.erase(it);
+        if (!enabled && it == disabled_providers_.end()) disabled_providers_.push_back(provider_id);
+    }
+    save();
+}
+
 bool ConfigManager::is_ctrl_np_navigation_enabled() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return enable_ctrl_np_navigation_;
@@ -277,6 +309,32 @@ void ConfigManager::set_ctrl_np_navigation_enabled(bool enabled) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         enable_ctrl_np_navigation_ = enabled;
+    }
+    save();
+}
+
+bool ConfigManager::is_history_enabled() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return history_enabled_;
+}
+
+void ConfigManager::set_history_enabled(bool enabled) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        history_enabled_ = enabled;
+    }
+    save();
+}
+
+utils::ThemeMode ConfigManager::get_theme() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return theme_;
+}
+
+void ConfigManager::set_theme(utils::ThemeMode mode) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        theme_ = mode;
     }
     save();
 }

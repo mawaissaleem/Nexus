@@ -6,8 +6,9 @@ namespace nexus::providers {
 
 ApplicationProvider::ApplicationProvider(
     std::shared_ptr<index::AppIndexer> indexer,
-    std::shared_ptr<index::Database> db
-) : indexer_(std::move(indexer)), db_(std::move(db)) {}
+    std::shared_ptr<index::Database> db,
+    std::function<bool()> history_enabled
+) : indexer_(std::move(indexer)), db_(std::move(db)), history_enabled_(std::move(history_enabled)) {}
 
 std::vector<core::SearchResult> ApplicationProvider::search(
     const core::Query& query,
@@ -24,9 +25,9 @@ std::vector<core::SearchResult> ApplicationProvider::search(
     }
 
     auto apps = indexer_->get_applications();
-    // One usage query per search, not one per matched app.
-    const auto usage_counts = (db_ && db_->is_open()) ? db_->get_usage_counts()
-                                                       : std::unordered_map<std::string, int>{};
+    // One usage query per search, not one per matched app. Counts only launches from similar queries.
+    const auto usage_counts = (db_ && db_->is_open()) ? db_->get_usage_counts(search_term)
+                                                       : std::unordered_map<std::string, index::Database::UsageStat>{};
 
     for (const auto& app : *apps) {
         if (cancel_token.load()) {
@@ -78,17 +79,19 @@ std::vector<core::SearchResult> ApplicationProvider::search(
             std::string app_id = app.id;
             std::string raw_q = query.raw();
             auto db_ref = db_;
+            auto history_enabled = history_enabled_;
 
-            res.action = [exec_cmd, terminal, app_id, raw_q, db_ref]() -> bool {
-                if (db_ref && db_ref->is_open()) {
+            res.action = [exec_cmd, terminal, app_id, raw_q, db_ref, history_enabled]() -> bool {
+                if (db_ref && db_ref->is_open() && (!history_enabled || history_enabled())) {
                     db_ref->record_usage(app_id, raw_q);
                     db_ref->record_query(raw_q, app_id, "applications");
                 }
                 return core::Executor::launch_desktop_exec(exec_cmd, terminal);
             };
 
-            if (auto it = usage_counts.find(app.id); it != usage_counts.end() && it->second > 0) {
-                res.metadata["usage_count"] = std::to_string(it->second);
+            if (auto it = usage_counts.find(app.id); it != usage_counts.end() && it->second.count > 0) {
+                res.metadata["query_usage_count"] = std::to_string(it->second.count);
+                res.metadata["query_last_used"] = std::to_string(it->second.last_used);
             }
 
             res.metadata["desktop_file"] = app.desktop_file;

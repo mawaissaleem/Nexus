@@ -8,6 +8,8 @@
 #include <memory>
 #include <atomic>
 #include <mutex>
+#include <functional>
+#include <string>
 
 namespace nexus::core {
 
@@ -24,12 +26,17 @@ public:
     std::vector<SearchResult> search(const Query& query, size_t max_results = 20);
     std::vector<SearchResult> search(const Query& query, std::atomic<bool>& cancel_token, size_t max_results = 20);
 
+    // Providers for which `is_enabled(id)` is false are skipped on every search (read per search, so
+    // changes apply live). Empty function = all enabled.
+    void set_provider_filter(std::function<bool(const std::string&)> is_enabled);
+
     void set_ranking_engine(RankingEngine ranking_engine) { ranking_engine_ = std::move(ranking_engine); }
     [[nodiscard]] const RankingEngine& ranking_engine() const noexcept { return ranking_engine_; }
 
 private:
     std::vector<SearchProviderPtr> providers_;
     RankingEngine ranking_engine_;
+    std::function<bool(const std::string&)> provider_filter_;
     std::mutex search_mutex_;
 };
 
