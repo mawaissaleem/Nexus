@@ -4,6 +4,7 @@
 #include <cassert>
 #include <filesystem>
 #include <fstream>
+#include <sqlite3.h>
 #include <unistd.h>
 
 int main() {
@@ -107,6 +108,53 @@ int main() {
         assert(again && again->usage_events == 0 && again->queries == 0);
         Database closed(":memory:");
         assert(!closed.clear_history());  // never opened
+    }
+
+    // clear_history wipes the query text from the raw file bytes (P8.18)
+    {
+        const std::string marker = "zq_secret_marker_123_wipe_check";
+        const fs::path d = fs::temp_directory_path() / ("nexus_wipe_" + std::to_string(getpid()));
+        fs::create_directories(d);
+        const fs::path dbfile = d / "nexus.db";
+        auto slurp = [&](const fs::path& f) {
+            std::ifstream in(f, std::ios::binary);
+            return std::string(std::istreambuf_iterator<char>(in), {});
+        };
+        auto leaks = [&] {
+            for (const char* suffix : {"", "-journal", "-wal"}) {
+                const fs::path f = fs::path(dbfile.string() + suffix);
+                if (fs::exists(f) && slurp(f).find(marker) != std::string::npos) return true;
+            }
+            return false;
+        };
+        Database w(dbfile.string());
+        assert(w.open());
+        DesktopEntry e;
+        e.id = "wipe";
+        e.name = "Wipe";
+        e.exec = "wipe";
+        assert(w.save_applications({e}));
+        // Older free pages full of the marker, left by a delete without secure_delete (what 0.4.0's clear
+        // or migration 4's DROP INDEX did on SQLite builds without SQLITE_SECURE_DELETE). Forced OFF here so
+        // the test doesn't depend on how the distro compiled SQLite.
+        sqlite3* raw = nullptr;
+        assert(sqlite3_open(dbfile.c_str(), &raw) == SQLITE_OK);
+        assert(sqlite3_exec(raw, "PRAGMA secure_delete=OFF; BEGIN;", nullptr, nullptr, nullptr) == SQLITE_OK);
+        for (int i = 0; i < 500; ++i) {
+            const std::string sql = "INSERT INTO usage_events(app_id, query) VALUES('wipe', '" + marker + "');"
+                                    "INSERT INTO query_history(query, selected_id) VALUES('" + marker + "', 'wipe');";
+            assert(sqlite3_exec(raw, sql.c_str(), nullptr, nullptr, nullptr) == SQLITE_OK);
+        }
+        assert(sqlite3_exec(raw, "COMMIT; DELETE FROM usage_events; DELETE FROM query_history;", nullptr, nullptr,
+                            nullptr) == SQLITE_OK);
+        sqlite3_close(raw);
+        assert(leaks());  // stale free pages hold the marker before the clear
+        // plus live rows written the normal way
+        assert(w.record_usage("wipe", marker) && w.record_query(marker, "wipe", "applications"));
+        const auto c = w.clear_history();
+        assert(c && c->usage_events == 1 && c->queries == 1 && c->file_compacted);
+        assert(!leaks());
+        fs::remove_all(d);
     }
 
     std::cout << "All Database tests passed successfully!\n";

@@ -124,16 +124,15 @@ int main() {
         {.name = "exact file name beats longer prefix file (SRS 15)", .query = "file thesis.pdf",
          .files = {file("/home/u/Documents/old/thesis.pdf.bak"), file("/home/u/Documents/thesis.pdf")},
          .expected_top = "file:/home/u/Documents/thesis.pdf"},
-        // SRS 14/15: an explicit mode prefix says what the user wants, but AliasProvider answers in every
-        // mode and an exact alias name outscores the mode's own result (alias 1056 vs file 1008, shell 210).
+        // SRS 14/15: an explicit mode prefix says what the user wants, so AliasProvider stays silent in it.
         {.name = "file mode: indexed file beats same-named alias (SRS 15)", .query = "file notes",
          .files = {file("/home/u/notes", true)},
          .aliases = {{"notes", "https://notes.example.com"}},
-         .expected_top = "dir:/home/u/notes", .known_failure = true},
+         .expected_top = "dir:/home/u/notes"},
         {.name = "shell mode: command beats same-named default alias (SRS 14)", .query = ">gh",
-         .expected_top = "shell:gh", .known_failure = true},
-        // Typing "> dd if=..." passes through ">dd", which fuzzy-matches the default "downloads" alias.
-        {.name = "shell mode: command beats fuzzy alias hit (SRS 14)", .query = ">dd",
+         .expected_top = "shell:gh"},
+        // Typing "> dd if=..." passes through ">dd"; it used to fuzzy-match the default "downloads" alias.
+        {.name = "shell mode: command wins unprefixed-alias lookalike (SRS 14)", .query = ">dd",
          .expected_top = "shell:dd"},
     };
 

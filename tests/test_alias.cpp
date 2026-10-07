@@ -54,6 +54,11 @@ int main() {
     assert(results[0].score >= 1500.0);
     assert(results[0].icon == "web-browser");
 
+    // Explicit mode prefixes never get alias results (">gh" must mean the shell).
+    for (const char* prefixed : {">gh", "file gh", "calc gh", "web gh", "clip gh"}) {
+        assert(provider.search(Query(prefixed), cancel).empty());
+    }
+
     // Test 4: Remove alias
     assert(mgr.remove_alias("ls_cmd"));
     Query q_removed("ls_cmd");

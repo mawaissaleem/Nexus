@@ -696,6 +696,9 @@ std::optional<Database::ClearedHistory> Database::clear_history() {
         sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
         return std::nullopt;
     }
+    // Rewrite the file so no free page (from this or any earlier delete) keeps old query text.
+    cleared.file_compacted = sqlite3_exec(db_, "VACUUM;", nullptr, nullptr, nullptr) == SQLITE_OK;
+    if (!cleared.file_compacted) NEXUS_LOG_WARN(std::string("VACUUM after history clear failed: ") + sqlite3_errmsg(db_));
     return cleared;
 }
 

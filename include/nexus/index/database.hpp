@@ -61,6 +61,7 @@ public:
     struct ClearedHistory {
         int usage_events{0};
         int queries{0};
+        bool file_compacted{false};  // VACUUM succeeded: old text is gone from free pages too
     };
     std::optional<ClearedHistory> clear_history();
 

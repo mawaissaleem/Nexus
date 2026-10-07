@@ -224,6 +224,10 @@ int main(int argc, char* argv[]) {
                 }
                 std::cout << "Cleared " << cleared->usage_events << " usage events and " << cleared->queries
                           << " query history entries.\n";
+                if (!cleared->file_compacted) {
+                    std::cerr << "Could not compact the database file, so old entries may still be readable in it."
+                                 " Run again when Nexus is closed.\n";
+                }
                 return 0;
             }
             std::cout << "Usage: nexus history clear\n";
@@ -282,6 +286,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (arg1 == "--list-apps") {
+            app_indexer->rebuild_index();  // cache may predate apps installed while Nexus was off
             auto apps = app_indexer->get_applications();
             std::cout << "Indexed applications (" << apps->size() << "):\n";
             for (const auto& a : *apps) {
@@ -301,6 +306,7 @@ int main(int argc, char* argv[]) {
                 query_str += argv[i];
             }
 
+            app_indexer->rebuild_index();  // cache may predate apps installed while Nexus was off
             auto start = std::chrono::high_resolution_clock::now();
             nexus::core::Query query(query_str);
             auto results = engine->search(query, 10);
@@ -334,6 +340,8 @@ int main(int argc, char* argv[]) {
         QMetaObject::invokeMethod(&app, [&]() { start_rebuild(); }, Qt::QueuedConnection);
     });
     std::thread startup_index_thread([&, options = file_options()]() {
+        // Apps installed while Nexus was off. After start_watching(), so an install mid-scan is caught by one or the other.
+        app_indexer->rebuild_index();
         file_watcher.arm(options, quitting);
         file_indexer->rebuild(options, quitting);
         file_watcher.resume();

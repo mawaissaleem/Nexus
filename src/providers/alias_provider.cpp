@@ -25,7 +25,8 @@ std::vector<core::SearchResult> AliasProvider::search(
     const std::atomic<bool>& cancel_token
 ) {
     std::vector<core::SearchResult> results;
-    if (cancel_token.load() || query.empty()) {
+    // An explicit prefix (>, file, calc, web, clip) states intent; aliases only answer unprefixed queries.
+    if (cancel_token.load() || query.empty() || query.mode() != core::QueryMode::General) {
         return results;
     }
 

@@ -95,6 +95,25 @@ int main() {
         assert(none.rebuild_index() == 0);
     }
 
+    // Startup rescan: initialize() serves the stale cache; rebuild_index() (what main runs on its startup worker
+    // thread) finds an app added while Nexus was off.
+    {
+        const fs::path dir = root / "rescan";
+        write_desktop(dir, "old", "Old App");
+        auto db = std::make_shared<Database>((root / "rescan.db").string());
+        assert(db->open());
+        {
+            AppIndexer first(db, std::vector<fs::path>{dir});
+            assert(first.rebuild_index() == 1);  // cache holds only "old"
+        }
+        write_desktop(dir, "fresh", "Fresh App");  // installed while "off"
+        AppIndexer second(db, std::vector<fs::path>{dir});
+        second.initialize();
+        assert(!find(*second.get_applications(), "fresh"));  // cache-only first paint
+        assert(second.rebuild_index() == 2);
+        assert(find(*second.get_applications(), "fresh"));
+    }
+
     // restore env
     old_home ? setenv("HOME", s_home.c_str(), 1) : unsetenv("HOME");
     old_xdh ? setenv("XDG_DATA_HOME", s_xdh.c_str(), 1) : unsetenv("XDG_DATA_HOME");

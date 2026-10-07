@@ -55,7 +55,7 @@ Nexus collapses those into a single keystroke. It is built around four ideas:
 | Themes | Dark (default), light, or follow the desktop |
 | History controls | Turn history off in Settings, or wipe it with `nexus history clear` |
 | Tray icon | Toggle, open settings, rebuild indexes, quit |
-| New apps appear automatically | While Nexus runs, installing or removing an application updates search within seconds. Apps installed while it was off appear after **Rebuild Indexes** in the tray or `nexus --rebuild-index` |
+| New apps appear automatically | While Nexus runs, installing or removing an application updates search within seconds. Apps installed while it was off are picked up at the next start |
 | Single instance | Launching Nexus again toggles the running window instead of starting a second copy |
 
 **Keys**
