@@ -79,8 +79,15 @@ size_t AppIndexer::rebuild_index() {
 
     for (const auto& dir : dirs) {
         std::error_code ec;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
-            if (ec) continue;
+        // Non-throwing iteration: a range-for's operator++ throws on e.g. a directory vanishing mid-scan.
+        std::filesystem::recursive_directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec), end;
+        if (ec) {
+            NEXUS_LOG_WARN("Cannot scan " + dir.string() + ": " + ec.message());
+            continue;
+        }
+        // ec is shared by is_regular_file(ec) and increment(ec); increment clears it on success.
+        for (; !ec && it != end; it.increment(ec)) {
+            const auto& entry = *it;
             if (entry.is_regular_file(ec) && entry.path().extension() == ".desktop") {
                 std::string id = entry.path().stem().string();
                 if (seen_ids.count(id)) {
@@ -88,12 +95,16 @@ size_t AppIndexer::rebuild_index() {
                 }
 
                 auto parsed = DesktopEntry::parse(entry.path());
-                if (parsed && parsed->is_valid_application()) {
-                    seen_ids.insert(id);
-                    new_apps.push_back(std::move(*parsed));
+                if (!parsed) {
+                    NEXUS_LOG_WARN("Unparseable desktop file, not masking lower-priority copies: " + entry.path().string());
+                    continue;
                 }
+                seen_ids.insert(id);  // hidden/no-display overrides claim the ID too, masking system copies
+                if (parsed->is_valid_application()) new_apps.push_back(std::move(*parsed));
             }
         }
+        // After a failed increment the iterator is unusable: stop this directory, keep the others.
+        if (ec) NEXUS_LOG_WARN("Scan of " + dir.string() + " stopped: " + ec.message());
     }
 
     NEXUS_LOG_INFO("Discovered " + std::to_string(new_apps.size()) + " applications.");

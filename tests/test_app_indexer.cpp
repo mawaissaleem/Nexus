@@ -5,6 +5,8 @@
 #include <atomic>
 #include <string>
 #include <thread>
+#include <fcntl.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 namespace fs = std::filesystem;
@@ -112,6 +114,70 @@ int main() {
         assert(!find(*second.get_applications(), "fresh"));  // cache-only first paint
         assert(second.rebuild_index() == 2);
         assert(find(*second.get_applications(), "fresh"));
+    }
+
+    // Filesystem errors never throw out of rebuild_index; apps in other dirs are still indexed.
+    {
+        const fs::path good = root / "fs_good", bad = root / "fs_bad";
+        write_desktop(good, "goodapp", "Good App");
+        write_desktop(bad / "locked", "lockedapp", "Locked App");
+        write_desktop(bad, "badtop", "Bad Top");
+        fs::permissions(bad / "locked", fs::perms::none);  // ignored when running as root: then it just scans fully
+        std::ofstream(root / "notadir") << "x";
+        AppIndexer err(nullptr, std::vector<fs::path>{root / "notadir", bad, root / "vanished", good});
+        bool threw = false;
+        try { err.rebuild_index(); } catch (...) { threw = true; }
+        fs::permissions(bad / "locked", fs::perms::owner_all);  // restore before asserts so cleanup works
+        assert(!threw);
+        assert(find(*err.get_applications(), "goodapp") && find(*err.get_applications(), "badtop"));
+    }
+
+    // Regression (D-76): an error inside operator++ (EMFILE opening a deep subdir; the iterator holds
+    // one fd per level) used to throw out of the range-for. Now that dir stops and the next is scanned.
+    {
+        fs::path deep = root / "fs_deep";
+        for (int i = 0; i < 30; ++i) deep /= "s";
+        fs::create_directories(deep);
+        const fs::path after = root / "fs_after";
+        write_desktop(after, "afterapp", "After App");
+        AppIndexer err(nullptr, std::vector<fs::path>{root / "fs_deep", after});
+
+        rlimit old{};
+        assert(getrlimit(RLIMIT_NOFILE, &old) == 0);
+        const int probe = open("/dev/null", O_RDONLY);  // lowest free fd
+        assert(probe >= 0);
+        close(probe);
+        rlimit low = old;
+        low.rlim_cur = static_cast<rlim_t>(probe) + 8;  // rlim_max untouched so restoring needs no privilege
+        assert(setrlimit(RLIMIT_NOFILE, &low) == 0);
+        bool threw = false;
+        try { err.rebuild_index(); } catch (...) { threw = true; }
+        assert(setrlimit(RLIMIT_NOFILE, &old) == 0);  // restore before any assert can abort
+        assert(!threw);
+        assert(find(*err.get_applications(), "afterapp"));
+    }
+
+    // D-54: a higher-priority hidden/no-display override masks the system copy; valid override replaces it;
+    // a broken override does not mask.
+    {
+        const fs::path usr = root / "mask_user", sys = root / "mask_sys";
+        for (const char* id : {"hid", "nod", "val", "brk", "keep"}) write_desktop(sys, id, std::string("Sys ") + id);
+        write_desktop(usr, "hid", "U", "Hidden=true\n");
+        write_desktop(usr, "nod", "U", "NoDisplay=true\n");
+        write_desktop(usr, "val", "User Val");
+        fs::create_directories(usr);
+        std::ofstream(usr / "brk.desktop") << "[Desktop Entry]\nType=Link\n";
+        AppIndexer m(nullptr, std::vector<fs::path>{usr, sys});
+        assert(m.rebuild_index() == 3);
+        const auto& apps = *m.get_applications();
+        assert(!find(apps, "hid") && !find(apps, "nod"));
+        assert(find(apps, "val") && find(apps, "val")->name == "User Val");
+        assert(find(apps, "brk") && find(apps, "brk")->name == "Sys brk");
+        assert(find(apps, "keep"));
+        // bare Hidden=true file with no Name/Exec also masks
+        std::ofstream(usr / "keep.desktop") << "[Desktop Entry]\nHidden=true\n";
+        m.rebuild_index();
+        assert(!find(*m.get_applications(), "keep"));
     }
 
     // restore env

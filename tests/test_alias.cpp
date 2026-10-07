@@ -59,6 +59,15 @@ int main() {
         assert(provider.search(Query(prefixed), cancel).empty());
     }
 
+    // Inline creation, with and without leading/trailing spaces; missing target offers no create result.
+    for (const char* q_str : {"alias zz /tmp", "  alias zz /tmp  "}) {
+        auto r = provider.search(Query(q_str), cancel);
+        assert(r.size() == 1 && r[0].id == "alias:create:zz" && r[0].score == 2500.0);
+    }
+    for (const char* q_str : {"alias", "alias zz", " alias zz "}) {
+        for (const auto& r : provider.search(Query(q_str), cancel)) assert(r.id.rfind("alias:create:", 0) != 0);
+    }
+
     // Test 4: Remove alias
     assert(mgr.remove_alias("ls_cmd"));
     Query q_removed("ls_cmd");

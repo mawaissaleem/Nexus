@@ -117,7 +117,9 @@ std::optional<DesktopEntry> DesktopEntry::parse(const std::filesystem::path& pat
         type_field = "Application";
     }
 
-    if (type_field != "Application" || entry.name.empty() || entry.exec.empty()) {
+    // A bare "Hidden=true" override has no Name/Exec; still return it so the indexer can let it mask the system copy.
+    if (!entry.hidden && !entry.no_display &&
+        (type_field != "Application" || entry.name.empty() || entry.exec.empty())) {
         return std::nullopt;
     }
 

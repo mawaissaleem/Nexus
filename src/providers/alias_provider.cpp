@@ -30,7 +30,8 @@ std::vector<core::SearchResult> AliasProvider::search(
         return results;
     }
 
-    std::string raw = query.raw();
+    // text() is trimmed (raw() keeps leading spaces) and case-preserving in General mode.
+    const std::string& raw = query.text();
 
     // 1. Inline creation mode: "alias <name> <target>"
     if (raw.rfind("alias ", 0) == 0) {
