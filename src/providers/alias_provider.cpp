@@ -13,7 +13,8 @@ std::string get_icon_for_type(core::AliasType type) {
         case core::AliasType::Url: return "web-browser";
         case core::AliasType::Directory: return "folder";
         case core::AliasType::File: return "text-x-generic";
-        case core::AliasType::Command: return "utilities-terminal";
+        case core::AliasType::Command:
+        case core::AliasType::Shell: return "utilities-terminal";
     }
     return "emblem-favorite";
 }
@@ -37,7 +38,10 @@ std::vector<core::SearchResult> AliasProvider::search(
     if (raw.rfind("alias ", 0) == 0) {
         std::istringstream iss(raw.substr(6));
         std::string name, target;
-        if (iss >> name >> target) {
+        if (iss >> name) {
+            std::getline(iss >> std::ws, target);  // whole rest of the line, so "up >sudo apt update" works
+        }
+        if (!name.empty() && !target.empty()) {
             core::SearchResult create_res;
             create_res.id = "alias:create:" + name;
             create_res.title = "Save alias '" + name + "' → " + target;
@@ -82,7 +86,7 @@ std::vector<core::SearchResult> AliasProvider::search(
             core::SearchResult res;
             res.id = "alias:" + alias.name;
             res.title = alias.name;
-            res.subtitle = "Alias → " + alias.target;
+            res.subtitle = (alias.type == core::AliasType::Shell ? "Alias (runs in shell) → " : "Alias → ") + alias.target;
             res.icon = get_icon_for_type(alias.type);
             res.provider_id = id();
             res.score = score;
@@ -93,11 +97,14 @@ std::vector<core::SearchResult> AliasProvider::search(
             core::AliasType type = alias.type;
 
             res.action = [target_str, type]() {
-                if (type == core::AliasType::Command) {
-                    return core::Executor::launch_shell_command(target_str);
-                } else {
-                    return core::Executor::open_path_or_url(target_str);
+                if (type == core::AliasType::Shell) {
+                    const auto cmd = target_str.find_first_not_of(" \t", 1);
+                    if (cmd == std::string::npos) return false;
+                    return core::Executor::launch_shell_command(target_str.substr(cmd));
                 }
+                // Plain commands are tokenised like a .desktop Exec line and run without a shell.
+                if (type == core::AliasType::Command) return core::Executor::launch_desktop_exec(target_str);
+                return core::Executor::open_path_or_url(target_str);
             };
 
             results.push_back(std::move(res));

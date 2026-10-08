@@ -59,7 +59,7 @@ void print_help() {
               << "History:\n"
               << "  history clear          Delete recorded usage events and query history (indexes are kept)\n\n"
               << "Custom Aliases / Nicknames:\n"
-              << "  alias add <name> <target>   Add nickname for URL, folder, or app\n"
+              << "  alias add <name> <target>   Add nickname for URL, folder, or app (start target with > to run in a shell)\n"
               << "  alias list                  List configured aliases\n"
               << "  alias remove <name>         Remove an alias\n\n"
               << "CLI Search:\n"
@@ -237,8 +237,10 @@ int main(int argc, char* argv[]) {
         // --- Aliases / Nicknames Configuration ---
         if (arg1 == "alias") {
             if (argc >= 3 && std::string(argv[2]) == "add" && argc >= 5) {
-                if (nexus::core::AliasManager::instance().add_alias(argv[3], argv[4])) {
-                    std::cout << "Saved alias: '" << argv[3] << "' -> " << argv[4] << '\n';
+                std::string target = argv[4];
+                for (int i = 5; i < argc; ++i) target += std::string(" ") + argv[i];  // unquoted multi-word target
+                if (nexus::core::AliasManager::instance().add_alias(argv[3], target)) {
+                    std::cout << "Saved alias: '" << argv[3] << "' -> " << target << '\n';
                 } else {
                     std::cerr << "Failed to save alias.\n";
                     return 1;

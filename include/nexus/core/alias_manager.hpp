@@ -10,7 +10,8 @@ enum class AliasType {
     Url,
     Directory,
     File,
-    Command
+    Command,   // run directly, no shell
+    Shell      // target starts with ">": the only alias type that runs through /bin/sh
 };
 
 struct AliasEntry {

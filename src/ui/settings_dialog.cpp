@@ -147,6 +147,7 @@ void AliasEditDialog::update_preview() {
         case core::AliasType::Directory: badge("📁 Directory", palette_.badge_dir, " font-weight: bold;"); break;
         case core::AliasType::File: badge("📄 File", palette_.badge_file, " font-weight: bold;"); break;
         case core::AliasType::Command: badge("⚡ Command / App", palette_.badge_cmd, " font-weight: bold;"); break;
+        case core::AliasType::Shell: badge("⚡ Shell command", palette_.badge_cmd, " font-weight: bold;"); break;
     }
 }
 
@@ -706,6 +707,7 @@ void SettingsDialog::reload_aliases() {
             case core::AliasType::Directory: type_str = "📁 Directory"; break;
             case core::AliasType::File: type_str = "📄 File"; break;
             case core::AliasType::Command: type_str = "⚡ Command"; break;
+            case core::AliasType::Shell: type_str = "⚡ Shell command"; break;
         }
         auto* type_item = new QTableWidgetItem(type_str);
 

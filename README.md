@@ -199,7 +199,14 @@ nexus alias list
 nexus alias remove gh
 ```
 
-Aliases resolve to URLs, directories, files or commands; the type is detected from the target.
+Aliases resolve to URLs, directories, files or commands; the type is detected from the target. A plain command is split into words and run directly, without a shell: `|`, `&&`, `$VAR`, redirects and `~` are passed through as plain text, single quotes do not group words, and `%` sequences such as `%f` are removed (`%%` gives one `%`). Use double quotes to keep words together in a plain command, for example `code "My Projects"`. To run a target through the shell, start it with `>`, for example `>code ~/nexus`. From a terminal, quote the whole target so your own shell does not treat `>` as a redirect or split it into separate words:
+
+```bash
+nexus alias add up '>sudo apt update'
+nexus alias add o 'code "My Dir"'
+```
+
+In the launcher, `alias up >sudo apt update` works as typed. Shell aliases show "runs in shell" in the result subtitle.
 
 
 ## Wayland

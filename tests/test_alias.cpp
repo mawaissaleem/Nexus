@@ -8,6 +8,9 @@
 #include <fstream>
 #include <iterator>
 #include <optional>
+#include <string>
+#include <thread>
+#include <chrono>
 #include <cstdlib>
 #include <unistd.h>
 
@@ -34,6 +37,11 @@ int main() {
     assert(AliasManager::detect_type("http://example.com") == AliasType::Url);
     assert(AliasManager::detect_type("/tmp") == AliasType::Directory);
     assert(AliasManager::detect_type("docker ps") == AliasType::Command);
+    // Only a leading '>' means shell; pipes/&&/$VAR in a plain command stay Command (run directly).
+    assert(AliasManager::detect_type(">sudo apt update") == AliasType::Shell);
+    assert(AliasManager::detect_type("ls | wc -l && echo $HOME") == AliasType::Command);
+    // A file alias whose file is missing is a direct command, never Shell.
+    assert(AliasManager::detect_type("/nonexistent_nexus_dir/file.txt") == AliasType::Command);
 
     // Test 2: Add and list aliases
     assert(mgr.add_alias("gh", "https://github.com"));
@@ -66,6 +74,76 @@ int main() {
     }
     for (const char* q_str : {"alias", "alias zz", " alias zz "}) {
         for (const auto& r : provider.search(Query(q_str), cancel)) assert(r.id.rfind("alias:create:", 0) != 0);
+    }
+
+    // Inline creation keeps the whole rest of the line (multi-word and '>' targets); stays in General mode.
+    for (const char* q_str : {"alias up >sudo apt update", "  alias up   >sudo apt update  "}) {
+        assert(Query(q_str).mode() == QueryMode::General);
+        auto r = provider.search(Query(q_str), cancel);
+        assert(r.size() == 1 && r[0].id == "alias:create:up");
+        assert(r[0].title == "Save alias 'up' → >sudo apt update");
+    }
+    {
+        auto r = provider.search(Query("alias dk docker ps -a"), cancel);
+        assert(r.size() == 1 && r[0].title == "Save alias 'dk' → docker ps -a");
+    }
+
+    // Subtitle shows when an alias runs a shell (search only; the action is never invoked here).
+    assert(mgr.add_alias("upd", ">sudo apt update"));
+    assert(mgr.add_alias("dps", "docker ps"));
+    {
+        auto r = provider.search(Query("upd"), cancel);
+        assert(!r.empty() && r[0].subtitle.find("shell") != std::string::npos);
+        auto r2 = provider.search(Query("dps"), cancel);
+        assert(!r2.empty() && r2[0].subtitle.find("shell") == std::string::npos);
+    }
+    assert(mgr.remove_alias("upd") && mgr.remove_alias("dps"));
+
+    // Which executor path an alias action takes: a fake program on PATH records the argv it received.
+    {
+        const fs::path dir = fs::temp_directory_path() / ("nexus_test_alias_bin_" + pid);
+        fs::remove_all(dir);
+        fs::create_directories(dir);
+        const fs::path out = dir / "args.txt";
+        {
+            std::ofstream f(dir / "nexus-fake-rec");
+            f << "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done > '" << out.string() << "'\n";
+        }
+        fs::permissions(dir / "nexus-fake-rec", fs::perms::owner_all);
+        const char* cp = std::getenv("PATH");
+        const std::string saved_path = cp ? cp : "";
+        setenv("PATH", (dir.string() + ":" + saved_path).c_str(), 1);
+
+        auto run = [&](const std::string& name, const std::string& target) {
+            fs::remove(out);
+            assert(mgr.add_alias(name, target));
+            auto r = provider.search(Query(name), cancel);
+            assert(!r.empty() && r[0].title == name);
+            const bool ok = r[0].action();
+            // Children are detached; poll briefly for the recorder output.
+            for (int i = 0; ok && i < 250 && !fs::exists(out); ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            std::string got;
+            std::getline(std::ifstream(out), got);
+            assert(mgr.remove_alias(name));
+            return std::make_pair(ok, got);
+        };
+
+        // (a) plain command: no shell, so '|' and $HOME stay literal.
+        auto r = run("plainrec", "nexus-fake-rec a|b $HOME");
+        assert(r.first && r.second == "[a|b][$HOME]");
+
+        // (b) '>' target: runs through the shell, which expands $HOME.
+        const char* home = std::getenv("HOME");
+        r = run("shellrec", ">nexus-fake-rec $HOME");
+        assert(r.first && r.second == "[" + std::string(home ? home : "") + "]");
+
+        // (c) file alias whose file is missing: fails, never reaches a shell.
+        r = run("missingrec", "/nonexistent_nexus_dir/file.txt");
+        assert(!r.first && !fs::exists(out));
+
+        setenv("PATH", saved_path.c_str(), 1);
+        fs::remove_all(dir);
     }
 
     // Test 4: Remove alias

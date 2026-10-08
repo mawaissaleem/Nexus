@@ -25,6 +25,7 @@ std::string expand_home(std::string_view path) {
 } // namespace
 
 AliasType AliasManager::detect_type(std::string_view target) {
+    if (!target.empty() && target.front() == '>') return AliasType::Shell;
     if (target.rfind("http://", 0) == 0 || target.rfind("https://", 0) == 0 || target.rfind("www.", 0) == 0) {
         return AliasType::Url;
     }

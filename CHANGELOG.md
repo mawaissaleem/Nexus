@@ -8,6 +8,24 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Aliases only use a shell when the target starts with `>`.** Any other
+  command alias is split into words and run directly, so pipes, `&&`,
+  `$VAR`, redirects and `~` are no longer interpreted, single quotes no
+  longer group words, and `%` sequences such as `%f` are removed (`%%` gives
+  one `%`). Double quotes still group words (`code "My Projects"`). Existing
+  aliases that rely on any of this need a leading `>` (for example
+  `>ls | wc -l` or `>code ~/nexus`). Shell aliases are marked "runs in shell"
+  in the result subtitle.
+- `alias <name> <target>` typed in the launcher now keeps the whole rest of the
+  line as the target, so multi-word and `>` aliases can be created there.
+  `nexus alias add` also joins extra words into the target.
+
+---
+
 ## [0.4.0] — 2026-11-07
 
 Closes out Phase 5 (personalisation) and the settings work planned for
