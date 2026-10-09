@@ -49,8 +49,8 @@ std::vector<core::SearchResult> AliasProvider::search(
             create_res.icon = "emblem-favorite";
             create_res.provider_id = id();
             create_res.score = 2500.0;
-            create_res.action = [name, target]() {
-                return core::AliasManager::instance().add_alias(name, target);
+            create_res.action = [&aliases = aliases_, name, target]() {
+                return aliases.add_alias(name, target);
             };
             results.push_back(std::move(create_res));
             return results;
@@ -59,7 +59,7 @@ std::vector<core::SearchResult> AliasProvider::search(
 
     // 2. Normal matching against existing aliases
     const auto& search_term = query.normalized();
-    auto aliases = core::AliasManager::instance().get_aliases();
+    auto aliases = aliases_.get_aliases();
 
     for (const auto& alias : aliases) {
         if (cancel_token.load()) return {};

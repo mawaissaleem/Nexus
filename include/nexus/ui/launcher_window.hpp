@@ -1,5 +1,7 @@
 #pragma once
 
+#include "nexus/core/alias_manager.hpp"
+#include "nexus/core/config_manager.hpp"
 #include "nexus/core/search_engine.hpp"
 #include "nexus/ui/query_manager.hpp"
 #include "nexus/ui/theme.hpp"
@@ -21,6 +23,8 @@ public:
     explicit LauncherWindow(
         std::shared_ptr<core::SearchEngine> search_engine,
         ThemeController& theme,
+        core::ConfigManager& config,
+        core::AliasManager& aliases,
         QWidget* parent = nullptr
     );
 
@@ -52,6 +56,8 @@ private:
 
     std::shared_ptr<core::SearchEngine> search_engine_;
     ThemeController& theme_;
+    core::ConfigManager& config_;
+    core::AliasManager& aliases_;
     QLineEdit* search_input_{nullptr};
     QListWidget* result_list_{nullptr};
     QWidget* container_{nullptr};

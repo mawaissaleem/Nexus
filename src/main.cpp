@@ -37,12 +37,12 @@ namespace {
 
 const char* IPC_SOCKET_NAME = "nexus_launcher_ipc";
 
-void print_help() {
+void print_help(const std::string& shortcut) {
     std::cout << "Nexus - Linux Productivity Launcher\n\n"
               << "Usage:\n"
               << "  nexus [options] [command]\n\n"
               << "Running without arguments starts the GUI launcher in the background.\n"
-              << "Global hotkey: " << nexus::core::ConfigManager::instance().get_shortcut() << " (configurable in settings)\n\n"
+              << "Global hotkey: " << shortcut << " (configurable in settings)\n\n"
               << "Options:\n"
               << "  --toggle, -t           Toggle the launcher window (shows or hides running instance)\n"
               << "  --show                 Show the launcher window on the active monitor\n"
@@ -98,6 +98,10 @@ int main(int argc, char* argv[]) {
 
     nexus::utils::Logger::instance().set_level(nexus::utils::LogLevel::Info);
 
+    // Created once; every provider, window and dialog below holds a reference, so they must outlive those.
+    nexus::core::ConfigManager config(nexus::core::ConfigManager::resolve_config_path());
+    nexus::core::AliasManager aliases(nexus::core::AliasManager::resolve_aliases_path());
+
     bool start_with_settings = false;
 
     // 1. Check for quick CLI commands that don't need GUI/daemon
@@ -105,7 +109,7 @@ int main(int argc, char* argv[]) {
         std::string arg1 = argv[1];
 
         if (arg1 == "--help" || arg1 == "-h") {
-            print_help();
+            print_help(config.get_shortcut());
             return 0;
         }
 
@@ -153,23 +157,22 @@ int main(int argc, char* argv[]) {
 
     auto file_indexer = std::make_shared<nexus::index::FileIndexer>(db);
     // Read config on the calling thread so worker threads never race the Settings dialog.
-    const auto file_options = []() {
-        auto& cfg = nexus::core::ConfigManager::instance();
-        return nexus::index::FileIndexOptions{cfg.get_search_directories(), cfg.get_file_exclusions()};
+    const auto file_options = [&config]() {
+        return nexus::index::FileIndexOptions{config.get_search_directories(), config.get_file_exclusions()};
     };
 
     // Setup SearchEngine and Providers
     auto engine = std::make_shared<nexus::core::SearchEngine>();
-    engine->register_provider(std::make_shared<nexus::providers::AliasProvider>());
+    engine->register_provider(std::make_shared<nexus::providers::AliasProvider>(aliases));
     engine->register_provider(std::make_shared<nexus::providers::ApplicationProvider>(
-        app_indexer, db, [] { return nexus::core::ConfigManager::instance().is_history_enabled(); }));
+        app_indexer, db, [&config] { return config.is_history_enabled(); }));
     engine->register_provider(std::make_shared<nexus::providers::FileProvider>(db));
     engine->register_provider(std::make_shared<nexus::providers::CalculatorProvider>());
     engine->register_provider(std::make_shared<nexus::providers::ShellProvider>());
 
     // Providers switched off in Settings are skipped per search, so the toggle needs no restart.
-    engine->set_provider_filter([](const std::string& id) {
-        return nexus::core::ConfigManager::instance().is_provider_enabled(id);
+    engine->set_provider_filter([&config](const std::string& id) {
+        return config.is_provider_enabled(id);
     });
     {
         std::vector<std::pair<std::string, std::string>> provider_names;
@@ -184,7 +187,7 @@ int main(int argc, char* argv[]) {
         // --- Directory Search Configuration ---
         if (arg1 == "dir") {
             if (argc >= 3 && std::string(argv[2]) == "add" && argc >= 4) {
-                if (nexus::core::ConfigManager::instance().add_search_directory(argv[3])) {
+                if (config.add_search_directory(argv[3])) {
                     std::cout << "Added search directory: " << argv[3]
                               << "\nRun `nexus --rebuild-index` (or restart Nexus) to index it.\n";
                 } else {
@@ -193,7 +196,7 @@ int main(int argc, char* argv[]) {
                 }
                 return 0;
             } else if (argc >= 3 && std::string(argv[2]) == "remove" && argc >= 4) {
-                if (nexus::core::ConfigManager::instance().remove_search_directory(argv[3])) {
+                if (config.remove_search_directory(argv[3])) {
                     std::cout << "Removed search directory: " << argv[3]
                               << "\nRun `nexus --rebuild-index` (or restart Nexus) to drop its files from search.\n";
                 } else {
@@ -202,7 +205,7 @@ int main(int argc, char* argv[]) {
                 }
                 return 0;
             } else if (argc >= 3 && std::string(argv[2]) == "list") {
-                auto dirs = nexus::core::ConfigManager::instance().get_search_directories();
+                auto dirs = config.get_search_directories();
                 std::cout << "Configured search directories (" << dirs.size() << "):\n";
                 for (const auto& d : dirs) {
                     std::cout << " - " << d << '\n';
@@ -239,7 +242,7 @@ int main(int argc, char* argv[]) {
             if (argc >= 3 && std::string(argv[2]) == "add" && argc >= 5) {
                 std::string target = argv[4];
                 for (int i = 5; i < argc; ++i) target += std::string(" ") + argv[i];  // unquoted multi-word target
-                if (nexus::core::AliasManager::instance().add_alias(argv[3], target)) {
+                if (aliases.add_alias(argv[3], target)) {
                     std::cout << "Saved alias: '" << argv[3] << "' -> " << target << '\n';
                 } else {
                     std::cerr << "Failed to save alias.\n";
@@ -247,7 +250,7 @@ int main(int argc, char* argv[]) {
                 }
                 return 0;
             } else if (argc >= 3 && std::string(argv[2]) == "remove" && argc >= 4) {
-                if (nexus::core::AliasManager::instance().remove_alias(argv[3])) {
+                if (aliases.remove_alias(argv[3])) {
                     std::cout << "Removed alias: " << argv[3] << '\n';
                 } else {
                     std::cerr << "Alias not found: " << argv[3] << '\n';
@@ -255,9 +258,9 @@ int main(int argc, char* argv[]) {
                 }
                 return 0;
             } else if (argc >= 3 && std::string(argv[2]) == "list") {
-                auto aliases = nexus::core::AliasManager::instance().get_aliases();
-                std::cout << "Configured aliases (" << aliases.size() << "):\n";
-                for (const auto& a : aliases) {
+                auto list = aliases.get_aliases();
+                std::cout << "Configured aliases (" << list.size() << "):\n";
+                for (const auto& a : list) {
                     std::cout << " - " << a.name << " -> " << a.target << '\n';
                 }
                 return 0;
@@ -351,19 +354,19 @@ int main(int argc, char* argv[]) {
     });
 
     // Initialize GUI Launcher Window
-    nexus::ui::ThemeController theme(nexus::core::ConfigManager::instance().get_theme());
+    nexus::ui::ThemeController theme(config.get_theme());
     nexus::ui::SettingsDialog::set_theme_controller(&theme);
-    auto launcher = std::make_shared<nexus::ui::LauncherWindow>(engine, theme);
+    auto launcher = std::make_shared<nexus::ui::LauncherWindow>(engine, theme, config, aliases);
 
     // 2. Start Single-Instance IPC Server for instant toggle from shortcuts
     auto ipc_server = std::make_unique<QLocalServer>(&app);
     QLocalServer::removeServer(IPC_SOCKET_NAME); // Clean any previous stale socket file
     if (ipc_server->listen(IPC_SOCKET_NAME)) {
         NEXUS_LOG_INFO("Nexus IPC server listening on: " + std::string(IPC_SOCKET_NAME));
-        QObject::connect(ipc_server.get(), &QLocalServer::newConnection, [server_ptr = ipc_server.get(), launcher]() {
+        QObject::connect(ipc_server.get(), &QLocalServer::newConnection, [server_ptr = ipc_server.get(), launcher, &config, &aliases]() {
             QLocalSocket* client = server_ptr->nextPendingConnection();
             if (!client) return;
-            QObject::connect(client, &QLocalSocket::readyRead, [client, launcher]() {
+            QObject::connect(client, &QLocalSocket::readyRead, [client, launcher, &config, &aliases]() {
                 QString msg = QString::fromUtf8(client->readAll()).trimmed();
                 if (msg == "TOGGLE") {
                     launcher->toggle_launcher();
@@ -372,7 +375,7 @@ int main(int argc, char* argv[]) {
                 } else if (msg == "HIDE") {
                     launcher->hide_launcher();
                 } else if (msg == "SETTINGS") {
-                    nexus::ui::SettingsDialog::show_settings();
+                    nexus::ui::SettingsDialog::show_settings(config, aliases);
                 }
             });
         });
@@ -394,7 +397,7 @@ int main(int argc, char* argv[]) {
         }
         QMessageBox::warning(nullptr, "Nexus global shortcut", msg + "\nChoose another one in Settings.");
     });
-    shortcut_mgr->apply_shortcut(nexus::core::ConfigManager::instance().get_shortcut());
+    shortcut_mgr->apply_shortcut(config.get_shortcut());
 
     // 4. System Tray Icon
     QSystemTrayIcon tray_icon;
@@ -403,7 +406,7 @@ int main(int argc, char* argv[]) {
         icon = QIcon::fromTheme("application-x-executable");
     }
     tray_icon.setIcon(icon);
-    const auto shortcut_text = []() { return QString::fromStdString(nexus::core::ConfigManager::instance().get_shortcut()); };
+    const auto shortcut_text = [&config]() { return QString::fromStdString(config.get_shortcut()); };
     tray_icon.setToolTip("Nexus Launcher (" + shortcut_text() + ")");
 
     QMenu tray_menu;
@@ -414,15 +417,15 @@ int main(int argc, char* argv[]) {
 
     // Settings dialog applies a new shortcut: persist, re-grab, refresh labels.
     nexus::ui::SettingsDialog::set_shortcut_applier([&](const std::string& text) {
-        if (!nexus::core::ConfigManager::instance().set_shortcut(text)) return false;
+        if (!config.set_shortcut(text)) return false;
         tray_icon.setToolTip("Nexus Launcher (" + shortcut_text() + ")");
         toggle_action->setText("Toggle Launcher (" + shortcut_text() + ")");
         return shortcut_mgr->apply_shortcut(text);
     });
 
     auto* settings_action = tray_menu.addAction("Settings...");
-    QObject::connect(settings_action, &QAction::triggered, []() {
-        nexus::ui::SettingsDialog::show_settings();
+    QObject::connect(settings_action, &QAction::triggered, [&]() {
+        nexus::ui::SettingsDialog::show_settings(config, aliases);
     });
 
     auto* rebuild_action = tray_menu.addAction("Rebuild Indexes");
@@ -483,12 +486,12 @@ int main(int argc, char* argv[]) {
 
     // Show initially so user sees it right away on first run
     if (start_with_settings) {
-        nexus::ui::SettingsDialog::show_settings();
+        nexus::ui::SettingsDialog::show_settings(config, aliases);
     } else {
         launcher->show_launcher();
     }
 
-    NEXUS_LOG_INFO("Nexus is running in the background. Press " + nexus::core::ConfigManager::instance().get_shortcut() + " to toggle.");
+    NEXUS_LOG_INFO("Nexus is running in the background. Press " + config.get_shortcut() + " to toggle.");
     const int rc = app.exec();
     quitting = true;  // walkers poll this, so quit mid-build returns within one directory entry
     if (startup_index_thread.joinable()) startup_index_thread.join();

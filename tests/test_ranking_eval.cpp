@@ -44,7 +44,7 @@ static index::FileEntry file(std::string path, bool is_dir = false, bool is_root
     return {path, fs::path(path).filename().string(), is_dir, is_root};
 }
 
-static std::vector<core::SearchResult> run(const Case& c, const fs::path& dir) {
+static std::vector<core::SearchResult> run(const Case& c, core::AliasManager& aliases, const fs::path& dir) {
     fs::create_directories(dir);
     for (const auto& a : c.apps)
         std::ofstream(dir / (a.id + ".desktop")) << "[Desktop Entry]\nType=Application\nName=" << a.name
@@ -59,11 +59,10 @@ static std::vector<core::SearchResult> run(const Case& c, const fs::path& dir) {
     std::vector<index::FileEntry> files = c.files;
     assert(db->replace_files(files));
 
-    auto& aliases = core::AliasManager::instance();
     for (const auto& [n, t] : c.aliases) assert(aliases.add_alias(n, t));
 
     core::SearchEngine engine;
-    engine.register_provider(std::make_shared<providers::AliasProvider>());
+    engine.register_provider(std::make_shared<providers::AliasProvider>(aliases));
     engine.register_provider(std::make_shared<providers::ApplicationProvider>(indexer, db));
     engine.register_provider(std::make_shared<providers::FileProvider>(db));
     engine.register_provider(std::make_shared<providers::CalculatorProvider>());
@@ -78,16 +77,7 @@ int main() {
     const fs::path root = fs::temp_directory_path() / ("nexus_ranking_eval_" + std::to_string(getpid()));
     fs::remove_all(root);
 
-    // The alias singleton loads ~/.config/nexus/aliases.json and builds defaults from $HOME on first use:
-    // point both at the temp dir for construction, then restore them.
-    auto save_env = [](const char* k) { const char* v = std::getenv(k); return v ? std::optional<std::string>(v) : std::nullopt; };
-    auto restore_env = [](const char* k, const std::optional<std::string>& v) { v ? setenv(k, v->c_str(), 1) : unsetenv(k); };
-    const auto old_home = save_env("HOME"), old_xdg = save_env("XDG_CONFIG_HOME");
-    setenv("HOME", (root / "home").c_str(), 1);
-    setenv("XDG_CONFIG_HOME", (root / "config").c_str(), 1);
-    core::AliasManager::instance().load((root / "aliases.json").string()); // missing file: defaults stay, saves go here
-    restore_env("HOME", old_home);
-    restore_env("XDG_CONFIG_HOME", old_xdg);
+    core::AliasManager aliases((root / "aliases.json").string()); // missing file: defaults stay, saves go here
 
     const std::vector<Case> cases = {
         {.name = "exact beats prefix", .query = "firefox",
@@ -139,7 +129,7 @@ int main() {
     int failures = 0, known = 0;
     for (size_t i = 0; i < cases.size(); ++i) {
         const auto& c = cases[i];
-        const auto results = run(c, root / ("case" + std::to_string(i)));
+        const auto results = run(c, aliases, root / ("case" + std::to_string(i)));
         const bool ok = !results.empty() && results[0].id == c.expected_top;
         if (ok && !c.known_failure) continue;
         if (ok || !c.known_failure) ++failures; else ++known;

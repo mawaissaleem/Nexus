@@ -42,13 +42,7 @@ AliasType AliasManager::detect_type(std::string_view target) {
     return AliasType::Command;
 }
 
-AliasManager& AliasManager::instance() {
-    static AliasManager inst;
-    return inst;
-}
-
-AliasManager::AliasManager() {
-    file_path_ = resolve_aliases_path();
+AliasManager::AliasManager(const std::string& aliases_path) : file_path_(aliases_path) {
     set_defaults();
     load();
 }

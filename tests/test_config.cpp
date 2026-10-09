@@ -18,26 +18,18 @@ int main() {
     fs::remove(temp_config_file);
 
     // Test 0: defaults never include the process working directory (it would get indexed).
-    // Defaults are built once in the singleton constructor, so chdir and redirect the config
-    // dir (never the real ~/.config/nexus) before the first instance() call.
-    const fs::path xdg = fs::temp_directory_path() / ("nexus_cfg_xdg_" + pid);
+    // Defaults come from the constructor, so chdir first; the config file is a temp path (never ~/.config/nexus).
     const fs::path work = fs::temp_directory_path() / ("nexus_cfg_cwd_" + pid);
-    const char* old_xdg_env = std::getenv("XDG_CONFIG_HOME");
-    const std::optional<std::string> old_xdg = old_xdg_env ? std::optional<std::string>(old_xdg_env) : std::nullopt;
     const fs::path old_cwd = fs::current_path();
-    fs::create_directories(xdg);
     fs::create_directories(work);
-    setenv("XDG_CONFIG_HOME", xdg.c_str(), 1);
     fs::current_path(work);
 
-    auto& config = ConfigManager::instance();
+    ConfigManager config(temp_config_file.string());
     const std::string cwd = fs::current_path().string();
     for (const auto& d : config.get_search_directories()) assert(d != cwd);
 
     fs::current_path(old_cwd);
-    if (old_xdg) setenv("XDG_CONFIG_HOME", old_xdg->c_str(), 1); else unsetenv("XDG_CONFIG_HOME");
     fs::remove_all(work);
-    fs::remove_all(xdg);
 
     // Test 1: Default state is true
     config.load(temp_config_file.string());

@@ -259,28 +259,28 @@ void SettingsDialog::set_providers(std::vector<std::pair<std::string, std::strin
     g_providers = std::move(providers);
 }
 
-void SettingsDialog::show_settings(QWidget* parent) {
+void SettingsDialog::show_settings(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent) {
     if (!g_active_settings) {
-        g_active_settings = new SettingsDialog(parent);
+        g_active_settings = new SettingsDialog(config, aliases, parent);
     }
     if (g_active_settings->ctrl_np_checkbox_) {
         bool blocked = g_active_settings->ctrl_np_checkbox_->blockSignals(true);
         g_active_settings->ctrl_np_checkbox_->setChecked(
-            core::ConfigManager::instance().is_ctrl_np_navigation_enabled()
+            config.is_ctrl_np_navigation_enabled()
         );
         g_active_settings->ctrl_np_checkbox_->blockSignals(blocked);
         g_active_settings->ctrl_np_checkbox_->update();
     }
     if (g_active_settings->shortcut_edit_) {
-        g_active_settings->shortcut_edit_->setText(QString::fromStdString(core::ConfigManager::instance().get_shortcut()));
+        g_active_settings->shortcut_edit_->setText(QString::fromStdString(config.get_shortcut()));
     }
     g_active_settings->show();
     g_active_settings->raise();
     g_active_settings->activateWindow();
 }
 
-SettingsDialog::SettingsDialog(QWidget* parent)
-    : QDialog(parent), palette_(g_theme ? g_theme->palette() : Palette::dark()) {
+SettingsDialog::SettingsDialog(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent)
+    : QDialog(parent), palette_(g_theme ? g_theme->palette() : Palette::dark()), config_(config), aliases_(aliases) {
     setWindowTitle("Nexus Settings & Configuration");
     resize(640, 480);
     setMinimumSize(540, 400);
@@ -570,7 +570,7 @@ void SettingsDialog::setup_ui() {
     card_layout->setContentsMargins(18, 16, 18, 16);
 
     ctrl_np_checkbox_ = new ModernCheckBox("Enable Ctrl+N / Ctrl+P navigation for search results", palette_, card);
-    ctrl_np_checkbox_->setChecked(core::ConfigManager::instance().is_ctrl_np_navigation_enabled());
+    ctrl_np_checkbox_->setChecked(config_.is_ctrl_np_navigation_enabled());
     connect(ctrl_np_checkbox_, &QCheckBox::toggled, this, &SettingsDialog::on_ctrl_np_toggled);
     card_layout->addWidget(ctrl_np_checkbox_);
 
@@ -587,7 +587,7 @@ void SettingsDialog::setup_ui() {
     card_layout->addWidget(desc_label);
 
     history_checkbox_ = new ModernCheckBox("Record usage and query history (used to rank results)", palette_, card);
-    history_checkbox_->setChecked(core::ConfigManager::instance().is_history_enabled());
+    history_checkbox_->setChecked(config_.is_history_enabled());
     connect(history_checkbox_, &QCheckBox::toggled, this, &SettingsDialog::on_history_toggled);
     card_layout->addWidget(history_checkbox_);
 
@@ -598,7 +598,7 @@ void SettingsDialog::setup_ui() {
     theme_combo_->addItem("Dark", static_cast<int>(utils::ThemeMode::Dark));
     theme_combo_->addItem("Light", static_cast<int>(utils::ThemeMode::Light));
     theme_combo_->addItem("System", static_cast<int>(utils::ThemeMode::System));
-    theme_combo_->setCurrentIndex(theme_combo_->findData(static_cast<int>(core::ConfigManager::instance().get_theme())));
+    theme_combo_->setCurrentIndex(theme_combo_->findData(static_cast<int>(config_.get_theme())));
     connect(theme_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsDialog::on_theme_changed);
     theme_row->addWidget(theme_label);
     theme_row->addWidget(theme_combo_, 1);
@@ -607,7 +607,7 @@ void SettingsDialog::setup_ui() {
     auto* shortcut_row = new QHBoxLayout();
     auto* shortcut_label = new QLabel("Global shortcut:", card);
     shortcut_label->setStyleSheet("border: none; background: transparent;");
-    shortcut_edit_ = new QLineEdit(QString::fromStdString(core::ConfigManager::instance().get_shortcut()), card);
+    shortcut_edit_ = new QLineEdit(QString::fromStdString(config_.get_shortcut()), card);
     shortcut_edit_->setPlaceholderText("e.g. Alt+Space, Ctrl+Shift+K");
     auto* shortcut_apply = new QPushButton("Apply", card);
     connect(shortcut_apply, &QPushButton::clicked, this, &SettingsDialog::on_apply_shortcut);
@@ -641,9 +641,9 @@ void SettingsDialog::setup_ui() {
     count_label->setStyleSheet("border: none; background: transparent;");
     auto* count_spin = new QSpinBox(search_card);
     count_spin->setRange(core::ConfigManager::kMinResultCount, core::ConfigManager::kMaxResultCount);
-    count_spin->setValue(core::ConfigManager::instance().get_result_count());
+    count_spin->setValue(config_.get_result_count());
     connect(count_spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int n) {
-        core::ConfigManager::instance().set_result_count(n);
+        config_.set_result_count(n);
         emit settings_changed();
     });
     count_row->addWidget(count_label);
@@ -656,9 +656,9 @@ void SettingsDialog::setup_ui() {
     search_card_layout->addWidget(providers_label);
     for (const auto& [id, name] : g_providers) {
         auto* box = new ModernCheckBox(QString::fromStdString(name), palette_, search_card);
-        box->setChecked(core::ConfigManager::instance().is_provider_enabled(id));
+        box->setChecked(config_.is_provider_enabled(id));
         connect(box, &QCheckBox::toggled, this, [this, id = id](bool on) {
-            core::ConfigManager::instance().set_provider_enabled(id, on);
+            config_.set_provider_enabled(id, on);
             emit settings_changed();
         });
         search_card_layout->addWidget(box);
@@ -692,7 +692,7 @@ void SettingsDialog::setup_ui() {
 
 void SettingsDialog::reload_aliases() {
     alias_table_->setRowCount(0);
-    auto aliases = core::AliasManager::instance().get_aliases();
+    auto aliases = aliases_.get_aliases();
 
     for (const auto& a : aliases) {
         int row = alias_table_->rowCount();
@@ -738,7 +738,7 @@ void SettingsDialog::on_filter_aliases(const QString& text) {
 void SettingsDialog::on_add_alias() {
     AliasEditDialog dlg(palette_, this);
     if (dlg.exec() == QDialog::Accepted) {
-        core::AliasManager::instance().add_alias(dlg.name().toStdString(), dlg.target().toStdString());
+        aliases_.add_alias(dlg.name().toStdString(), dlg.target().toStdString());
         reload_aliases();
         emit settings_changed();
     }
@@ -754,9 +754,9 @@ void SettingsDialog::on_edit_alias() {
     AliasEditDialog dlg(palette_, this, current_name, current_target);
     if (dlg.exec() == QDialog::Accepted) {
         if (dlg.name() != current_name) {
-            core::AliasManager::instance().remove_alias(current_name.toStdString());
+            aliases_.remove_alias(current_name.toStdString());
         }
-        core::AliasManager::instance().add_alias(dlg.name().toStdString(), dlg.target().toStdString());
+        aliases_.add_alias(dlg.name().toStdString(), dlg.target().toStdString());
         reload_aliases();
         emit settings_changed();
     }
@@ -771,7 +771,7 @@ void SettingsDialog::on_delete_alias() {
                                      QString("Are you sure you want to remove alias '%1'?").arg(name),
                                      QMessageBox::Yes | QMessageBox::No);
     if (res == QMessageBox::Yes) {
-        core::AliasManager::instance().remove_alias(name.toStdString());
+        aliases_.remove_alias(name.toStdString());
         reload_aliases();
         emit settings_changed();
     }
@@ -783,7 +783,7 @@ void SettingsDialog::on_delete_alias() {
 
 void SettingsDialog::reload_directories() {
     dir_list_->clear();
-    auto dirs = core::ConfigManager::instance().get_search_directories();
+    auto dirs = config_.get_search_directories();
     QIcon folder_icon = QIcon::fromTheme("folder");
 
     for (const auto& d : dirs) {
@@ -795,7 +795,7 @@ void SettingsDialog::reload_directories() {
 void SettingsDialog::on_add_directory() {
     QString dir = QFileDialog::getExistingDirectory(this, "Choose Search Directory", QDir::homePath());
     if (!dir.isEmpty()) {
-        if (core::ConfigManager::instance().add_search_directory(dir.toStdString())) {
+        if (config_.add_search_directory(dir.toStdString())) {
             reload_directories();
             if (g_directories_changed) g_directories_changed();
             emit settings_changed();
@@ -814,7 +814,7 @@ void SettingsDialog::on_remove_directory() {
                                      QString("Remove '%1' from search paths?").arg(path),
                                      QMessageBox::Yes | QMessageBox::No);
     if (res == QMessageBox::Yes) {
-        core::ConfigManager::instance().remove_search_directory(path.toStdString());
+        config_.remove_search_directory(path.toStdString());
         reload_directories();
         if (g_directories_changed) g_directories_changed();
         emit settings_changed();
@@ -823,7 +823,7 @@ void SettingsDialog::on_remove_directory() {
 
 void SettingsDialog::reload_exclusions() {
     exclusion_list_->clear();
-    for (const auto& n : core::ConfigManager::instance().get_file_exclusions()) {
+    for (const auto& n : config_.get_file_exclusions()) {
         exclusion_list_->addItem(QString::fromStdString(n));
     }
 }
@@ -831,7 +831,7 @@ void SettingsDialog::reload_exclusions() {
 void SettingsDialog::on_add_exclusion() {
     const std::string name = exclusion_edit_->text().trimmed().toStdString();
     if (name.empty()) return;
-    auto& cfg = core::ConfigManager::instance();
+    auto& cfg = config_;
     auto names = cfg.get_file_exclusions();
     names.push_back(name);
     cfg.set_file_exclusions(names);
@@ -849,7 +849,7 @@ void SettingsDialog::on_add_exclusion() {
 void SettingsDialog::on_remove_exclusion() {
     auto* item = exclusion_list_->currentItem();
     if (!item) return;
-    auto& cfg = core::ConfigManager::instance();
+    auto& cfg = config_;
     auto names = cfg.get_file_exclusions();
     names.erase(std::remove(names.begin(), names.end(), item->text().toStdString()), names.end());
     cfg.set_file_exclusions(names);
@@ -865,18 +865,18 @@ void SettingsDialog::on_open_directory() {
 }
 
 void SettingsDialog::on_ctrl_np_toggled(bool checked) {
-    core::ConfigManager::instance().set_ctrl_np_navigation_enabled(checked);
+    config_.set_ctrl_np_navigation_enabled(checked);
     emit settings_changed();
 }
 
 void SettingsDialog::on_theme_changed(int index) {
     const auto mode = static_cast<utils::ThemeMode>(theme_combo_->itemData(index).toInt());
-    core::ConfigManager::instance().set_theme(mode);
+    config_.set_theme(mode);
     if (g_theme) g_theme->set_mode(mode);
 }
 
 void SettingsDialog::on_history_toggled(bool checked) {
-    core::ConfigManager::instance().set_history_enabled(checked);
+    config_.set_history_enabled(checked);
     emit settings_changed();
 }
 

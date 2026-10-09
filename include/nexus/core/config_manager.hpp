@@ -10,7 +10,9 @@ namespace nexus::core {
 
 class ConfigManager {
 public:
-    static ConfigManager& instance();
+    // Loads `config_path` (defaults if missing). Production passes resolve_config_path(); tests pass a temp file.
+    explicit ConfigManager(const std::string& config_path);
+    static std::string resolve_config_path();
 
     bool load(const std::string& custom_path = "");
     bool save();
@@ -54,11 +56,7 @@ public:
     std::string get_config_path() const { return config_file_path_; }
 
 private:
-    ConfigManager();
-    ~ConfigManager() = default;
-
     void set_defaults();
-    static std::string resolve_config_path();
 
     mutable std::mutex mutex_;
     std::string config_file_path_;

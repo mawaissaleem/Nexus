@@ -30,13 +30,7 @@ bool valid_exclusion(const std::string& name) {
 
 } // namespace
 
-ConfigManager& ConfigManager::instance() {
-    static ConfigManager inst;
-    return inst;
-}
-
-ConfigManager::ConfigManager() {
-    config_file_path_ = resolve_config_path();
+ConfigManager::ConfigManager(const std::string& config_path) : config_file_path_(config_path) {
     set_defaults();
     load();
 }

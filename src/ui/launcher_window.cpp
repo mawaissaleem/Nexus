@@ -19,8 +19,10 @@ namespace nexus::ui {
 LauncherWindow::LauncherWindow(
     std::shared_ptr<core::SearchEngine> search_engine,
     ThemeController& theme,
+    core::ConfigManager& config,
+    core::AliasManager& aliases,
     QWidget* parent
-) : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme) {
+) : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config), aliases_(aliases) {
     query_manager_ = std::make_unique<QueryManager>(search_engine_, this);
     connect(query_manager_.get(), &QueryManager::results_ready, this, &LauncherWindow::on_search_results);
 
@@ -266,7 +268,7 @@ void LauncherWindow::perform_search() {
         return;
     }
 
-    query_manager_->search(q_str, static_cast<size_t>(core::ConfigManager::instance().get_result_count()));
+    query_manager_->search(q_str, static_cast<size_t>(config_.get_result_count()));
 }
 
 void LauncherWindow::on_search_results(const std::vector<core::SearchResult>& results, const QString& query_text) {
@@ -351,7 +353,7 @@ void LauncherWindow::on_item_clicked(QListWidgetItem* item) {
 
 void LauncherWindow::update_footer_hint() {
     if (!hint_label_) return;
-    if (core::ConfigManager::instance().is_ctrl_np_navigation_enabled()) {
+    if (config_.is_ctrl_np_navigation_enabled()) {
         hint_label_->setText("↑↓ or Ctrl+N/P Navigate   •   ↵ Launch   •   Esc Close");
     } else {
         hint_label_->setText("↑↓ Navigate   •   ↵ Launch   •   Esc Close");
@@ -375,7 +377,7 @@ void LauncherWindow::select_prev_result() {
 bool LauncherWindow::eventFilter(QObject* watched, QEvent* event) {
     if (watched == search_input_ && event->type() == QEvent::KeyPress) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
-        bool ctrl_np_enabled = core::ConfigManager::instance().is_ctrl_np_navigation_enabled();
+        bool ctrl_np_enabled = config_.is_ctrl_np_navigation_enabled();
         bool is_ctrl = (keyEvent->modifiers() == Qt::ControlModifier);
 
         bool is_next = (keyEvent->key() == Qt::Key_Down) ||
@@ -404,7 +406,7 @@ void LauncherWindow::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
         hide_launcher();
     } else {
-        bool ctrl_np_enabled = core::ConfigManager::instance().is_ctrl_np_navigation_enabled();
+        bool ctrl_np_enabled = config_.is_ctrl_np_navigation_enabled();
         bool is_ctrl = (event->modifiers() == Qt::ControlModifier);
         if (event->key() == Qt::Key_Down || (ctrl_np_enabled && is_ctrl && event->key() == Qt::Key_N)) {
             select_next_result();
@@ -434,7 +436,7 @@ void LauncherWindow::changeEvent(QEvent* event) {
 
 void LauncherWindow::open_settings() {
     hide_launcher();
-    SettingsDialog::show_settings();
+    SettingsDialog::show_settings(config_, aliases_);
 }
 
 } // namespace nexus::ui

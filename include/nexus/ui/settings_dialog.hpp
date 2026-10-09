@@ -10,6 +10,8 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QSpinBox>
+#include "nexus/core/alias_manager.hpp"
+#include "nexus/core/config_manager.hpp"
 #include "nexus/ui/theme.hpp"
 #include <functional>
 #include <memory>
@@ -49,9 +51,9 @@ class SettingsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit SettingsDialog(QWidget* parent = nullptr);
+    SettingsDialog(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent = nullptr);
 
-    static void show_settings(QWidget* parent = nullptr);
+    static void show_settings(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent = nullptr);
 
     // Called with the shortcut text when the user applies one; returns false if it is invalid.
     // The caller owns persisting and re-grabbing it, so the dialog stays UI-only.
@@ -126,6 +128,8 @@ private:
     QComboBox* theme_combo_{nullptr};
     QLineEdit* shortcut_edit_{nullptr};
     Palette palette_;
+    core::ConfigManager& config_;
+    core::AliasManager& aliases_;
 };
 
 } // namespace nexus::ui

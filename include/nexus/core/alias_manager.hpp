@@ -22,7 +22,9 @@ struct AliasEntry {
 
 class AliasManager {
 public:
-    static AliasManager& instance();
+    // Loads `aliases_path` (defaults if missing). Production passes resolve_aliases_path(); tests pass a temp file.
+    explicit AliasManager(const std::string& aliases_path);
+    static std::string resolve_aliases_path();
 
     bool load(const std::string& custom_path = "");
     bool save();
@@ -34,11 +36,7 @@ public:
     static AliasType detect_type(std::string_view target);
 
 private:
-    AliasManager();
-    ~AliasManager() = default;
-
     void set_defaults();
-    static std::string resolve_aliases_path();
 
     mutable std::mutex mutex_;
     std::string file_path_;

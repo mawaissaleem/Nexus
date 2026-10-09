@@ -23,14 +23,7 @@ int main() {
     fs::path temp_alias_file = fs::temp_directory_path() / ("nexus_test_aliases_" + pid + ".json");
     fs::remove(temp_alias_file);
 
-    // The singleton constructor loads the default aliases file: point it at a temp dir, never ~/.config/nexus.
-    const fs::path xdg = fs::temp_directory_path() / ("nexus_alias_xdg_" + pid);
-    const char* old_xdg_env = std::getenv("XDG_CONFIG_HOME");
-    const std::optional<std::string> old_xdg = old_xdg_env ? std::optional<std::string>(old_xdg_env) : std::nullopt;
-    setenv("XDG_CONFIG_HOME", xdg.c_str(), 1);
-    auto& mgr = AliasManager::instance();
-    if (old_xdg) setenv("XDG_CONFIG_HOME", old_xdg->c_str(), 1); else unsetenv("XDG_CONFIG_HOME");
-    mgr.load(temp_alias_file.string());
+    AliasManager mgr(temp_alias_file.string());
 
     // Test 1: Type detection
     assert(AliasManager::detect_type("https://github.com") == AliasType::Url);
@@ -52,7 +45,7 @@ int main() {
     assert(list.size() >= 3);
 
     // Test 3: Search with AliasProvider
-    AliasProvider provider;
+    AliasProvider provider(mgr);
     std::atomic<bool> cancel{false};
 
     Query q("gh");
@@ -177,7 +170,6 @@ int main() {
     // Clean up
     fs::remove(temp_alias_file);
     fs::remove(temp_alias_file.string() + ".malformed");
-    fs::remove_all(xdg);
 
     std::cout << "All Alias tests passed successfully!\n";
     return 0;

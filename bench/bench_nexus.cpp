@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
     const fs::path root = fs::temp_directory_path() / ("nexus_bench_" + std::to_string(getpid()));
     fs::remove_all(root);
     fs::create_directories(root / "home");
-    // Must precede the first ConfigManager/AliasManager use (they read env once).
+    // Must precede resolve_config_path()/resolve_aliases_path() and the first DB open (they read env).
     setenv("HOME", (root / "home").c_str(), 1);
     setenv("XDG_CONFIG_HOME", (root / "config").c_str(), 1);
     setenv("XDG_DATA_HOME", (root / "data").c_str(), 1);
@@ -152,7 +152,8 @@ int main(int argc, char** argv) {
     make_apps(root / "data" / "applications", n_apps);
     const fs::path tree = root / "tree";
     make_tree(tree, n_files);
-    auto& cfg = core::ConfigManager::instance();
+    core::ConfigManager cfg(core::ConfigManager::resolve_config_path());
+    core::AliasManager aliases(core::AliasManager::resolve_aliases_path());
     for (const auto& d : cfg.get_search_directories()) cfg.remove_search_directory(d);
     cfg.add_search_directory(tree.string());
 
@@ -167,7 +168,7 @@ int main(int argc, char** argv) {
         idx = std::make_shared<index::AppIndexer>(db);
         idx->initialize();
         auto eng = std::make_shared<core::SearchEngine>();
-        eng->register_provider(std::make_shared<providers::AliasProvider>());
+        eng->register_provider(std::make_shared<providers::AliasProvider>(aliases));
         eng->register_provider(std::make_shared<providers::ApplicationProvider>(idx, db));
         eng->register_provider(std::make_shared<providers::FileProvider>(db));
         eng->register_provider(std::make_shared<providers::CalculatorProvider>());
