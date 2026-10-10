@@ -1,5 +1,6 @@
 #include "nexus/core/ranking_engine.hpp"
 #include "nexus/utils/fuzzy.hpp"
+#include "nexus/utils/logger.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -32,22 +33,13 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results,
             }
         }
 
-        // 4. Usage boost from metadata (if available)
+        // 4. Usage boost; 5. recency: exponential decay from the last launch for a similar query
         double usage_score = 0.0;
-        auto usage_it = res.metadata.find("query_usage_count");
-        if (usage_it != res.metadata.end()) {
-            try {
-                int count = std::stoi(usage_it->second);
-                if (count > 0) {
-                    usage_score = std::log1p(count) * weights_.usage_boost;
-                    // 5. Recency: exponential decay from the last launch for a similar query
-                    auto last_it = res.metadata.find("query_last_used");
-                    if (last_it != res.metadata.end() && weights_.recency_half_life_days > 0.0) {
-                        const double age_days = std::max<std::int64_t>(0, now - std::stoll(last_it->second)) / 86400.0;
-                        usage_score += weights_.recency_boost * std::exp2(-age_days / weights_.recency_half_life_days);
-                    }
-                }
-            } catch (...) {
+        if (res.usage_count > 0) {
+            usage_score = std::log1p(res.usage_count) * weights_.usage_boost;
+            if (res.last_used > 0 && weights_.recency_half_life_days > 0.0) {
+                const double age_days = std::max<std::int64_t>(0, now - res.last_used) / 86400.0;
+                usage_score += weights_.recency_boost * std::exp2(-age_days / weights_.recency_half_life_days);
             }
         }
 
@@ -58,6 +50,14 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results,
 
         // Combine scores: normalize raw provider score into [0.0, 1.0], scale by provider_relevance_weight,
         // and add lexical and usage boosts
+        // NaN/inf would break the sort's strict weak ordering (std::clamp passes NaN through): treat as 0.
+        if (!std::isfinite(res.score)) {
+            NEXUS_LOG_WARN("RankingEngine: non-finite provider score for '" + res.id + "' treated as 0");
+            res.score = 0.0;
+        } else if (res.score > weights_.max_provider_score && weights_.max_provider_score > 0.0) {
+            NEXUS_LOG_WARN("RankingEngine: provider score " + std::to_string(res.score) + " for '" + res.id +
+                           "' exceeds max_provider_score; clamped");
+        }
         double normalized_relevance = (weights_.max_provider_score > 0.0)
             ? std::clamp(res.score / weights_.max_provider_score, 0.0, 1.0)
             : 0.0;

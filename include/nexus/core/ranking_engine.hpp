@@ -15,9 +15,8 @@ struct RankingWeights {
     // that changing a provider's raw score scale and changing these
     // weights are two independent decisions, not one entangled one.
     // Current known maximum across providers is AliasProvider's 2500.0
-    // (offering to create a new alias) — verify this is still the highest
-    // value across all providers before picking this constant, and update
-    // this comment if it changes.
+    // (offering to create a new alias). rank() logs a warning for any
+    // score above this, so a provider that outgrows it is noticed.
     double max_provider_score{2500.0};
 
     double exact_match{500.0};

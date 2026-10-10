@@ -60,25 +60,25 @@ int main() {
     assert(name > generic && generic > keyword && keyword > comment && comment > 0.0);
     assert(find(results, "bygeneric")->subtitle == "frobnicate");
 
-    // Zero usage: metadata key absent
-    assert(find(results, "byname")->metadata.count("query_usage_count") == 0);
+    // Zero usage: typed signals unset
+    assert(find(results, "byname")->usage_count == 0);
     assert(find(results, "byname")->metadata.count("desktop_file") == 1);
 
     // Recorded usage: key present with the right count (action() is never called)
     assert(db->record_usage("byname", "frobnicate"));
     assert(db->record_usage("byname", "frob"));
     results = provider.search(core::Query("frobnicate"), cancel);
-    assert(find(results, "byname")->metadata.at("query_usage_count") == "2");
-    assert(find(results, "bykeyword")->metadata.count("query_usage_count") == 0);
-    assert(find(results, "bykeyword")->metadata.count("query_last_used") == 0);
+    assert(find(results, "byname")->usage_count == 2);
+    assert(find(results, "bykeyword")->usage_count == 0);
+    assert(find(results, "bykeyword")->last_used == 0);
     {
-        const long long last = std::stoll(find(results, "byname")->metadata.at("query_last_used"));
+        const long long last = find(results, "byname")->last_used;
         const long long now = static_cast<long long>(std::time(nullptr));
         assert(last >= now - 5 && last <= now + 5);
     }
     // Unrelated query: "frobnicate"/"frob" launches don't boost for a query that shares no prefix
     results = provider.search(core::Query("nicate"), cancel);
-    assert(find(results, "byname") && find(results, "byname")->metadata.count("query_usage_count") == 0);
+    assert(find(results, "byname") && find(results, "byname")->usage_count == 0);
 
     // Non-general mode and cancelled token yield nothing
     assert(provider.search(core::Query("> frobnicate"), cancel).empty());

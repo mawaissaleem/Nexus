@@ -90,8 +90,8 @@ std::vector<core::SearchResult> ApplicationProvider::search(
             };
 
             if (auto it = usage_counts.find(app.id); it != usage_counts.end() && it->second.count > 0) {
-                res.metadata["query_usage_count"] = std::to_string(it->second.count);
-                res.metadata["query_last_used"] = std::to_string(it->second.last_used);
+                res.usage_count = it->second.count;
+                res.last_used = it->second.last_used;
             }
 
             res.metadata["desktop_file"] = app.desktop_file;

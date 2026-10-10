@@ -4,6 +4,10 @@
 #include <iostream>
 #include <cassert>
 #include <cmath>
+#include <algorithm>
+#include <limits>
+#include <sstream>
+#include "nexus/utils/logger.hpp"
 #include <string>
 #include <cstdlib>
 #include <filesystem>
@@ -62,7 +66,7 @@ int main() {
     high_usage.id = "high";
     high_usage.title = "app high";
     high_usage.score = 50.0;
-    high_usage.metadata["query_usage_count"] = "50";
+    high_usage.usage_count = 50;
 
     Query app_q("app");
     std::vector<SearchResult> usage_results = {low_usage, high_usage};
@@ -79,8 +83,8 @@ int main() {
             r.id = id;
             r.title = "app";
             r.score = 50.0;
-            r.metadata["query_usage_count"] = "3";
-            r.metadata["query_last_used"] = std::to_string(now - age_days * day);
+            r.usage_count = 3;
+            r.last_used = now - age_days * day;
             return r;
         };
         std::vector<SearchResult> rs = {make("old", 60), make("fresh", 0), make("week", 7)};
@@ -90,16 +94,16 @@ int main() {
         assert(std::abs((rs[0].score - rs[1].score) - w / 2) < 1e-9);  // 7 days = one half-life
         // Without a timestamp there is no recency term; a future timestamp (clock skew) is clamped to "now"
         SearchResult none = make("none", 0);
-        none.metadata.erase("query_last_used");
+        none.last_used = 0;
         SearchResult future = make("future", -5);
         std::vector<SearchResult> rs2 = {none, future};
         ranker.rank(app_q, rs2, now);
         assert(std::abs((rs2[0].score - rs2[1].score) - w) < 1e-9 && rs2[0].id == "future");
         // Zero usage count: recency alone adds nothing
         SearchResult zero = make("zero", 0);
-        zero.metadata["query_usage_count"] = "0";
+        zero.usage_count = 0;
         SearchResult bare = make("bare", 0);
-        bare.metadata.clear();
+        bare.usage_count = 0; bare.last_used = 0;
         std::vector<SearchResult> rs3 = {zero, bare};
         ranker.rank(app_q, rs3, now);
         assert(rs3[0].score == rs3[1].score);
@@ -199,15 +203,15 @@ int main() {
     {
         const RankingWeights w;
         const double cap = 0.5 * (w.exact_match - w.provider_relevance_weight);
-        auto mk = [](const char* id, const char* title, double score, const char* count) {
+        auto mk = [](const char* id, const char* title, double score, int count) {
             SearchResult r;
             r.id = id; r.title = title; r.score = score;
-            if (count) { r.metadata["query_usage_count"] = count; r.metadata["query_last_used"] = "1000"; }
+            if (count) { r.usage_count = count; r.last_used = 1000; }
             return r;
         };
         // Worst case: exact title with minimum provider score and no usage vs a non-exact with the
         // maximum provider score, a prefix match and maximal usage/recency.
-        std::vector<SearchResult> v = {mk("rival", "terminal", w.max_provider_score, "2000000000"), mk("exact", "term", 0.0, nullptr)};
+        std::vector<SearchResult> v = {mk("rival", "terminal", w.max_provider_score, 2000000000), mk("exact", "term", 0.0, 0)};
         ranker.rank(Query("term"), v, 1000);
         assert(v[0].id == "exact");
         const double rival_base = w.provider_relevance_weight + w.prefix_match + w.token_match;
@@ -215,20 +219,52 @@ int main() {
 
         // Pathological weights (huge usage_boost) still cannot outrank.
         RankingWeights big; big.usage_boost = 1e12;
-        v = {mk("rival", "terminal", big.max_provider_score, "2000000000"), mk("exact", "term", 0.0, nullptr)};
+        v = {mk("rival", "terminal", big.max_provider_score, 2000000000), mk("exact", "term", 0.0, 0)};
         RankingEngine(big).rank(Query("term"), v, 1000);
         assert(v[0].id == "exact");
 
         // Below the cap personalisation is untouched: 1 launch just now = 5*ln2 + 2.
-        v = {mk("a", "x", 0.0, "1")};
+        v = {mk("a", "x", 0.0, 1)};
         ranker.rank(Query("zzz"), v, 1000);
         assert(std::abs(v[0].score - (5.0 * std::log(2.0) + 2.0)) < 1e-9);
 
         // Gap <= 0 disables personalisation instead of going negative.
         RankingWeights flat; flat.exact_match = 100.0; flat.provider_relevance_weight = 400.0;
-        v = {mk("a", "x", 0.0, "5")};
+        v = {mk("a", "x", 0.0, 5)};
         RankingEngine(flat).rank(Query("zzz"), v, 1000);
         assert(v[0].score == 0.0);
+    }
+
+    // PA.4 / D-80: over-limit scores are logged; NaN/inf are treated as 0 and the sort stays valid.
+    {
+        std::ostringstream captured;
+        auto* old = std::cerr.rdbuf(captured.rdbuf());
+        const auto saved_level = nexus::utils::Logger::instance().get_level();
+        nexus::utils::Logger::instance().set_level(nexus::utils::LogLevel::Warning);
+
+        auto mk = [](const char* id, double score) {
+            SearchResult r; r.id = id; r.title = "item"; r.score = score; return r;
+        };
+        std::vector<SearchResult> ok = {mk("ok", 2500.0)};
+        ranker.rank(Query("zzz"), ok);
+        assert(captured.str().empty());                       // at the limit: no warning
+        std::vector<SearchResult> over = {mk("over", 2500.5)};
+        ranker.rank(Query("zzz"), over);
+        assert(captured.str().find("exceeds max_provider_score") != std::string::npos);
+        assert(std::abs(over[0].score - 400.0) < 1e-9);       // still clamped
+
+        captured.str("");
+        const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();
+        std::vector<SearchResult> bad = {mk("nan", nan), mk("good", 1250.0), mk("pinf", inf), mk("ninf", -inf), mk("good2", 1250.0)};
+        ranker.rank(Query("zzz"), bad);
+        assert(captured.str().find("non-finite") != std::string::npos);
+        for (const auto& r : bad) assert(std::isfinite(r.score));
+        assert(bad[0].id == "good" && bad[1].id == "good2");  // finite 200 beats the zeroed ones
+        assert(bad[2].score == 0.0 && bad[3].score == 0.0 && bad[4].score == 0.0);
+        assert(std::is_sorted(bad.begin(), bad.end(), [](const SearchResult& a, const SearchResult& b) { return a.score > b.score; }));
+
+        std::cerr.rdbuf(old);
+        nexus::utils::Logger::instance().set_level(saved_level);
     }
 
     std::cout << "All RankingEngine tests passed successfully!\n";
