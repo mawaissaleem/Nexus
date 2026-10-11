@@ -164,12 +164,6 @@ QString AliasEditDialog::target() const {
 // ============================================================================
 
 namespace {
-    SettingsDialog* g_active_settings = nullptr;
-    std::function<bool(const std::string&)> g_shortcut_applier;
-    std::function<void()> g_directories_changed;
-    std::vector<std::pair<std::string, std::string>> g_providers;
-    ThemeController* g_theme = nullptr;
-
     class ModernCheckBox : public QCheckBox {
     public:
         ModernCheckBox(const QString& text, const Palette& palette, QWidget* parent = nullptr)
@@ -243,44 +237,22 @@ void enterEvent(QEvent* event) override {
     };
 }
 
-void SettingsDialog::set_shortcut_applier(std::function<bool(const std::string&)> applier) {
-    g_shortcut_applier = std::move(applier);
-}
-
-void SettingsDialog::set_theme_controller(ThemeController* theme) {
-    g_theme = theme;
-}
-
-void SettingsDialog::set_directories_changed_handler(std::function<void()> handler) {
-    g_directories_changed = std::move(handler);
-}
-
-void SettingsDialog::set_providers(std::vector<std::pair<std::string, std::string>> providers) {
-    g_providers = std::move(providers);
-}
-
-void SettingsDialog::show_settings(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent) {
-    if (!g_active_settings) {
-        g_active_settings = new SettingsDialog(config, aliases, parent);
+void SettingsDialog::refresh_from_config() {
+    if (ctrl_np_checkbox_) {
+        const bool blocked = ctrl_np_checkbox_->blockSignals(true);
+        ctrl_np_checkbox_->setChecked(config_.is_ctrl_np_navigation_enabled());
+        ctrl_np_checkbox_->blockSignals(blocked);
+        ctrl_np_checkbox_->update();
     }
-    if (g_active_settings->ctrl_np_checkbox_) {
-        bool blocked = g_active_settings->ctrl_np_checkbox_->blockSignals(true);
-        g_active_settings->ctrl_np_checkbox_->setChecked(
-            config.is_ctrl_np_navigation_enabled()
-        );
-        g_active_settings->ctrl_np_checkbox_->blockSignals(blocked);
-        g_active_settings->ctrl_np_checkbox_->update();
+    if (shortcut_edit_) {
+        shortcut_edit_->setText(QString::fromStdString(config_.get_shortcut()));
     }
-    if (g_active_settings->shortcut_edit_) {
-        g_active_settings->shortcut_edit_->setText(QString::fromStdString(config.get_shortcut()));
-    }
-    g_active_settings->show();
-    g_active_settings->raise();
-    g_active_settings->activateWindow();
 }
 
-SettingsDialog::SettingsDialog(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent)
-    : QDialog(parent), palette_(g_theme ? g_theme->palette() : Palette::dark()), config_(config), aliases_(aliases) {
+SettingsDialog::SettingsDialog(core::ConfigManager& config, core::AliasManager& aliases, ThemeController& theme,
+                               SettingsHooks hooks, QWidget* parent)
+    : QDialog(parent), theme_(theme), hooks_(std::move(hooks)), palette_(theme.palette()), config_(config),
+      aliases_(aliases) {
     setWindowTitle("Nexus Settings & Configuration");
     resize(640, 480);
     setMinimumSize(540, 400);
@@ -290,17 +262,15 @@ SettingsDialog::SettingsDialog(core::ConfigManager& config, core::AliasManager& 
     reload_aliases();
     reload_directories();
     reload_exclusions();
-    if (g_theme) {
-        connect(g_theme, &ThemeController::palette_changed, this, [this]() {
-            palette_ = g_theme->palette();
-            apply_theme();
-            for (int r = 0; r < alias_table_->rowCount(); ++r) {
-                if (auto* item = alias_table_->item(r, 2)) item->setForeground(palette_.target_text);
-            }
-            ctrl_np_checkbox_->update();
-            history_checkbox_->update();
-        });
-    }
+    connect(&theme_, &ThemeController::palette_changed, this, [this]() {
+        palette_ = theme_.palette();
+        apply_theme();
+        for (int r = 0; r < alias_table_->rowCount(); ++r) {
+            if (auto* item = alias_table_->item(r, 2)) item->setForeground(palette_.target_text);
+        }
+        ctrl_np_checkbox_->update();
+        history_checkbox_->update();
+    });
 }
 
 void SettingsDialog::apply_theme() {
@@ -654,7 +624,7 @@ void SettingsDialog::setup_ui() {
     auto* providers_label = new QLabel("Search sources (untick to turn one off):", search_card);
     providers_label->setStyleSheet("border: none; background: transparent;");
     search_card_layout->addWidget(providers_label);
-    for (const auto& [id, name] : g_providers) {
+    for (const auto& [id, name] : hooks_.providers) {
         auto* box = new ModernCheckBox(QString::fromStdString(name), palette_, search_card);
         box->setChecked(config_.is_provider_enabled(id));
         connect(box, &QCheckBox::toggled, this, [this, id = id](bool on) {
@@ -797,7 +767,7 @@ void SettingsDialog::on_add_directory() {
     if (!dir.isEmpty()) {
         if (config_.add_search_directory(dir.toStdString())) {
             reload_directories();
-            if (g_directories_changed) g_directories_changed();
+            if (hooks_.directories_changed) hooks_.directories_changed();
             emit settings_changed();
         } else {
             QMessageBox::warning(this, "Failed to Add Directory", "Directory could not be added or already exists.");
@@ -816,7 +786,7 @@ void SettingsDialog::on_remove_directory() {
     if (res == QMessageBox::Yes) {
         config_.remove_search_directory(path.toStdString());
         reload_directories();
-        if (g_directories_changed) g_directories_changed();
+        if (hooks_.directories_changed) hooks_.directories_changed();
         emit settings_changed();
     }
 }
@@ -842,7 +812,7 @@ void SettingsDialog::on_add_exclusion() {
     }
     exclusion_edit_->clear();
     reload_exclusions();
-    if (g_directories_changed) g_directories_changed();  // exclusions only apply when the index is rebuilt
+    if (hooks_.directories_changed) hooks_.directories_changed();  // exclusions only apply when the index is rebuilt
     emit settings_changed();
 }
 
@@ -854,7 +824,7 @@ void SettingsDialog::on_remove_exclusion() {
     names.erase(std::remove(names.begin(), names.end(), item->text().toStdString()), names.end());
     cfg.set_file_exclusions(names);
     reload_exclusions();
-    if (g_directories_changed) g_directories_changed();
+    if (hooks_.directories_changed) hooks_.directories_changed();
     emit settings_changed();
 }
 
@@ -872,7 +842,7 @@ void SettingsDialog::on_ctrl_np_toggled(bool checked) {
 void SettingsDialog::on_theme_changed(int index) {
     const auto mode = static_cast<utils::ThemeMode>(theme_combo_->itemData(index).toInt());
     config_.set_theme(mode);
-    if (g_theme) g_theme->set_mode(mode);
+    theme_.set_mode(mode);
 }
 
 void SettingsDialog::on_history_toggled(bool checked) {
@@ -882,7 +852,7 @@ void SettingsDialog::on_history_toggled(bool checked) {
 
 void SettingsDialog::on_apply_shortcut() {
     const std::string text = shortcut_edit_->text().toStdString();
-    if (!g_shortcut_applier || !g_shortcut_applier(text)) {
+    if (!hooks_.apply_shortcut || !hooks_.apply_shortcut(text)) {
         QMessageBox::warning(this, "Invalid shortcut",
                              "Use modifiers plus a key, for example Alt+Space or Ctrl+Shift+K.");
         return;

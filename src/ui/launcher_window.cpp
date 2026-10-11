@@ -1,6 +1,5 @@
 #include "nexus/ui/launcher_window.hpp"
 #include "nexus/ui/result_widget.hpp"
-#include "nexus/ui/settings_dialog.hpp"
 #include "nexus/core/query.hpp"
 #include "nexus/core/config_manager.hpp"
 #include "nexus/utils/logger.hpp"
@@ -20,9 +19,8 @@ LauncherWindow::LauncherWindow(
     std::shared_ptr<core::SearchEngine> search_engine,
     ThemeController& theme,
     core::ConfigManager& config,
-    core::AliasManager& aliases,
     QWidget* parent
-) : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config), aliases_(aliases) {
+) : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config) {
     query_manager_ = std::make_unique<QueryManager>(search_engine_, this);
     connect(query_manager_.get(), &QueryManager::results_ready, this, &LauncherWindow::on_search_results);
 
@@ -436,7 +434,7 @@ void LauncherWindow::changeEvent(QEvent* event) {
 
 void LauncherWindow::open_settings() {
     hide_launcher();
-    SettingsDialog::show_settings(config_, aliases_);
+    emit settings_requested();
 }
 
 } // namespace nexus::ui

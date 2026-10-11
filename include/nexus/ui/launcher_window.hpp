@@ -1,6 +1,5 @@
 #pragma once
 
-#include "nexus/core/alias_manager.hpp"
 #include "nexus/core/config_manager.hpp"
 #include "nexus/core/search_engine.hpp"
 #include "nexus/ui/query_manager.hpp"
@@ -24,7 +23,6 @@ public:
         std::shared_ptr<core::SearchEngine> search_engine,
         ThemeController& theme,
         core::ConfigManager& config,
-        core::AliasManager& aliases,
         QWidget* parent = nullptr
     );
 
@@ -32,6 +30,9 @@ public:
     void show_launcher();
     void hide_launcher();
     void open_settings();
+
+signals:
+    void settings_requested();  // the settings button / "settings" result; the application owns the dialog
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -57,7 +58,6 @@ private:
     std::shared_ptr<core::SearchEngine> search_engine_;
     ThemeController& theme_;
     core::ConfigManager& config_;
-    core::AliasManager& aliases_;
     QLineEdit* search_input_{nullptr};
     QListWidget* result_list_{nullptr};
     QWidget* container_{nullptr};

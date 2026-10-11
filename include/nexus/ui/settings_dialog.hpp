@@ -47,26 +47,26 @@ private:
     Palette palette_;
 };
 
+// What the dialog asks of the application. The dialog stays UI-only: the caller persists, re-grabs and re-indexes.
+struct SettingsHooks {
+    // Called with the shortcut text when the user applies one; returns false if it is invalid.
+    std::function<bool(const std::string&)> apply_shortcut;
+    // Called after the user adds or removes a search directory or exclusion; the caller re-indexes.
+    std::function<void()> directories_changed;
+    // (id, display name) of every registered provider, for the on/off list.
+    std::vector<std::pair<std::string, std::string>> providers;
+};
+
 class SettingsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    SettingsDialog(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent = nullptr);
+    // `config`, `aliases` and `theme` must outlive the dialog. The dialog follows and changes `theme`.
+    SettingsDialog(core::ConfigManager& config, core::AliasManager& aliases, ThemeController& theme,
+                   SettingsHooks hooks, QWidget* parent = nullptr);
 
-    static void show_settings(core::ConfigManager& config, core::AliasManager& aliases, QWidget* parent = nullptr);
-
-    // Called with the shortcut text when the user applies one; returns false if it is invalid.
-    // The caller owns persisting and re-grabbing it, so the dialog stays UI-only.
-    static void set_shortcut_applier(std::function<bool(const std::string&)> applier);
-
-    // The theme the dialog follows and changes (set once at startup; not owned).
-    static void set_theme_controller(ThemeController* theme);
-
-    // Called after the user adds or removes a search directory; the caller re-indexes.
-    static void set_directories_changed_handler(std::function<void()> handler);
-
-    // (id, display name) of every registered provider, for the on/off list. Set once at startup.
-    static void set_providers(std::vector<std::pair<std::string, std::string>> providers);
+    // Re-reads the values that can change while the dialog is hidden (set from the launcher, config file).
+    void refresh_from_config();
 
 signals:
     void settings_changed();
@@ -127,6 +127,8 @@ private:
     QCheckBox* history_checkbox_{nullptr};
     QComboBox* theme_combo_{nullptr};
     QLineEdit* shortcut_edit_{nullptr};
+    ThemeController& theme_;
+    SettingsHooks hooks_;
     Palette palette_;
     core::ConfigManager& config_;
     core::AliasManager& aliases_;

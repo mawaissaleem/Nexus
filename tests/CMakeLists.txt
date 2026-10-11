@@ -23,6 +23,7 @@ set(TEST_TARGETS
     test_file_indexer
     test_file_watcher
     test_app_watcher
+    test_cli
 )
 
 foreach(test_name ${TEST_TARGETS})
