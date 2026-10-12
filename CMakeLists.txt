@@ -44,6 +44,7 @@ set(NEXUS_CORE_SOURCES
     src/utils/fs_watcher.cpp
     src/core/query.cpp
     src/core/executor.cpp
+    src/core/action_dispatcher.cpp
     src/core/ranking_engine.cpp
     src/core/search_engine.cpp
     src/core/async_search_coordinator.cpp

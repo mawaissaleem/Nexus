@@ -1,3 +1,4 @@
+#include "nexus/core/action_dispatcher.hpp"
 #include "nexus/providers/app_provider.hpp"
 #include <atomic>
 #include <ctime>
@@ -41,6 +42,7 @@ int main() {
     write_desktop(dir, "bykeyword", "Beta", "Keywords=frobnicate;\n");
     write_desktop(dir, "bycomment", "Gamma", "Comment=frobnicate\n");
     write_desktop(dir, "nomatch", "Delta");
+    write_desktop(dir, "interm", "frobnicate", "Terminal=true\n");
 
     auto db = std::make_shared<index::Database>((root / "nexus.db").string());
     assert(db->open());
@@ -59,6 +61,10 @@ int main() {
     // name > generic name (x0.8) > keyword (x0.75) > comment (x0.5)
     assert(name > generic && generic > keyword && keyword > comment && comment > 0.0);
     assert(find(results, "bygeneric")->subtitle == "frobnicate");
+    // Terminal flag travels on the result to the dispatcher
+    assert(find(results, "interm") && find(results, "interm")->terminal);
+    assert(find(results, "interm")->action_kind == core::ActionKind::Launch);
+    assert(!find(results, "byname")->terminal && find(results, "byname")->action_kind == core::ActionKind::Launch);
 
     // Zero usage: typed signals unset
     assert(find(results, "byname")->usage_count == 0);
@@ -90,13 +96,14 @@ int main() {
     std::ofstream(dir / "histapp.desktop") << "[Desktop Entry]\nType=Application\nName=histapp\nExec=/nonexistent/nexus_test_no_such_binary\n";
     assert(indexer->rebuild_index() >= 6);
     std::atomic<bool> hist_on{false};
-    providers::ApplicationProvider hist_provider(indexer, db, [&] { return hist_on.load(); });
+    auto hist_ptr = std::make_shared<providers::ApplicationProvider>(indexer, db, [&] { return hist_on.load(); });
+    auto& hist_provider = *hist_ptr;
     std::atomic<bool> go{false};
     const auto run_histapp = [&] {
         auto rs = hist_provider.search(core::Query("histapp"), go);
         const auto* r = find(rs, "histapp");
-        assert(r && r->action);
-        r->action();
+        assert(r && r->action_kind == core::ActionKind::Launch);
+        core::dispatch_action(*r, {hist_ptr});
     };
     run_histapp();  // off: nothing written
     assert(db->get_usage_count("histapp") == 0);

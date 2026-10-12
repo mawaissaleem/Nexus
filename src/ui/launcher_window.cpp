@@ -1,4 +1,5 @@
 #include "nexus/ui/launcher_window.hpp"
+#include "nexus/core/action_dispatcher.hpp"
 #include "nexus/ui/result_widget.hpp"
 #include "nexus/core/query.hpp"
 #include "nexus/core/config_manager.hpp"
@@ -283,10 +284,7 @@ void LauncherWindow::on_search_results(const std::vector<core::SearchResult>& re
         settings_res.provider_id = "settings";
         settings_res.icon = "preferences-system";
         settings_res.score = 3000.0;
-        settings_res.action = [this]() -> bool {
-            open_settings();
-            return true;
-        };
+        settings_res.action_kind = core::ActionKind::Internal;
         final_results.insert(final_results.begin(), settings_res);
     }
 
@@ -327,14 +325,21 @@ void LauncherWindow::update_results(const std::vector<core::SearchResult>& resul
     adjustSize();
 }
 
+// "settings" is a launcher-owned result, not a provider's; everything else goes through the core dispatcher.
+void LauncherWindow::run_result(const core::SearchResult& res) {
+    if (res.provider_id == "settings") {
+        open_settings();
+        return;
+    }
+    core::dispatch_action(res, search_engine_->providers());
+}
+
 void LauncherWindow::execute_selected() {
     int row = result_list_->currentRow();
     if (row >= 0 && row < static_cast<int>(current_results_.size())) {
         const auto& res = current_results_[row];
         hide_launcher();
-        if (res.action) {
-            res.action();
-        }
+        run_result(res);
     }
 }
 
@@ -343,9 +348,7 @@ void LauncherWindow::on_item_clicked(QListWidgetItem* item) {
     if (row >= 0 && row < static_cast<int>(current_results_.size())) {
         const auto& res = current_results_[row];
         hide_launcher();
-        if (res.action) {
-            res.action();
-        }
+        run_result(res);
     }
 }
 

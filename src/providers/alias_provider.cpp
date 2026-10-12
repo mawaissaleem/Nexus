@@ -1,6 +1,5 @@
 #include "nexus/providers/alias_provider.hpp"
 #include "nexus/core/alias_manager.hpp"
-#include "nexus/core/executor.hpp"
 #include "nexus/utils/fuzzy.hpp"
 #include <sstream>
 
@@ -20,6 +19,12 @@ std::string get_icon_for_type(core::AliasType type) {
 }
 
 } // namespace
+
+bool AliasProvider::on_executed(const core::SearchResult& result) {
+    if (result.action_kind != core::ActionKind::Internal) return true;
+    const auto name = result.metadata.find("alias_name");
+    return name != result.metadata.end() && aliases_.add_alias(name->second, result.execution_payload);
+}
 
 std::vector<core::SearchResult> AliasProvider::search(
     const core::Query& query,
@@ -49,9 +54,9 @@ std::vector<core::SearchResult> AliasProvider::search(
             create_res.icon = "emblem-favorite";
             create_res.provider_id = id();
             create_res.score = 2500.0;
-            create_res.action = [&aliases = aliases_, name, target]() {
-                return aliases.add_alias(name, target);
-            };
+            create_res.action_kind = core::ActionKind::Internal;
+            create_res.execution_payload = target;
+            create_res.metadata["alias_name"] = name;
             results.push_back(std::move(create_res));
             return results;
         }
@@ -91,21 +96,19 @@ std::vector<core::SearchResult> AliasProvider::search(
             res.provider_id = id();
             res.score = score;
             res.matched_indices = std::move(matched_indices);
+
             res.execution_payload = alias.target;
-
-            std::string target_str = alias.target;
-            core::AliasType type = alias.type;
-
-            res.action = [target_str, type]() {
-                if (type == core::AliasType::Shell) {
-                    const auto cmd = target_str.find_first_not_of(" \t", 1);
-                    if (cmd == std::string::npos) return false;
-                    return core::Executor::launch_shell_command(target_str.substr(cmd));
+            // Only a '>' target reaches the shell; plain commands are tokenised like a .desktop Exec line.
+            switch (alias.type) {
+                case core::AliasType::Shell: {
+                    const auto cmd = alias.target.find_first_not_of(" \t", 1);
+                    res.action_kind = core::ActionKind::Shell;
+                    res.execution_payload = cmd == std::string::npos ? "" : alias.target.substr(cmd);
+                    break;
                 }
-                // Plain commands are tokenised like a .desktop Exec line and run without a shell.
-                if (type == core::AliasType::Command) return core::Executor::launch_desktop_exec(target_str);
-                return core::Executor::open_path_or_url(target_str);
-            };
+                case core::AliasType::Command: res.action_kind = core::ActionKind::Launch; break;
+                default: res.action_kind = core::ActionKind::Open; break;
+            }
 
             results.push_back(std::move(res));
         }

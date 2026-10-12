@@ -1,5 +1,4 @@
 #include "nexus/providers/shell_provider.hpp"
-#include "nexus/core/executor.hpp"
 
 namespace nexus::providers {
 
@@ -24,9 +23,7 @@ std::vector<core::SearchResult> ShellProvider::search(
     res.provider_id = id();
     res.score = 1000.0;
     res.execution_payload = cmd;
-    res.action = [cmd]() -> bool {
-        return core::Executor::launch_shell_command(cmd);
-    };
+    res.action_kind = core::ActionKind::Shell;
 
     return {res};
 }

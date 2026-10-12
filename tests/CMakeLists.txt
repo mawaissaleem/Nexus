@@ -14,6 +14,7 @@ set(TEST_TARGETS
     test_theme
     test_query
     test_executor
+    test_action_dispatcher
     test_search_engine
     test_async_search_coordinator
     test_database_migrations
@@ -34,5 +35,6 @@ foreach(test_name ${TEST_TARGETS})
 endforeach()
 
 
+target_compile_definitions(test_action_dispatcher PRIVATE NEXUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 # test_theme scans src/ui for stray colour literals.
 target_compile_definitions(test_theme PRIVATE NEXUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

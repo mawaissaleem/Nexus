@@ -23,6 +23,10 @@ public:
         const Query& query,
         const std::atomic<bool>& cancel_token
     ) = 0;
+
+    // Post-execute hook, called by dispatch_action() before the action runs (so a failed launch still counts).
+    // For ActionKind::Internal results this IS the action and its return value is the outcome.
+    virtual bool on_executed(const SearchResult& /*result*/) { return true; }
 };
 
 using SearchProviderPtr = std::shared_ptr<ISearchProvider>;

@@ -82,7 +82,7 @@ std::vector<core::SearchResult> FileProvider::search(
         res.score = s.score;
         res.matched_indices = std::move(s.match.matched_indices);
         res.execution_payload = s.entry.path;
-        res.action = [p = s.entry.path]() { return core::Executor::open_path_or_url(p); };
+        res.action_kind = core::ActionKind::Open;
         results.push_back(std::move(res));
     }
 

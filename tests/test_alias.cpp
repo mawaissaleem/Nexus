@@ -1,3 +1,4 @@
+#include "nexus/core/action_dispatcher.hpp"
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/providers/alias_provider.hpp"
 #include "nexus/core/query.hpp"
@@ -46,6 +47,7 @@ int main() {
 
     // Test 3: Search with AliasProvider
     AliasProvider provider(mgr);
+    const std::vector<SearchProviderPtr> providers{std::make_shared<AliasProvider>(mgr)};
     std::atomic<bool> cancel{false};
 
     Query q("gh");
@@ -81,6 +83,17 @@ int main() {
         assert(r.size() == 1 && r[0].title == "Save alias 'dk' → docker ps -a");
     }
 
+    // Executing the inline-creation result saves the alias (kind Internal, handled by AliasProvider::on_executed).
+    {
+        auto r = provider.search(Query("alias made /tmp"), cancel);
+        assert(r.size() == 1 && r[0].action_kind == ActionKind::Internal);
+        assert(dispatch_action(r[0], providers));
+        bool found = false;
+        for (const auto& a : mgr.get_aliases()) found |= (a.name == "made" && a.target == "/tmp");
+        assert(found);
+        assert(mgr.remove_alias("made"));
+    }
+
     // Subtitle shows when an alias runs a shell (search only; the action is never invoked here).
     assert(mgr.add_alias("upd", ">sudo apt update"));
     assert(mgr.add_alias("dps", "docker ps"));
@@ -100,7 +113,7 @@ int main() {
         const fs::path out = dir / "args.txt";
         {
             std::ofstream f(dir / "nexus-fake-rec");
-            f << "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done > '" << out.string() << "'\n";
+            f << "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done > '" << out.string() << ".tmp' && mv '" << out.string() << ".tmp' '" << out.string() << "'\n";
         }
         fs::permissions(dir / "nexus-fake-rec", fs::perms::owner_all);
         const char* cp = std::getenv("PATH");
@@ -112,7 +125,7 @@ int main() {
             assert(mgr.add_alias(name, target));
             auto r = provider.search(Query(name), cancel);
             assert(!r.empty() && r[0].title == name);
-            const bool ok = r[0].action();
+            const bool ok = dispatch_action(r[0], providers);
             // Children are detached; poll briefly for the recorder output.
             for (int i = 0; ok && i < 250 && !fs::exists(out); ++i)
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));

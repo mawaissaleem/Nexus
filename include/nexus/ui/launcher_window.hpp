@@ -52,6 +52,7 @@ private:
     void center_on_screen();
     void update_results(const std::vector<core::SearchResult>& results);
     void update_footer_hint();
+    void run_result(const core::SearchResult& res);
     void select_next_result();
     void select_prev_result();
 

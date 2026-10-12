@@ -27,6 +27,9 @@ public:
         const std::atomic<bool>& cancel_token
     ) override;
 
+    // Records usage and query history (when history is on) for the launched application.
+    bool on_executed(const core::SearchResult& result) override;
+
 private:
     std::shared_ptr<index::AppIndexer> indexer_;
     std::shared_ptr<index::Database> db_;

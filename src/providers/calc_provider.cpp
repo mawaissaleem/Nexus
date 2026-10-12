@@ -283,10 +283,7 @@ std::vector<core::SearchResult> CalculatorProvider::search(
     res.provider_id = id();
     res.score = (query.mode() == core::QueryMode::Calculator) ? 1000.0 : 750.0;
     res.execution_payload = result_str;
-    res.action = [result_str]() -> bool {
-        // Output to stdout / can integrate with clipboard
-        return true;
-    };
+    res.action_kind = core::ActionKind::Copy;
 
     return {res};
 }

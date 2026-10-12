@@ -1,5 +1,4 @@
 #include "nexus/providers/app_provider.hpp"
-#include "nexus/core/executor.hpp"
 #include "nexus/utils/fuzzy.hpp"
 
 namespace nexus::providers {
@@ -9,6 +8,15 @@ ApplicationProvider::ApplicationProvider(
     std::shared_ptr<index::Database> db,
     std::function<bool()> history_enabled
 ) : indexer_(std::move(indexer)), db_(std::move(db)), history_enabled_(std::move(history_enabled)) {}
+
+bool ApplicationProvider::on_executed(const core::SearchResult& result) {
+    if (result.action_kind != core::ActionKind::Launch) return true;  // only real app launches count as usage
+    if (db_ && db_->is_open() && (!history_enabled_ || history_enabled_())) {
+        db_->record_usage(result.id, result.query);
+        db_->record_query(result.query, result.id, "applications");
+    }
+    return true;
+}
 
 std::vector<core::SearchResult> ApplicationProvider::search(
     const core::Query& query,
@@ -73,21 +81,9 @@ std::vector<core::SearchResult> ApplicationProvider::search(
             res.score = best_score;
             res.matched_indices = std::move(matched_indices);
             res.execution_payload = app.exec;
-
-            std::string exec_cmd = app.exec;
-            bool terminal = app.terminal;
-            std::string app_id = app.id;
-            std::string raw_q = query.raw();
-            auto db_ref = db_;
-            auto history_enabled = history_enabled_;
-
-            res.action = [exec_cmd, terminal, app_id, raw_q, db_ref, history_enabled]() -> bool {
-                if (db_ref && db_ref->is_open() && (!history_enabled || history_enabled())) {
-                    db_ref->record_usage(app_id, raw_q);
-                    db_ref->record_query(raw_q, app_id, "applications");
-                }
-                return core::Executor::launch_desktop_exec(exec_cmd, terminal);
-            };
+            res.action_kind = core::ActionKind::Launch;
+            res.terminal = app.terminal;
+            res.query = query.raw();
 
             if (auto it = usage_counts.find(app.id); it != usage_counts.end() && it->second.count > 0) {
                 res.usage_count = it->second.count;
