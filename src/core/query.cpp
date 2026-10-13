@@ -21,46 +21,20 @@ std::string trim(std::string_view s) {
 
 } // namespace
 
-Query::Query(std::string raw_query)
-    : raw_(std::move(raw_query)) {
+Query::Query(std::string raw_query, std::string prefix)
+    : raw_(std::move(raw_query)), prefix_(std::move(prefix)) {
     parse();
 }
 
 void Query::parse() {
     std::string trimmed = trim(raw_);
-    if (trimmed.empty()) {
-        mode_ = QueryMode::General;
-        processed_text_ = "";
-        normalized_ = "";
-        return;
-    }
-
-    // Check prefixes
-    if (trimmed.front() == '>') {
-        mode_ = QueryMode::Shell;
-        processed_text_ = trim(std::string_view(trimmed).substr(1));
-        normalized_ = processed_text_; // do not lowercase shell commands!
-    } else if (trimmed.rfind("calc ", 0) == 0) {
-        mode_ = QueryMode::Calculator;
-        processed_text_ = trim(std::string_view(trimmed).substr(5));
-        normalized_ = utils::FuzzyMatcher::to_lower(processed_text_);
-    } else if (trimmed.rfind("file ", 0) == 0) {
-        mode_ = QueryMode::File;
-        processed_text_ = trim(std::string_view(trimmed).substr(5));
-        normalized_ = utils::FuzzyMatcher::to_lower(processed_text_);
-    } else if (trimmed.rfind("web ", 0) == 0) {
-        mode_ = QueryMode::Web;
-        processed_text_ = trim(std::string_view(trimmed).substr(4));
-        normalized_ = processed_text_;
-    } else if (trimmed.rfind("clip ", 0) == 0) {
-        mode_ = QueryMode::Clipboard;
-        processed_text_ = trim(std::string_view(trimmed).substr(5));
-        normalized_ = utils::FuzzyMatcher::to_lower(processed_text_);
+    if (!prefix_.empty() && trimmed.rfind(prefix_, 0) == 0) {
+        processed_text_ = trim(std::string_view(trimmed).substr(prefix_.size()));
     } else {
-        mode_ = QueryMode::General;
+        prefix_.clear();
         processed_text_ = trimmed;
-        normalized_ = utils::FuzzyMatcher::to_lower(trimmed);
     }
+    normalized_ = utils::FuzzyMatcher::to_lower(processed_text_);
 
     // Tokenize normalized text
     std::istringstream iss(normalized_);

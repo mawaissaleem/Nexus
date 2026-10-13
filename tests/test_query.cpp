@@ -5,58 +5,31 @@
 using namespace nexus::core;
 
 int main() {
-    // Plain text -> General mode, text unchanged
+    // Plain text: no prefix, text unchanged
     {
         Query q("hello world");
-        assert(q.mode() == QueryMode::General);
+        assert(q.prefix().empty());
         assert(q.text() == "hello world");
     }
 
-    // Shell prefix: leading '>' should be stripped and mode Shell
+    // A prefix given by the caller is stripped (and trimmed); shell text keeps its case, normalized() lowercases
     {
-        Query q("> ls -la");
-        assert(q.mode() == QueryMode::Shell);
-        assert(q.text() == "ls -la");
+        Query q("> LS -la", ">");
+        assert(q.prefix() == ">");
+        assert(q.text() == "LS -la");
+        assert(q.normalized() == "ls -la");
+        Query nospace(">ls", ">");
+        assert(nospace.text() == "ls");
+        Query c("  calc 5 + 5  ", "calc ");
+        assert(c.prefix() == "calc " && c.text() == "5 + 5");
     }
 
-    // Explicit calc prefix
+    // A prefix that raw() does not start with is ignored; without one nothing is stripped
     {
-        Query q("calc 5 + 5");
-        assert(q.mode() == QueryMode::Calculator);
-    }
-
-    // Implicit calculator detection: current implementation does NOT
-    // detect bare arithmetic as Calculator, so this should be General.
-    {
-        Query q("5 + 5");
-        assert(q.mode() == QueryMode::General);
-    }
-
-    // Negative arithmetic-like case: contains number but should be General
-    {
-        Query q("iphone 15");
-        assert(q.mode() == QueryMode::General);
-    }
-
-    // File prefix
-    {
-        Query q("file resume.pdf");
-        assert(q.mode() == QueryMode::File);
-        assert(q.text() == "resume.pdf");
-    }
-
-    // Web prefix
-    {
-        Query q("web robotics");
-        assert(q.mode() == QueryMode::Web);
-        assert(q.text() == "robotics");
-    }
-
-    // Clipboard prefix (must include following text to match current parsing)
-    {
-        Query q("clip some-clipboard-text");
-        assert(q.mode() == QueryMode::Clipboard);
-        assert(q.text() == "some-clipboard-text");
+        Query q("5 + 5", "calc ");
+        assert(q.prefix().empty() && q.text() == "5 + 5");
+        Query w("web robotics");
+        assert(w.prefix().empty() && w.text() == "web robotics");
     }
 
     // normalized() lowercases (note: it does not collapse internal multiple spaces)

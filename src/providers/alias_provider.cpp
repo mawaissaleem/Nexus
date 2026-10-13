@@ -31,17 +31,15 @@ std::vector<core::SearchResult> AliasProvider::search(
     const std::atomic<bool>& cancel_token
 ) {
     std::vector<core::SearchResult> results;
-    // An explicit prefix (>, file, calc, web, clip) states intent; aliases only answer unprefixed queries.
-    if (cancel_token.load() || query.empty() || query.mode() != core::QueryMode::General) {
+    // Any other prefix (>, file, calc, ...) states intent; aliases only answer unprefixed or "alias " queries.
+    const bool creating = query.prefix() == "alias ";
+    if (cancel_token.load() || query.empty() || (!creating && !query.prefix().empty())) {
         return results;
     }
 
-    // text() is trimmed (raw() keeps leading spaces) and case-preserving in General mode.
-    const std::string& raw = query.text();
-
-    // 1. Inline creation mode: "alias <name> <target>"
-    if (raw.rfind("alias ", 0) == 0) {
-        std::istringstream iss(raw.substr(6));
+    // 1. Inline creation mode: "alias <name> <target>" (text() is trimmed and case-preserving)
+    if (creating) {
+        std::istringstream iss(query.text());
         std::string name, target;
         if (iss >> name) {
             std::getline(iss >> std::ws, target);  // whole rest of the line, so "up >sudo apt update" works
@@ -58,8 +56,8 @@ std::vector<core::SearchResult> AliasProvider::search(
             create_res.execution_payload = target;
             create_res.metadata["alias_name"] = name;
             results.push_back(std::move(create_res));
-            return results;
         }
+        return results;  // "alias <name>" without a target offers nothing
     }
 
     // 2. Normal matching against existing aliases

@@ -24,7 +24,7 @@ void touch(const fs::path& p) {
 }
 
 std::vector<core::SearchResult> search(providers::FileProvider& fp, const std::string& q) {
-    return fp.search(core::Query(q), kNoCancel);
+    return fp.search(core::Query(q, "file "), kNoCancel);
 }
 
 bool has_title(const std::vector<core::SearchResult>& r, const std::string& title) {
@@ -122,7 +122,7 @@ int main() {
     assert(has_title(search(provider, "file newfile"), "newfile.txt"));
 
     // Cancelled query returns no results.
-    assert(provider.search(core::Query("file newfile"), cancelled).empty());
+    assert(provider.search(core::Query("file newfile", "file "), cancelled).empty());
 
     // A missing search directory is skipped without error.
     index::FileIndexOptions missing{{(root / "nope").string(), tree.string()}, opts.exclusions, 3};

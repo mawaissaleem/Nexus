@@ -10,6 +10,7 @@
 #include <mutex>
 #include <functional>
 #include <string>
+#include <map>
 
 namespace nexus::core {
 
@@ -35,6 +36,7 @@ public:
 
 private:
     std::vector<SearchProviderPtr> providers_;
+    std::map<std::string, std::string> prefix_owner_;  // non-empty prefix -> owning provider id
     RankingEngine ranking_engine_;
     std::function<bool(const std::string&)> provider_filter_;
     std::mutex search_mutex_;

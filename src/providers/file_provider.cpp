@@ -38,7 +38,7 @@ std::vector<core::SearchResult> FileProvider::search(
 ) {
     std::vector<core::SearchResult> results;
 
-    if (query.mode() != core::QueryMode::File || !db_) {
+    if (query.prefix() != "file " || !db_) {
         return results;
     }
 

@@ -10,6 +10,7 @@ public:
     [[nodiscard]] std::string id() const override { return "calculator"; }
     [[nodiscard]] std::string name() const override { return "Calculator"; }
     [[nodiscard]] std::string description() const override { return "Evaluates mathematical expressions"; }
+    [[nodiscard]] std::vector<std::string> prefixes() const override { return {"calc ", ""}; }
     [[nodiscard]] int priority() const override { return 90; }
 
     std::vector<core::SearchResult> search(

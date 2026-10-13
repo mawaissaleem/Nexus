@@ -18,6 +18,11 @@ public:
     [[nodiscard]] virtual std::string description() const { return ""; }
     [[nodiscard]] virtual int priority() const { return 0; }
 
+    // Query prefixes this provider owns (">" or "file "; matched case-sensitively against the trimmed query,
+    // longest wins). A prefixed query reaches only its owner. "" = also answers unprefixed queries, and any
+    // number of providers may claim it. Default: unprefixed only. A prefix already owned is rejected at registration.
+    [[nodiscard]] virtual std::vector<std::string> prefixes() const { return {""}; }
+
     // Execute search for query. If cancel_token becomes true, provider should abort early.
     virtual std::vector<SearchResult> search(
         const Query& query,

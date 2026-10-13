@@ -12,6 +12,13 @@ SearchEngine::~SearchEngine() = default;
 void SearchEngine::register_provider(SearchProviderPtr provider) {
     if (!provider) return;
     std::lock_guard<std::mutex> lock(search_mutex_);
+    for (const auto& prefix : provider->prefixes()) {
+        if (prefix.empty()) continue;  // "" = unprefixed queries, shared by any number of providers
+        const auto [it, inserted] = prefix_owner_.emplace(prefix, provider->id());
+        if (!inserted) {
+            NEXUS_LOG_WARN("Prefix '" + prefix + "' of provider " + provider->id() + " rejected: already owned by " + it->second);
+        }
+    }
     providers_.push_back(provider);
     std::stable_sort(providers_.begin(), providers_.end(), [](const auto& a, const auto& b) {
         return a->priority() > b->priority();
@@ -25,6 +32,7 @@ void SearchEngine::unregister_provider(const std::string& provider_id) {
         return p->id() == provider_id;
     });
     providers_.erase(it, providers_.end());
+    std::erase_if(prefix_owner_, [&](const auto& kv) { return kv.second == provider_id; });
 }
 
 void SearchEngine::set_provider_filter(std::function<bool(const std::string&)> is_enabled) {
@@ -37,20 +45,36 @@ std::vector<SearchResult> SearchEngine::search(const Query& query, size_t max_re
     return search(query, never_cancelled, max_results);
 }
 
-std::vector<SearchResult> SearchEngine::search(const Query& query, std::atomic<bool>& cancel_token, size_t max_results) {
+std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<bool>& cancel_token, size_t max_results) {
     std::vector<SearchResult> combined_results;
 
-    if (query.empty()) {
+    if (input.empty()) {
         return combined_results;
     }
 
     std::vector<SearchProviderPtr> current_providers;
     std::function<bool(const std::string&)> filter;
+    std::string matched, owner;
     {
         std::lock_guard<std::mutex> lock(search_mutex_);
         current_providers = providers_;
         filter = provider_filter_;
+        // Longest owned prefix wins; no match = unprefixed text for the general providers.
+        const std::string trimmed = Query(input.raw()).text();
+        for (const auto& [prefix, id] : prefix_owner_) {
+            if (prefix.size() > matched.size() && trimmed.rfind(prefix, 0) == 0) {
+                matched = prefix;
+                owner = id;
+            }
+        }
     }
+    const Query query(input.raw(), matched);
+    // A prefixed query reaches only its owner; an unprefixed one only providers that claim "".
+    current_providers.erase(std::remove_if(current_providers.begin(), current_providers.end(), [&](const auto& p) {
+        if (!query.prefix().empty()) return p->id() != owner;
+        const auto prefixes = p->prefixes();
+        return std::find(prefixes.begin(), prefixes.end(), "") == prefixes.end();
+    }), current_providers.end());
     if (filter) {
         current_providers.erase(std::remove_if(current_providers.begin(), current_providers.end(),
                                                [&](const auto& p) { return !filter(p->id()); }),

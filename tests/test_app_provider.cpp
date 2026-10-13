@@ -87,7 +87,7 @@ int main() {
     assert(find(results, "byname") && find(results, "byname")->usage_count == 0);
 
     // Non-general mode and cancelled token yield nothing
-    assert(provider.search(core::Query("> frobnicate"), cancel).empty());
+    assert(provider.search(core::Query("> frobnicate", ">"), cancel).empty());
     cancel = true;
     assert(provider.search(core::Query("frobnicate"), cancel).empty());
 

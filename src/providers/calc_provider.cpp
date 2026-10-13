@@ -239,9 +239,10 @@ std::vector<core::SearchResult> CalculatorProvider::search(
     }
 
     std::string_view expr;
-    if (query.mode() == core::QueryMode::Calculator) {
+    const bool prefixed = query.prefix() == "calc ";
+    if (prefixed) {
         expr = query.text();
-    } else if (query.mode() == core::QueryMode::General) {
+    } else if (query.prefix().empty()) {
         // Test if expression contains math symbols (+, -, *, /, ^, sqrt)
         std::string raw = query.raw();
         bool has_operator = false;
@@ -281,7 +282,7 @@ std::vector<core::SearchResult> CalculatorProvider::search(
     res.subtitle = "= " + std::string(expr);
     res.icon = "accessories-calculator";
     res.provider_id = id();
-    res.score = (query.mode() == core::QueryMode::Calculator) ? 1000.0 : 750.0;
+    res.score = prefixed ? 1000.0 : 750.0;
     res.execution_payload = result_str;
     res.action_kind = core::ActionKind::Copy;
 

@@ -16,6 +16,7 @@ public:
     [[nodiscard]] std::string id() const override { return "files"; }
     [[nodiscard]] std::string name() const override { return "Files & Directories"; }
     [[nodiscard]] std::string description() const override { return "Searches files and folders in configured paths"; }
+    [[nodiscard]] std::vector<std::string> prefixes() const override { return {"file "}; }
     [[nodiscard]] int priority() const override { return 70; }
 
     std::vector<core::SearchResult> search(

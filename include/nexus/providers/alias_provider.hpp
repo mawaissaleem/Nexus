@@ -13,6 +13,7 @@ public:
     [[nodiscard]] std::string id() const override { return "alias"; }
     [[nodiscard]] std::string name() const override { return "Custom Aliases"; }
     [[nodiscard]] std::string description() const override { return "User-defined nicknames for links, directories, and commands"; }
+    [[nodiscard]] std::vector<std::string> prefixes() const override { return {"alias ", ""}; }
     [[nodiscard]] int priority() const override { return 120; }
 
     std::vector<core::SearchResult> search(

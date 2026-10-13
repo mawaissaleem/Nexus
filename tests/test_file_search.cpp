@@ -45,7 +45,7 @@ int main() {
     // Test 1: Search directory name (explicit "file " prefix required —
     // FileProvider no longer responds to General-mode queries, see file_provider.cpp)
     {
-        Query q("file my_project");
+        Query q("file my_project", "file ");
         auto results = provider.search(q, cancel);
         assert(!results.empty());
         assert(results[0].title == "my_project");
@@ -54,7 +54,7 @@ int main() {
 
     // Test 2: Search file inside directory (explicit "file " prefix required)
     {
-        Query q("file thesis");
+        Query q("file thesis", "file ");
         auto results = provider.search(q, cancel);
         assert(!results.empty());
         assert(results[0].title == "thesis.pdf");
@@ -72,7 +72,7 @@ int main() {
 
     // Test 3: Explicit file mode
     {
-        Query q("file main");
+        Query q("file main", "file ");
         auto results = provider.search(q, cancel);
         assert(!results.empty());
         assert(results[0].title == "main.cpp");

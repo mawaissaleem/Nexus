@@ -9,6 +9,7 @@ public:
     [[nodiscard]] std::string id() const override { return "shell"; }
     [[nodiscard]] std::string name() const override { return "Terminal Command"; }
     [[nodiscard]] std::string description() const override { return "Executes shell commands"; }
+    [[nodiscard]] std::vector<std::string> prefixes() const override { return {">"}; }
     [[nodiscard]] int priority() const override { return 80; }
 
     std::vector<core::SearchResult> search(

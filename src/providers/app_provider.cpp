@@ -23,7 +23,7 @@ std::vector<core::SearchResult> ApplicationProvider::search(
     const std::atomic<bool>& cancel_token
 ) {
     std::vector<core::SearchResult> results;
-    if (!indexer_ || query.mode() != core::QueryMode::General) {
+    if (!indexer_ || !query.prefix().empty()) {
         return results;
     }
 

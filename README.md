@@ -74,8 +74,8 @@ Esc             Close
 Listed honestly so you know what you are getting. These are planned — see the [roadmap](#roadmap).
 
 - **Plugin system.** All providers are compiled into the core. There is no public API and no way to extend Nexus without editing it.
-- **Web search.** The `web ` prefix is parsed but no provider handles it yet, so it returns nothing.
-- **Clipboard history.** Same — `clip ` is parsed but unimplemented.
+- **Web search.** Not implemented yet. `web foo` is searched like any other text.
+- **Clipboard history.** Not implemented yet. `clip foo` is searched like any other text.
 - **System actions.** No shutdown, lock, logout or sleep entries.
 - **URL handling.** Pasting a bare URL does nothing unless you have made an alias for it.
 - **Wayland hotkey.** The global hotkey uses an X11 key grab, which does not work under a Wayland session. See [Wayland](#wayland).
@@ -276,7 +276,7 @@ include/nexus/ , src/
 
 Two rules hold throughout: the core never depends on Qt, and OS-level calls are confined to `Executor`. Every provider implements `ISearchProvider` and returns the same `SearchResult`, so the UI never needs to know where a result came from.
 
-**Search flow.** `Query` classifies the input by prefix (`>`, `calc `, `file `) and normalises it without destroying syntax-sensitive text. `SearchEngine` fans out to providers in priority order, catching exceptions per provider so one bad source cannot take down the window. `RankingEngine` then rescores everything with exact-match, prefix, token and usage signals, and sorts.
+**Search flow.** Each provider declares the prefixes it owns (`>`, `calc `, `file `, `alias `). `SearchEngine` matches the longest prefix the input starts with and sends the query only to that prefix's owner; unprefixed input goes to the providers that answer general queries. `Query` strips the prefix, keeping the original text for commands and a lowercased copy for matching. `SearchEngine` fans out to providers in priority order, catching exceptions per provider so one bad source cannot take down the window. `RankingEngine` then rescores everything with exact-match, prefix, token and usage signals, and sorts.
 
 
 ## Tests

@@ -23,6 +23,11 @@ version is `0`, expect breaking changes between minor versions.
 - `alias <name> <target>` typed in the launcher now keeps the whole rest of the
   line as the target, so multi-word and `>` aliases can be created there.
   `nexus alias add` also joins extra words into the target.
+- A prefixed query (`>`, `calc `, `file `, `alias `) now reaches only the
+  source that owns the prefix. `alias x y` shows just the "save alias" result,
+  and `alias x` without a target shows nothing.
+- `web foo` and `clip foo` are searched like ordinary text until web search
+  and clipboard history exist; before, they returned nothing.
 
 ---
 

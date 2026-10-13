@@ -2,6 +2,7 @@
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/providers/alias_provider.hpp"
 #include "nexus/core/query.hpp"
+#include "nexus/core/search_engine.hpp"
 #include <iostream>
 #include <cassert>
 #include <atomic>
@@ -58,34 +59,45 @@ int main() {
     assert(results[0].icon == "web-browser");
 
     // Explicit mode prefixes never get alias results (">gh" must mean the shell).
-    for (const char* prefixed : {">gh", "file gh", "calc gh", "web gh", "clip gh"}) {
-        assert(provider.search(Query(prefixed), cancel).empty());
+    for (const auto& [raw, prefix] : {std::pair{">gh", ">"}, {"file gh", "file "}, {"calc gh", "calc "}}) {
+        assert(provider.search(Query(raw, prefix), cancel).empty());
     }
 
     // Inline creation, with and without leading/trailing spaces; missing target offers no create result.
     for (const char* q_str : {"alias zz /tmp", "  alias zz /tmp  "}) {
-        auto r = provider.search(Query(q_str), cancel);
+        auto r = provider.search(Query(q_str, "alias "), cancel);
         assert(r.size() == 1 && r[0].id == "alias:create:zz" && r[0].score == 2500.0);
     }
     for (const char* q_str : {"alias", "alias zz", " alias zz "}) {
-        for (const auto& r : provider.search(Query(q_str), cancel)) assert(r.id.rfind("alias:create:", 0) != 0);
+        for (const auto& r : provider.search(Query(q_str, "alias "), cancel)) assert(r.id.rfind("alias:create:", 0) != 0);
     }
 
-    // Inline creation keeps the whole rest of the line (multi-word and '>' targets); stays in General mode.
+    // Inline creation keeps the whole rest of the line (multi-word and '>' targets); 
     for (const char* q_str : {"alias up >sudo apt update", "  alias up   >sudo apt update  "}) {
-        assert(Query(q_str).mode() == QueryMode::General);
-        auto r = provider.search(Query(q_str), cancel);
+        auto r = provider.search(Query(q_str, "alias "), cancel);
         assert(r.size() == 1 && r[0].id == "alias:create:up");
         assert(r[0].title == "Save alias 'up' → >sudo apt update");
     }
     {
-        auto r = provider.search(Query("alias dk docker ps -a"), cancel);
+        auto r = provider.search(Query("alias dk docker ps -a", "alias "), cancel);
         assert(r.size() == 1 && r[0].title == "Save alias 'dk' → docker ps -a");
+    }
+
+    // Through SearchEngine the "alias " prefix is claimed by AliasProvider (no manual prefix), creation still works,
+    // and "alias zz" (no target) or plain "alias" fall back to nothing / ordinary matching.
+    {
+        SearchEngine engine;
+        engine.register_provider(providers[0]);
+        auto r = engine.search(Query("alias viaengine /tmp"));
+        assert(r.size() == 1 && r[0].id == "alias:create:viaengine");
+        assert(dispatch_action(r[0], providers));
+        assert(mgr.remove_alias("viaengine"));
+        assert(engine.search(Query("alias zz")).empty());
     }
 
     // Executing the inline-creation result saves the alias (kind Internal, handled by AliasProvider::on_executed).
     {
-        auto r = provider.search(Query("alias made /tmp"), cancel);
+        auto r = provider.search(Query("alias made /tmp", "alias "), cancel);
         assert(r.size() == 1 && r[0].action_kind == ActionKind::Internal);
         assert(dispatch_action(r[0], providers));
         bool found = false;
