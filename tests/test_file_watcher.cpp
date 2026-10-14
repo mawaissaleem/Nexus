@@ -1,4 +1,3 @@
-#include "nexus/core/config_manager.hpp"
 #include "nexus/index/database.hpp"
 #include "nexus/index/file_indexer.hpp"
 #include "nexus/index/file_watcher.hpp"
@@ -53,7 +52,7 @@ int main() {
     auto db = std::make_shared<index::Database>((root / "t.db").string());
     assert(db->open());
     index::FileIndexer indexer(db);
-    index::FileIndexOptions opts{{tree.string()}, core::ConfigManager::default_file_exclusions(), 3};
+    index::FileIndexOptions opts{{tree.string()}, {"node_modules", "build"}, 3};
 
     std::atomic<int> overflows{0};
     {

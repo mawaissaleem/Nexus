@@ -34,49 +34,62 @@ if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
 endif()
 
-# Core library sources
-set(NEXUS_CORE_SOURCES
+# Layered static libraries. Direction (checked against the real include graph, PA.6):
+#   nexus_utils <- nexus_core      (query, ranking, search engine, executor, config, aliases)
+#   nexus_utils <- nexus_index     (database, indexers, watchers; does not use core)
+#   nexus_core + nexus_index <- nexus_providers <- nexus_app <- nexus (ui, Qt)
+# core and index are siblings. A lower layer calling an upper one links only in a binary that
+# also pulls the upper library, so tests link the smallest layer they need: a wrong-direction
+# call then fails with an undefined reference. Only nexus (ui) links Qt.
+add_library(nexus_utils STATIC
     src/utils/logger.cpp
     src/utils/fuzzy.cpp
     src/utils/shortcut.cpp
     src/utils/json.cpp
     src/utils/theme.cpp
     src/utils/fs_watcher.cpp
+)
+target_include_directories(nexus_utils PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(nexus_utils PUBLIC Threads::Threads stdc++fs)
+
+add_library(nexus_core STATIC
     src/core/query.cpp
     src/core/executor.cpp
     src/core/action_dispatcher.cpp
     src/core/ranking_engine.cpp
     src/core/search_engine.cpp
     src/core/async_search_coordinator.cpp
+    src/core/config_manager.cpp
+    src/core/alias_manager.cpp
+)
+target_link_libraries(nexus_core PUBLIC nexus_utils)
+
+add_library(nexus_index STATIC
     src/index/desktop_entry.cpp
     src/index/database.cpp
     src/index/app_indexer.cpp
     src/index/file_indexer.cpp
     src/index/file_watcher.cpp
+)
+target_link_libraries(nexus_index PUBLIC nexus_utils SQLite::SQLite3)
+
+add_library(nexus_providers STATIC
     src/providers/app_provider.cpp
     src/providers/calc_provider.cpp
     src/providers/shell_provider.cpp
-    src/core/config_manager.cpp
-    src/core/alias_manager.cpp
     src/providers/file_provider.cpp
     src/providers/alias_provider.cpp
+)
+target_link_libraries(nexus_providers PUBLIC nexus_core nexus_index)
+
+add_library(nexus_app STATIC
     src/app/services.cpp
     src/app/cli.cpp
 )
-
-# Core static library
-add_library(nexus_core STATIC ${NEXUS_CORE_SOURCES})
-
-target_include_directories(nexus_core PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(nexus_core PUBLIC
-    Threads::Threads
-    SQLite::SQLite3
-    stdc++fs
-)
+target_link_libraries(nexus_app PUBLIC nexus_providers)
 
 # UI Sources and Headers for AUTOMOC
 set(NEXUS_UI_HEADERS
@@ -106,12 +119,8 @@ add_executable(nexus
     ${NEXUS_UI_HEADERS}
 )
 
-target_include_directories(nexus PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
 target_link_libraries(nexus PRIVATE
-    nexus_core
+    nexus_app
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Core
@@ -129,7 +138,7 @@ option(NEXUS_BUILD_BENCH "Build bench/bench_nexus" ON)
 if(NEXUS_BUILD_BENCH)
     add_executable(bench_nexus bench/bench_nexus.cpp)
     target_compile_options(bench_nexus PRIVATE -UNDEBUG)
-    target_link_libraries(bench_nexus PRIVATE nexus_core)
+    target_link_libraries(bench_nexus PRIVATE nexus_providers)
 endif()
 
 # Testing

@@ -1,0 +1,32 @@
+# Layering check (PA.6): run as `cmake -DSRC=<source dir> -P check_layering.cmake`.
+# Fails if a layer includes a header from a layer it may not depend on, or if Qt is included
+# outside ui/ and main.cpp. Complements the per-layer libraries, which only catch calls that link.
+cmake_minimum_required(VERSION 3.22)  # script mode needs it for IN_LIST (CMP0057)
+set(ALLOWED_utils utils)
+set(ALLOWED_core core utils)
+set(ALLOWED_index index utils)
+set(ALLOWED_providers providers core index utils)
+set(ALLOWED_app app providers core index utils)
+
+set(errors "")
+foreach(layer utils core index providers app)
+    file(GLOB_RECURSE files "${SRC}/src/${layer}/*" "${SRC}/include/nexus/${layer}/*")
+    foreach(file ${files})
+        file(STRINGS "${file}" includes REGEX "^[ \t]*#[ \t]*include")
+        foreach(line ${includes})
+            if(line MATCHES "\"nexus/([a-z_]+)/")
+                if(NOT CMAKE_MATCH_1 IN_LIST ALLOWED_${layer})
+                    string(APPEND errors "\n  ${file}: ${layer} may not include nexus/${CMAKE_MATCH_1}: ${line}")
+                endif()
+            endif()
+            if(line MATCHES "<Q[A-Za-z]*[/>]")
+                string(APPEND errors "\n  ${file}: Qt include outside ui/: ${line}")
+            endif()
+        endforeach()
+    endforeach()
+endforeach()
+
+if(errors)
+    message(FATAL_ERROR "Layering violations:${errors}")
+endif()
+message(STATUS "Layering OK")
