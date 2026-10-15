@@ -1,6 +1,4 @@
 #include "nexus/core/async_search_coordinator.hpp"
-#include <algorithm>
-#include <chrono>
 #include <stdexcept>
 
 namespace nexus::core {
@@ -10,15 +8,20 @@ AsyncSearchCoordinator::AsyncSearchCoordinator(std::shared_ptr<SearchEngine> eng
     if (!engine_) {
         throw std::invalid_argument("SearchEngine cannot be null");
     }
+    worker_ = std::thread([this] { run(); });
 }
 
 AsyncSearchCoordinator::AsyncSearchCoordinator(SearchEngine& engine)
     : AsyncSearchCoordinator(std::shared_ptr<SearchEngine>(&engine, [](SearchEngine*) {})) {}
 
 AsyncSearchCoordinator::~AsyncSearchCoordinator() {
-    cancel_all();
-    std::lock_guard<std::mutex> lock(mutex_);
-    in_flight_.clear();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stop_ = true;
+        if (latest_token_) latest_token_->store(true);
+    }
+    cv_.notify_all();
+    worker_.join();  // engine->search returns promptly once its token is set
 }
 
 uint64_t AsyncSearchCoordinator::search(
@@ -26,55 +29,46 @@ uint64_t AsyncSearchCoordinator::search(
     size_t max_results,
     CompletionCallback on_complete)
 {
-    const uint64_t my_generation = ++generation_;
-    auto my_cancel_token = std::make_shared<std::atomic<bool>>(false);
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // 1. Cancel previous in-flight searches
-    for (auto& item : in_flight_) {
-        item.cancel_token->store(true);
+    auto token = std::make_shared<std::atomic<bool>>(false);
+    uint64_t my_generation;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        my_generation = ++generation_;
+        if (latest_token_) latest_token_->store(true);  // cancel the running/pending predecessor
+        latest_token_ = token;
+        pending_ = Job{my_generation, query, max_results, std::move(on_complete), std::move(token)};
     }
-
-    // 2. Prune any finished tasks so in_flight_ stays bounded
-    in_flight_.erase(
-        std::remove_if(in_flight_.begin(), in_flight_.end(), [](auto& item) {
-            return item.future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-        }),
-        in_flight_.end()
-    );
-
-    // 3. Dispatch the new search via std::async
-    auto engine = engine_;
-    auto fut = std::async(
-        std::launch::async,
-        [this, engine, query, max_results, my_cancel_token, my_generation, callback = std::move(on_complete)]() {
-            auto results = engine->search(query, *my_cancel_token, max_results);
-
-            // Discard results if a newer search has started or if this search was cancelled
-            if (generation_.load() == my_generation && !my_cancel_token->load()) {
-                if (callback) {
-                    try {
-                        callback(std::move(results), my_generation);
-                    } catch (...) {
-                        // Suppress user callback exceptions in background thread
-                    }
-                }
-            }
-        }
-    );
-
-    in_flight_.push_back(InFlightSearch{my_generation, my_cancel_token, std::move(fut)});
-
+    cv_.notify_one();
     return my_generation;
 }
 
 void AsyncSearchCoordinator::cancel_all() {
     std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& item : in_flight_) {
-        item.cancel_token->store(true);
+    if (latest_token_) latest_token_->store(true);
+}
+
+void AsyncSearchCoordinator::run() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    for (;;) {
+        cv_.wait(lock, [&] { return stop_ || pending_; });
+        if (stop_) return;
+        Job job = std::move(*pending_);
+        pending_.reset();
+        lock.unlock();
+
+        if (!job.cancel_token->load()) {
+            auto results = engine_->search(job.query, *job.cancel_token, job.max_results);
+            // Discard results if a newer search has started or if this search was cancelled
+            if (generation_.load() == job.generation && !job.cancel_token->load() && job.callback) {
+                try {
+                    job.callback(std::move(results), job.generation);
+                } catch (...) {
+                    // Suppress user callback exceptions in background thread
+                }
+            }
+        }
+        lock.lock();
     }
 }
 
 } // namespace nexus::core
-

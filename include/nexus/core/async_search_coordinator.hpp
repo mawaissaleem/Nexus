@@ -6,7 +6,9 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <future>
+#include <condition_variable>
+#include <optional>
+#include <thread>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -36,17 +38,23 @@ public:
     }
 
 private:
-    struct InFlightSearch {
+    struct Job {
         uint64_t generation{0};
+        Query query;
+        size_t max_results{0};
+        CompletionCallback callback;
         std::shared_ptr<std::atomic<bool>> cancel_token;
-        std::future<void> future;
     };
+    void run();
 
     std::shared_ptr<SearchEngine> engine_;
     std::atomic<uint64_t> generation_{0};
     mutable std::mutex mutex_;
-    std::vector<InFlightSearch> in_flight_;
+    std::condition_variable cv_;
+    std::optional<Job> pending_;  // only the latest query is kept; an older one that never started is dropped
+    std::shared_ptr<std::atomic<bool>> latest_token_;  // token of the newest job, running or pending
+    bool stop_{false};
+    std::thread worker_;  // last member: starts after everything above exists
 };
 
 } // namespace nexus::core
-

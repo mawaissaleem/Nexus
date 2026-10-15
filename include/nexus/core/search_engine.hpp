@@ -4,6 +4,7 @@
 #include "nexus/core/result.hpp"
 #include "nexus/core/search_provider.hpp"
 #include "nexus/core/ranking_engine.hpp"
+#include <chrono>
 #include <vector>
 #include <memory>
 #include <atomic>
@@ -16,7 +17,13 @@ namespace nexus::core {
 
 class SearchEngine {
 public:
-    explicit SearchEngine(RankingEngine ranking_engine = RankingEngine{});
+    // Providers run concurrently on a small fixed pool. One whose results are not in within `provider_budget`
+    // of the search start is dropped from that search (logged, cancel token set) and never waited on.
+    // A cancelled search returns once its providers have returned (or the budget ends), so only an over-budget
+    // provider can still be running at the next search; it is skipped, so search() is never re-entered per provider.
+    static constexpr std::chrono::milliseconds kDefaultProviderBudget{200};
+    explicit SearchEngine(RankingEngine ranking_engine = RankingEngine{},
+                          std::chrono::milliseconds provider_budget = kDefaultProviderBudget);
     ~SearchEngine();
 
     void register_provider(SearchProviderPtr provider);
@@ -35,11 +42,15 @@ public:
     [[nodiscard]] const RankingEngine& ranking_engine() const noexcept { return ranking_engine_; }
 
 private:
+    class Pool;
     std::vector<SearchProviderPtr> providers_;
+    std::map<std::string, std::shared_ptr<std::atomic<bool>>> busy_;  // provider id -> a search() call is running
+    std::chrono::milliseconds provider_budget_;
     std::map<std::string, std::string> prefix_owner_;  // non-empty prefix -> owning provider id
     RankingEngine ranking_engine_;
     std::function<bool(const std::string&)> provider_filter_;
     std::mutex search_mutex_;
+    std::unique_ptr<Pool> pool_;  // last member: destroyed first
 };
 
 } // namespace nexus::core

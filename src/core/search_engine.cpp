@@ -1,11 +1,84 @@
 #include "nexus/core/search_engine.hpp"
 #include "nexus/utils/logger.hpp"
 #include <algorithm>
+#include <condition_variable>
+#include <deque>
+#include <optional>
+#include <thread>
 
 namespace nexus::core {
 
-SearchEngine::SearchEngine(RankingEngine ranking_engine)
-    : ranking_engine_(std::move(ranking_engine)) {}
+// Fixed set of detached workers that share only `State`, so a worker stuck in a provider can outlive the
+// engine without touching it. The destructor waits a bounded time for workers to finish, then lets go.
+// Provider contract: an abandoned (over-budget) task can outlive the engine by up to that 1 s bound, so a
+// provider must not reference objects that may die before its search() returns (see P4.4 for plugins).
+class SearchEngine::Pool {
+public:
+    explicit Pool(size_t threads) : state_(std::make_shared<State>()) {
+        for (size_t i = 0; i < threads; ++i) {
+            ++state_->alive;
+            std::thread([s = state_] { run(*s); }).detach();
+        }
+    }
+    ~Pool() {
+        std::unique_lock<std::mutex> lock(state_->m);
+        state_->stop = true;
+        state_->cv.notify_all();
+        state_->cv.wait_for(lock, std::chrono::seconds(1), [&] { return state_->alive == 0; });
+    }
+    void submit(std::function<void()> task) {
+        std::lock_guard<std::mutex> lock(state_->m);
+        state_->tasks.push_back(std::move(task));
+        state_->cv.notify_one();
+    }
+
+private:
+    struct State {
+        std::mutex m;
+        std::condition_variable cv;
+        std::deque<std::function<void()>> tasks;
+        bool stop{false};
+        size_t alive{0};
+    };
+    static void run(State& s) {
+        std::unique_lock<std::mutex> lock(s.m);
+        for (;;) {
+            s.cv.wait(lock, [&] { return s.stop || !s.tasks.empty(); });
+            if (s.stop) break;
+            auto task = std::move(s.tasks.front());
+            s.tasks.pop_front();
+            lock.unlock();
+            task();
+            lock.lock();
+        }
+        --s.alive;
+        s.cv.notify_all();  // state_ is kept alive by the caller's shared_ptr copy
+    }
+    std::shared_ptr<State> state_;
+};
+
+namespace {
+
+// Everything a provider task touches lives here, shared with the pool, so an abandoned (over-budget)
+// task can finish safely after search() has returned.
+struct Batch {
+    explicit Batch(Query q) : query(std::move(q)) {}
+    Query query;
+    std::atomic<bool> cancel{false};  // handed to providers; set on caller cancel or budget overrun
+    std::mutex m;
+    std::condition_variable cv;
+    size_t pending{0};
+    bool closed{false};  // search() stopped waiting; late results are discarded
+    std::vector<std::optional<std::vector<SearchResult>>> slots;  // by provider order, not completion order
+    std::vector<char> done;                                        // provider returned (or threw) in time
+};
+
+} // namespace
+
+SearchEngine::SearchEngine(RankingEngine ranking_engine, std::chrono::milliseconds provider_budget)
+    : provider_budget_(provider_budget),
+      ranking_engine_(std::move(ranking_engine)),
+      pool_(std::make_unique<Pool>(std::clamp(std::thread::hardware_concurrency(), 2u, 8u))) {}
 
 SearchEngine::~SearchEngine() = default;
 
@@ -81,22 +154,74 @@ std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<b
                                 current_providers.end());
     }
 
-    for (const auto& provider : current_providers) {
-        if (cancel_token.load()) {
-            break;
+    auto batch = std::make_shared<Batch>(query);
+    batch->slots.resize(current_providers.size());
+    batch->done.assign(current_providers.size(), 0);
+    const auto deadline = std::chrono::steady_clock::now() + provider_budget_;
+    std::vector<size_t> dispatched;
+    for (size_t i = 0; i < current_providers.size(); ++i) {
+        if (cancel_token.load()) break;
+        const auto& provider = current_providers[i];
+        std::shared_ptr<std::atomic<bool>> busy;
+        {
+            std::lock_guard<std::mutex> lock(search_mutex_);
+            auto& flag = busy_[provider->id()];
+            if (!flag) flag = std::make_shared<std::atomic<bool>>(false);
+            busy = flag;
         }
+        if (busy->exchange(true)) {
+            NEXUS_LOG_DEBUG("Provider " + provider->id() + " still busy from an earlier search, skipped");
+            continue;
+        }
+        dispatched.push_back(i);
+        ++batch->pending;
+        pool_->submit([batch, provider, busy, i] {
+            std::optional<std::vector<SearchResult>> out;
+            if (!batch->cancel.load()) {
+                try {
+                    out = provider->search(batch->query, batch->cancel);
+                } catch (const std::exception& ex) {
+                    NEXUS_LOG_ERROR(std::string("Provider ") + provider->id() + " threw exception: " + ex.what());
+                } catch (...) {
+                    NEXUS_LOG_ERROR(std::string("Provider ") + provider->id() + " threw unknown exception");
+                }
+            }
+            busy->store(false);
+            std::lock_guard<std::mutex> lock(batch->m);
+            if (!batch->closed) {
+                batch->slots[i] = std::move(out);
+                batch->done[i] = 1;
+            }
+            --batch->pending;
+            batch->cv.notify_all();
+        });
+    }
 
-        try {
-            auto provider_results = provider->search(query, cancel_token);
-            combined_results.insert(
-                combined_results.end(),
-                std::make_move_iterator(provider_results.begin()),
-                std::make_move_iterator(provider_results.end())
-            );
-        } catch (const std::exception& ex) {
-            NEXUS_LOG_ERROR(std::string("Provider ") + provider->id() + " threw exception: " + ex.what());
-        } catch (...) {
-            NEXUS_LOG_ERROR(std::string("Provider ") + provider->id() + " threw unknown exception");
+    {
+        std::unique_lock<std::mutex> lock(batch->m);
+        // Short slices so a cancel of the caller's token reaches the providers promptly. After a cancel we still
+        // wait (up to the deadline) for the tasks to return, so their busy flags are clear for the next search.
+        while (batch->pending > 0 && std::chrono::steady_clock::now() < deadline) {
+            if (cancel_token.load()) batch->cancel.store(true);
+            batch->cv.wait_until(lock, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(5)));
+        }
+        batch->closed = true;
+        if (batch->pending > 0) {
+            batch->cancel.store(true);
+            if (!cancel_token.load()) {
+                for (size_t i : dispatched) {
+                    if (!batch->done[i]) {
+                        NEXUS_LOG_WARN("Provider " + current_providers[i]->id() + " exceeded its " +
+                                       std::to_string(provider_budget_.count()) + " ms budget, results dropped");
+                    }
+                }
+            }
+        }
+        if (cancel_token.load()) batch->cancel.store(true);
+        for (auto& slot : batch->slots) {
+            if (!slot) continue;
+            combined_results.insert(combined_results.end(), std::make_move_iterator(slot->begin()),
+                                    std::make_move_iterator(slot->end()));
         }
     }
 

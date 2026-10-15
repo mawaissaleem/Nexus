@@ -1,6 +1,9 @@
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <memory>
+#include <sstream>
+#include <thread>
 #include "nexus/core/search_engine.hpp"
 #include "nexus/core/search_provider.hpp"
 #include "nexus/providers/calc_provider.hpp"
@@ -63,6 +66,52 @@ private:
     std::string id_;
     std::vector<std::string> prefixes_;
 };
+
+using namespace std::chrono;
+using ms = milliseconds;
+
+// Concurrency probe: optionally sleeps, or blocks until released (and, if honour_cancel, until cancelled).
+class GateProvider : public ISearchProvider {
+public:
+    GateProvider(std::string id, int priority, ms delay = ms(0), bool block = false, bool honour_cancel = true)
+        : id_(std::move(id)), priority_(priority), delay_(delay), block_(block), honour_cancel_(honour_cancel) {}
+    std::string id() const override { return id_; }
+    std::string name() const override { return id_; }
+    int priority() const override { return priority_; }
+    std::vector<SearchResult> search(const Query&, const std::atomic<bool>& cancel) override {
+        const int now_active = ++active;
+        int seen = max_active.load();
+        while (now_active > seen && !max_active.compare_exchange_weak(seen, now_active)) {}
+        ++calls;
+        std::this_thread::sleep_for(delay_);
+        while (block_ && !released) {
+            if (honour_cancel_ && cancel.load()) { saw_cancel = true; break; }
+            std::this_thread::sleep_for(ms(2));
+        }
+        --active;
+        SearchResult r;
+        r.id = id_;
+        r.title = id_;
+        r.provider_id = id_;
+        r.score = 1.0;
+        finished = true;
+        return {r};
+    }
+    std::atomic<int> calls{0}, active{0}, max_active{0};
+    std::atomic<bool> released{false}, saw_cancel{false}, finished{false};
+
+private:
+    std::string id_;
+    int priority_;
+    ms delay_;
+    bool block_, honour_cancel_;
+};
+
+template <class F> static bool wait_for(F cond, ms limit = ms(3000)) {
+    for (auto end = steady_clock::now() + limit; steady_clock::now() < end; std::this_thread::sleep_for(ms(2)))
+        if (cond()) return true;
+    return false;
+}
 
 int main() {
     // register_provider + search
@@ -250,6 +299,98 @@ int main() {
         for (const auto& res : engine.search(Query("2*3"))) plain_calc |= (res.provider_id == "calculator" && res.title == "6");
         assert(plain_calc);
         assert(engine.search(Query("> 2*3")).size() == 1);  // only the shell command, never a calc result
+    }
+
+    // Providers run concurrently: two 200 ms providers finish in well under 2 x 200 ms
+    {
+        SearchEngine engine(RankingEngine{}, ms(2000));
+        engine.register_provider(std::make_shared<GateProvider>("a", 0, ms(200)));
+        engine.register_provider(std::make_shared<GateProvider>("b", 0, ms(200)));
+        const auto t0 = steady_clock::now();
+        assert(engine.search(Query("x")).size() == 2);
+        assert(steady_clock::now() - t0 < ms(380));
+    }
+
+    // Over-budget provider: dropped and logged, search returns without waiting, token reaches it,
+    // its late result never appears, and a still-busy provider is not re-entered by the next search
+    {
+        SearchEngine engine(RankingEngine{}, ms(100));
+        auto fast = std::make_shared<GateProvider>("fast", 0);
+        auto stuck = std::make_shared<GateProvider>("stuck", 0, ms(0), true, /*honour_cancel=*/false);
+        engine.register_provider(fast);
+        engine.register_provider(stuck);
+
+        std::ostringstream captured;
+        auto* old = std::cerr.rdbuf(captured.rdbuf());
+        const auto t0 = steady_clock::now();
+        auto res = engine.search(Query("x"));
+        const auto took = steady_clock::now() - t0;
+        std::cerr.rdbuf(old);
+
+        assert(took < ms(1500));  // returned on budget; the stuck provider is still blocked
+        assert(!stuck->finished);
+        assert(res.size() == 1 && res[0].provider_id == "fast");
+        assert(captured.str().find("stuck") != std::string::npos && captured.str().find("budget") != std::string::npos);
+        assert(captured.str().find("Provider fast") == std::string::npos);
+
+        // Re-entrancy: stuck is still inside search(); the next search must not call it again.
+        res = engine.search(Query("y"));
+        assert(res.size() == 1 && stuck->calls == 1 && stuck->max_active == 1);
+
+        // Once it returns, its late result is discarded and it can serve searches again.
+        stuck->released = true;
+        assert(wait_for([&] { return stuck->finished.load(); }));
+        std::this_thread::sleep_for(ms(20));
+        res = engine.search(Query("z"));
+        assert(stuck->calls == 2);
+        assert(res.size() == 2);
+    }
+
+    // The token of a search that ran over budget reaches the provider; so does the caller's token
+    {
+        SearchEngine engine(RankingEngine{}, ms(100));
+        auto slow = std::make_shared<GateProvider>("slow", 0, ms(0), true);
+        engine.register_provider(slow);
+        assert(engine.search(Query("x")).empty());
+        assert(wait_for([&] { return slow->saw_cancel.load(); }));
+    }
+    {
+        SearchEngine engine(RankingEngine{}, ms(5000));
+        auto slow = std::make_shared<GateProvider>("slow", 0, ms(0), true);
+        engine.register_provider(slow);
+        std::atomic<bool> token{false};
+        std::vector<SearchResult> res;
+        std::thread t([&] { res = engine.search(Query("x"), token); });
+        assert(wait_for([&] { return slow->calls.load() == 1; }));
+        token = true;
+        t.join();  // returns long before the 5 s budget
+        assert(res.empty());
+        assert(wait_for([&] { return slow->saw_cancel.load(); }));
+    }
+
+    // Merge order follows registration order (priority), not completion order
+    {
+        for (const auto first_delay : {ms(0), ms(80)}) {
+            SearchEngine engine(RankingEngine{}, ms(2000));
+            engine.register_provider(std::make_shared<GateProvider>("hi", 10, first_delay));
+            engine.register_provider(std::make_shared<GateProvider>("lo", 0, ms(80) - first_delay));
+            auto res = engine.search(Query("x"));
+            assert(res.size() == 2 && res[0].provider_id == "hi" && res[1].provider_id == "lo");
+        }
+    }
+
+    // Shutdown with a provider still running neither crashes nor hangs beyond the pool's bounded wait
+    {
+        auto stuck = std::make_shared<GateProvider>("stuck", 0, ms(0), true, false);
+        const auto t0 = steady_clock::now();
+        {
+            SearchEngine engine(RankingEngine{}, ms(50));
+            engine.register_provider(stuck);
+            assert(engine.search(Query("x")).empty());
+        }
+        assert(steady_clock::now() - t0 < ms(4000));
+        stuck->released = true;  // the orphaned worker finishes against its own shared state
+        assert(wait_for([&] { return stuck->finished.load(); }));
     }
 
     std::cout << "All SearchEngine tests passed successfully!\n";

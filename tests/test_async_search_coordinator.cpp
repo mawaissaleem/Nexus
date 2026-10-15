@@ -1,5 +1,6 @@
 #include <cassert>
 #include <chrono>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -233,6 +234,75 @@ int main() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         assert(!callback_called.load());
+    }
+
+    // 6. A burst of searches on the single worker delivers only the newest; destruction with work queued is clean
+    {
+        auto engine = std::make_shared<SearchEngine>();
+        auto p = std::make_shared<FakeProvider>("p", "P");
+        SearchResult r;
+        r.id = "r";
+        r.provider_id = "p";
+        p->set_results({r});
+        engine->register_provider(p);
+
+        std::atomic<int> delivered{0};
+        std::atomic<uint64_t> last_gen{0};
+        uint64_t newest = 0;
+        {
+            AsyncSearchCoordinator coordinator(engine);
+            for (int i = 0; i < 50; ++i) {
+                newest = coordinator.search(Query("q" + std::to_string(i)), 10, [&](auto, uint64_t gen) {
+                    ++delivered;
+                    last_gen = gen;
+                });
+            }
+            for (int i = 0; i < 200 && last_gen.load() != newest; ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            assert(last_gen.load() == newest);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            assert(last_gen.load() == newest);  // nothing stale arrives after the newest
+        }
+        assert(delivered.load() >= 1);
+    }
+
+    // 7. Superseding a running search: the newest search still gets the provider that was busy with the
+    //    cancelled one (regression: it used to be skipped as "still busy", losing its results).
+    {
+        struct Worker : ISearchProvider {
+            std::atomic<bool> started{false};
+            std::string id() const override { return "w"; }
+            std::string name() const override { return "W"; }
+            std::vector<SearchResult> search(const Query& q, const std::atomic<bool>& cancel) override {
+                started = true;
+                for (int i = 0; i < 20; ++i) {  // ~20 ms of work, honouring cancel every 1 ms
+                    if (cancel.load()) return {};
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                SearchResult r;
+                r.id = q.raw();
+                r.provider_id = "w";
+                return {r};
+            }
+        };
+        auto engine = std::make_shared<SearchEngine>();
+        auto w = std::make_shared<Worker>();
+        engine->register_provider(w);
+        AsyncSearchCoordinator coordinator(engine);
+        for (int round = 0; round < 10; ++round) {
+            w->started = false;
+            coordinator.search(Query("fi"), 10, [](auto, auto) {});
+            for (int i = 0; i < 200 && !w->started; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            assert(w->started);
+            std::this_thread::sleep_for(std::chrono::milliseconds(8));
+            std::promise<std::vector<SearchResult>> done;
+            auto fut = done.get_future();
+            coordinator.search(Query("fir"), 10, [&](std::vector<SearchResult> res, uint64_t) { done.set_value(std::move(res)); });
+            assert(fut.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+            const auto res = fut.get();
+            assert(res.size() == 1 && res[0].id == "fir");
+        }
     }
 
     std::cout << "All AsyncSearchCoordinator tests passed successfully!\n";
