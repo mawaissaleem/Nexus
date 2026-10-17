@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <chrono>
+#include <atomic>
+#include <csignal>
 #include <fstream>
 #include <iostream>
 #include <thread>
@@ -128,6 +130,98 @@ int main() {
             if (child) std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
         assert(!child);
+    }
+
+    // spawn_with_pipes / ChildProcess (P4.3)
+    {
+        using ms = std::chrono::milliseconds;
+        using RS = ChildProcess::ReadStatus;
+        const auto dir = std::filesystem::temp_directory_path() / ("nexus_test_pipes_" + std::to_string(getpid()));
+        std::filesystem::create_directories(dir);
+        const std::atomic<bool> no_cancel{false};
+        auto soon = [](int n) { return std::chrono::steady_clock::now() + std::chrono::milliseconds(n); };
+        std::string line;
+
+        // Round trip through cat; stderr lands in <cwd>/plugin.log; cwd is honoured.
+        {
+            auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "echo err >&2; pwd; exec cat"}, dir);
+            assert(p.valid());
+            assert(p.read_line(line, soon(2000), no_cancel) == RS::Line);
+            assert(std::filesystem::equivalent(line, dir));
+            assert(p.write_line("hello\n"));
+            assert(p.read_line(line, soon(2000), no_cancel) == RS::Line && line == "hello");
+            p.terminate(ms(0));
+            assert(!p.valid());
+            std::ifstream log(dir / "plugin.log");
+            std::getline(log, line);
+            assert(line == "err");
+        }
+        // Nothing to read: Timeout, promptly; a set cancel token wins.
+        {
+            auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "sleep 5"}, {});
+            const auto t0 = std::chrono::steady_clock::now();
+            assert(p.read_line(line, soon(60), no_cancel) == RS::Timeout);
+            assert(std::chrono::steady_clock::now() - t0 < ms(150));
+            const std::atomic<bool> cancelled{true};
+            assert(p.read_line(line, soon(2000), cancelled) == RS::Cancelled);
+        }
+        // A partial line stays buffered until the rest arrives; two lines in one burst come out one by one.
+        {
+            auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "printf 'ab'; sleep 0.3; printf 'c\\nd\\n'"}, {});
+            assert(p.read_line(line, soon(100), no_cancel) == RS::Timeout);
+            assert(p.read_line(line, soon(2000), no_cancel) == RS::Line && line == "abc");
+            assert(p.read_line(line, soon(2000), no_cancel) == RS::Line && line == "d");
+            assert(p.read_line(line, soon(2000), no_cancel) == RS::Closed);
+        }
+        // Over-long line without a newline is refused instead of buffered forever.
+        {
+            auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "head -c 100000 /dev/zero | tr '\\0' x; sleep 5"}, {});
+            assert(p.read_line(line, soon(3000), no_cancel, 1000) == RS::TooLong);
+        }
+        // Writing to a dead child fails (EPIPE) and must not kill us (SIGPIPE ignored); a full pipe fails instead of blocking.
+        {
+            auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "exit 0"}, {});
+            assert(p.read_line(line, soon(2000), no_cancel) == RS::Closed);
+            bool ok = true;
+            for (int i = 0; i < 50 && ok; ++i) { ok = p.write_line("x\n"); std::this_thread::sleep_for(ms(5)); }
+            assert(!ok);
+            auto q = Executor::spawn_with_pipes({"/bin/sh", "-c", "sleep 5"}, {});
+            const std::string big(1 << 20, 'y');
+            const auto t0 = std::chrono::steady_clock::now();
+            assert(!q.write_line(big + "\n"));
+            assert(std::chrono::steady_clock::now() - t0 < ms(500));  // O_NONBLOCK: no waiting for `sleep 5`
+        }
+        // SIGPIPE is ignored in Nexus now, but no child inherits that: plugins, apps and `>` commands.
+        {
+            auto sigpipe_ignored = [](const std::string& status_line) {  // "SigIgn:\t<hex mask>"
+                assert(status_line.rfind("SigIgn:", 0) == 0);
+                return (std::stoull(status_line.substr(7), nullptr, 16) >> (SIGPIPE - 1)) & 1;
+            };
+            auto p = Executor::spawn_with_pipes({"/bin/grep", "SigIgn", "/proc/self/status"}, {});
+            assert(p.read_line(line, soon(2000), no_cancel) == RS::Line && !sigpipe_ignored(line));
+            auto file_line = [&](const std::filesystem::path& f) {
+                for (int i = 0; i < 250 && !std::filesystem::exists(f); ++i)
+                    std::this_thread::sleep_for(ms(20));
+                std::this_thread::sleep_for(ms(50));  // let the writer finish the line
+                std::string l;
+                std::getline(std::ifstream(f), l);
+                return l;
+            };
+            assert(Executor::launch_desktop_exec("/bin/sh -c \"grep SigIgn /proc/self/status > '" + (dir / "app").string() + "'\""));
+            assert(!sigpipe_ignored(file_line(dir / "app")));
+            assert(Executor::launch_shell_command("grep SigIgn /proc/self/status > '" + (dir / "cmd").string() + "'"));
+            assert(!sigpipe_ignored(file_line(dir / "cmd")));
+        }
+        // terminate() kills a child that ignores EOF, and the destructor reaps it.
+        {
+            auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "trap '' TERM; sleep 30"}, {});
+            const auto t0 = std::chrono::steady_clock::now();
+            p.terminate(ms(50));
+            assert(std::chrono::steady_clock::now() - t0 < ms(1000));
+        }
+        assert(!Executor::spawn_with_pipes({"/nonexistent/nexus-plugin"}, {}).valid());
+        assert(!has_child());
+        std::filesystem::remove_all(dir);
     }
 
     // Do not spawn a real GUI opener in CI; the regression above uses a fake.

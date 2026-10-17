@@ -21,7 +21,7 @@ struct Manifest {
     std::string name;
     std::string version;
     std::filesystem::path dir;
-    std::filesystem::path exec;  // absolute path inside `dir`
+    std::filesystem::path exec;  // canonical absolute path inside `dir` (as checked)
     std::vector<std::string> prefixes;
     std::vector<core::ActionKind> permissions;  // Launch/Open/Copy/Internal only
 };

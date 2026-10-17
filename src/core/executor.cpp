@@ -13,6 +13,12 @@
 #include <system_error>
 #include <thread>
 #include <optional>
+#include <utility>
+#include <algorithm>
+#include <csignal>
+#include <mutex>
+#include <poll.h>
+#include <signal.h>
 
 extern char **environ;
 
@@ -110,6 +116,7 @@ bool Executor::launch_shell_command(std::string_view command) {
         }
 
         // Grandchild process
+        signal(SIGPIPE, SIG_DFL);  // Nexus ignores SIGPIPE (spawn_with_pipes); commands expect the default
         // Redirect standard descriptors to /dev/null
         if (freopen("/dev/null", "r", stdin) == nullptr ||
             freopen("/dev/null", "w", stdout) == nullptr ||
@@ -161,7 +168,11 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
         posix_spawn_file_actions_adddup2(&actions, stderr_fd, STDERR_FILENO);
     }
 
-    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID);
+    sigset_t sigpipe_only;
+    sigemptyset(&sigpipe_only);
+    sigaddset(&sigpipe_only, SIGPIPE);
+    posix_spawnattr_setsigdefault(&attr, &sigpipe_only);  // Nexus ignores SIGPIPE; apps expect the default
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID | POSIX_SPAWN_SETSIGDEF);
 
     pid_t pid = 0;
     int rc = posix_spawnp(&pid, argv[0], &actions, &attr, argv.data(), environ);
@@ -185,6 +196,139 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
         NEXUS_LOG_WARN("spawn_detached: could not start reaper thread; child may linger as a zombie");
     }
     return true;
+}
+
+ChildProcess::ChildProcess(ChildProcess&& o) noexcept
+    : pid_(std::exchange(o.pid_, -1)), in_(std::exchange(o.in_, -1)), out_(std::exchange(o.out_, -1)),
+      buf_(std::move(o.buf_)) {}
+
+ChildProcess& ChildProcess::operator=(ChildProcess&& o) noexcept {
+    if (this != &o) {
+        terminate(std::chrono::milliseconds(0));
+        pid_ = std::exchange(o.pid_, -1);
+        in_ = std::exchange(o.in_, -1);
+        out_ = std::exchange(o.out_, -1);
+        buf_ = std::move(o.buf_);
+    }
+    return *this;
+}
+
+bool ChildProcess::write_line(std::string_view line) {
+    if (in_ < 0) return false;
+    size_t done = 0;
+    while (done < line.size()) {
+        const ssize_t n = write(in_, line.data() + done, line.size() - done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0) return false;  // EAGAIN (pipe full), EPIPE (child gone), ...
+        done += static_cast<size_t>(n);
+        if (done < line.size()) return false;  // partial line written: stream is desynchronised
+    }
+    return true;
+}
+
+ChildProcess::ReadStatus ChildProcess::read_line(std::string& line, std::chrono::steady_clock::time_point deadline,
+                                                 const std::atomic<bool>& cancel, std::size_t max_bytes) {
+    using clock = std::chrono::steady_clock;
+    bool polled = false;
+    for (;;) {
+        const size_t nl = buf_.find('\n');
+        if (nl != std::string::npos) {
+            if (nl > max_bytes) return ReadStatus::TooLong;
+            line.assign(buf_, 0, nl);
+            buf_.erase(0, nl + 1);
+            return ReadStatus::Line;
+        }
+        if (buf_.size() > max_bytes) return ReadStatus::TooLong;
+        if (cancel.load()) return ReadStatus::Cancelled;
+        if (out_ < 0) return ReadStatus::Closed;
+
+        // Checked on every pass, not only when poll() times out: a trickling child must not hold us past it.
+        if (polled && clock::now() >= deadline) return ReadStatus::Timeout;
+        polled = true;
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - clock::now());
+        const int slice = static_cast<int>(std::clamp<long long>(left.count(), 0, 5));
+        pollfd p{out_, POLLIN, 0};
+        const int rc = poll(&p, 1, slice);
+        if (rc < 0 && errno != EINTR) return ReadStatus::Closed;
+        if (rc > 0) {
+            char chunk[4096];
+            const ssize_t n = read(out_, chunk, sizeof chunk);
+            if (n == 0) return ReadStatus::Closed;
+            if (n < 0 && errno != EINTR && errno != EAGAIN) return ReadStatus::Closed;
+            if (n > 0) buf_.append(chunk, static_cast<size_t>(n));
+        }
+    }
+}
+
+void ChildProcess::terminate(std::chrono::milliseconds grace) {
+    if (in_ >= 0) close(in_);
+    if (out_ >= 0) close(out_);
+    in_ = out_ = -1;
+    if (pid_ <= 0) return;
+    const auto until = std::chrono::steady_clock::now() + grace;
+    int st = 0;
+    bool reaped = false;
+    while (!reaped) {
+        const pid_t r = waitpid(pid_, &st, WNOHANG);
+        if (r == pid_ || (r < 0 && errno != EINTR)) { reaped = true; break; }
+        if (std::chrono::steady_clock::now() >= until) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (!reaped) {
+        kill(pid_, SIGKILL);
+        while (waitpid(pid_, &st, 0) < 0 && errno == EINTR) {}
+    }
+    pid_ = -1;
+    buf_.clear();
+}
+
+ChildProcess Executor::spawn_with_pipes(const std::vector<std::string>& args, const std::filesystem::path& cwd) {
+    if (args.empty()) return {};
+    static std::once_flag sigpipe_once;
+    std::call_once(sigpipe_once, [] { signal(SIGPIPE, SIG_IGN); });
+
+    int to_child[2], from_child[2];
+    if (pipe2(to_child, O_CLOEXEC) != 0) return {};
+    if (pipe2(from_child, O_CLOEXEC) != 0) {
+        close(to_child[0]); close(to_child[1]);
+        return {};
+    }
+    int log_fd = cwd.empty() ? -1 : open((cwd / "plugin.log").c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
+
+    std::vector<char*> argv;
+    for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_adddup2(&actions, to_child[0], STDIN_FILENO);
+    posix_spawn_file_actions_adddup2(&actions, from_child[1], STDOUT_FILENO);
+    if (log_fd >= 0) posix_spawn_file_actions_adddup2(&actions, log_fd, STDERR_FILENO);
+    else posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    if (!cwd.empty()) posix_spawn_file_actions_addchdir_np(&actions, cwd.c_str());
+
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    sigset_t sigpipe_only;
+    sigemptyset(&sigpipe_only);
+    sigaddset(&sigpipe_only, SIGPIPE);
+    posix_spawnattr_setsigdefault(&attr, &sigpipe_only);
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF);
+
+    pid_t pid = 0;
+    const int rc = posix_spawn(&pid, argv[0], &actions, &attr, argv.data(), environ);
+    posix_spawnattr_destroy(&attr);
+    posix_spawn_file_actions_destroy(&actions);
+    close(to_child[0]);
+    close(from_child[1]);
+    if (log_fd >= 0) close(log_fd);
+    if (rc != 0) {
+        close(to_child[1]);
+        close(from_child[0]);
+        return {};
+    }
+    fcntl(to_child[1], F_SETFL, fcntl(to_child[1], F_GETFL) | O_NONBLOCK);
+    return ChildProcess(pid, to_child[1], from_child[0]);
 }
 
 bool Executor::open_path_or_url(std::string_view target) {

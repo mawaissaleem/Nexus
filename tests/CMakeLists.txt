@@ -26,6 +26,7 @@ set(TEST_TARGETS
     test_app_watcher
     test_cli
     test_plugin_protocol
+    test_plugin_provider
 )
 
 # Each test links the smallest layer it needs (see CMakeLists.txt), so layering is enforced at link time.

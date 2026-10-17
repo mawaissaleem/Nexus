@@ -81,7 +81,8 @@ static void test_manifest() {
         write(p / "real.sh", "#!/bin/sh\n");
         fs::permissions(p / "real.sh", fs::perms::owner_exec, fs::perm_options::add);
         fs::create_symlink("real.sh", p / "run.sh");
-        assert(parse_manifest(p));
+        auto m = parse_manifest(p);
+        assert(m && m->exec == fs::canonical(p / "run.sh") && m->exec.filename() == "real.sh");  // spawn what was checked
     }
     assert(rejected(make_plugin("sh", manifest("sh", ",\"permissions\":[\"shell\"]"))));
     assert(rejected(make_plugin("unk", manifest("unk", ",\"permissions\":[\"root\"]"))));
@@ -91,7 +92,7 @@ static void test_manifest() {
         assert(rejected(p, "64 KiB"));
         fs::remove(p / "plugin.json");
         assert(mkfifo((p / "plugin.json").c_str(), 0600) == 0);
-        assert(rejected(p));                                             // FIFO: refused, not blocked on
+        assert(rejected(p, "regular file"));                             // FIFO: refused after open+fstat (D-102), not blocked on
     }
     assert(rejected(make_plugin("badjson", "{nope")));
     assert(rejected(root / "missing"));

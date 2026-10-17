@@ -4,8 +4,9 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
-#include <fstream>
-#include <sstream>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace nexus::providers::plugin {
 
@@ -118,18 +119,23 @@ std::optional<Manifest> parse_manifest(const fs::path& dir, std::string* error) 
     auto bad = [&](std::string msg) -> std::optional<Manifest> { fail(error, std::move(msg)); return std::nullopt; };
 
     fs::path name_path = dir.filename().empty() ? dir.parent_path().filename() : dir.filename();
-    std::error_code size_ec;
-    // file_size fails on non-regular files too, so a FIFO named plugin.json can't block the read.
-    const auto size = fs::file_size(dir / "plugin.json", size_ec);
-    if (size_ec) return bad("cannot read plugin.json");
-    if (size > kMaxLineBytes) return bad("plugin.json is larger than 64 KiB");
-    std::ifstream in(dir / "plugin.json", std::ios::binary);
-    if (!in) return bad("cannot read plugin.json");
-    std::stringstream ss;
-    ss << in.rdbuf();
+    // O_NONBLOCK so a FIFO swapped in for plugin.json can't block startup; fstat on the opened file (not a
+    // path check first) so what we measure is what we read.
+    const std::string json_path = (dir / "plugin.json").string();
+    const int fd = ::open(json_path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) return bad("cannot read plugin.json");
+    struct stat st{};
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) { ::close(fd); return bad("plugin.json is not a regular file"); }
+    if (static_cast<std::uintmax_t>(st.st_size) > kMaxLineBytes) { ::close(fd); return bad("plugin.json is larger than 64 KiB"); }
+    std::string text;
+    char chunk[4096];
+    ssize_t n;
+    while (text.size() <= kMaxLineBytes && (n = ::read(fd, chunk, sizeof chunk)) > 0) text.append(chunk, static_cast<size_t>(n));
+    ::close(fd);
+    if (text.size() > kMaxLineBytes) return bad("plugin.json is larger than 64 KiB");
     JsonValue root;
     std::string perr;
-    if (!utils::parse_json(ss.str(), root, &perr) || !root.is_object()) return bad("plugin.json is not a JSON object: " + perr);
+    if (!utils::parse_json(text, root, &perr) || !root.is_object()) return bad("plugin.json is not a JSON object: " + perr);
 
     Manifest m;
     m.dir = dir;
@@ -159,7 +165,7 @@ std::optional<Manifest> parse_manifest(const fs::path& dir, std::string* error) 
     const auto perms = fs::status(canon_exec, ec).permissions();
     if (ec || (perms & (fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec)) == fs::perms::none)
         return bad("exec is not executable");
-    m.exec = dir / rel;
+    m.exec = canon_exec;  // spawn exactly what was checked, not a path that can be re-pointed via a symlink
 
     if (const JsonValue* p = root.find("prefixes"); p && p->is_array())
         for (const JsonValue& e : p->array)
