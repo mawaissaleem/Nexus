@@ -1,5 +1,6 @@
 #include "nexus/providers/plugin_provider.hpp"
 #include "nexus/utils/logger.hpp"
+#include <algorithm>
 
 namespace nexus::providers {
 
@@ -26,6 +27,7 @@ void PluginProvider::fail(const char* why) {
     }
     dead.reset();  // kills and reaps outside the lock
     pending_.clear();
+    if (stopped_) return;  // exiting after our `shutdown` is not a failure
     misses_ = 0;
     ++failures_;
     NEXUS_LOG_WARN("Plugin '" + manifest_.id + "' failed: " + why);
@@ -39,6 +41,7 @@ void PluginProvider::fail(const char* why) {
 
 // Spawn, hello handshake; publishes the process only once the plugin has said hello.
 bool PluginProvider::start(std::chrono::steady_clock::time_point deadline, const std::atomic<bool>& cancel) {
+    if (stopped_) return false;
     auto child = std::make_shared<core::ChildProcess>(core::Executor::spawn_with_pipes({manifest_.exec.string()}, manifest_.dir));
     if (!child->valid()) { fail("cannot start"); return false; }
     if (!child->write_line(plugin::encode_hello())) { fail("cannot write hello"); return false; }
@@ -58,6 +61,7 @@ bool PluginProvider::start(std::chrono::steady_clock::time_point deadline, const
             return false;
         }
         std::lock_guard<std::mutex> lock(mutex_);
+        if (stopped_) return false;  // shutdown began mid-handshake: `child` is killed on return
         proc_ = std::move(child);
         return true;
     }
@@ -86,11 +90,11 @@ PluginProvider::Handled PluginProvider::handle_line(const std::string& line, std
 }
 
 // Reads whatever the plugin has already sent, without waiting; a plugin that keeps talking stops it at the deadline.
-void PluginProvider::drain(std::chrono::steady_clock::time_point deadline, const std::atomic<bool>& cancel) {
+void PluginProvider::drain(core::ChildProcess& proc, std::chrono::steady_clock::time_point deadline, const std::atomic<bool>& cancel) {
     for (;;) {
         if (cancel.load() || opts_.clock() >= deadline) return;
         std::string line;
-        switch (proc_->read_line(line, std::chrono::steady_clock::now(), kNeverCancel, plugin::kMaxLineBytes)) {
+        switch (proc.read_line(line, std::chrono::steady_clock::now(), kNeverCancel, plugin::kMaxLineBytes)) {
         case core::ChildProcess::ReadStatus::Line:
             if (handle_line(line, 0, nullptr) == Handled::Bad) { fail("invalid JSON"); return; }
             break;
@@ -111,7 +115,7 @@ void PluginProvider::expire_pending() {
 
 std::vector<core::SearchResult> PluginProvider::search(const core::Query& query, const std::atomic<bool>& cancel) {
     std::unique_lock<std::mutex> busy(search_mutex_, std::try_to_lock);
-    if (!busy.owns_lock() || disabled_) return {};
+    if (!busy.owns_lock() || disabled_ || stopped_) return {};
     const auto deadline = opts_.clock() + opts_.budget;
 
     bool write_failed;
@@ -120,14 +124,18 @@ std::vector<core::SearchResult> PluginProvider::search(const core::Query& query,
         write_failed = write_failed_;
     }
     if (write_failed) fail("write failed");
-    if (proc_) {
-        drain(deadline, cancel);
-        if (proc_) expire_pending();
+    // request_shutdown() may take proc_ from another thread at any time: always work on a locked snapshot.
+    if (const auto p = current_proc()) {
+        drain(*p, deadline, cancel);
+        if (current_proc()) expire_pending();
     }
-    // A search that is already cancelled must not spawn a process only to fail its handshake.
-    if (!proc_ && (cancel.load() || opts_.clock() < next_spawn_ || !start(deadline, cancel))) return {};
-
-    const auto proc = proc_;  // only this thread replaces proc_, so reading it unlocked is safe
+    auto proc = current_proc();
+    if (!proc) {
+        // A search that is already cancelled must not spawn a process only to fail its handshake.
+        if (cancel.load() || opts_.clock() < next_spawn_ || !start(deadline, cancel)) return {};
+        proc = current_proc();
+        if (!proc) return {};
+    }
     const std::int64_t id = next_id_++;
     pending_.push_back({id, opts_.clock()});
     bool wrote;
@@ -169,6 +177,32 @@ std::vector<core::SearchResult> PluginProvider::search(const core::Query& query,
             return {};
         }
     }
+}
+
+std::shared_ptr<core::ChildProcess> PluginProvider::current_proc() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return proc_;
+}
+
+void PluginProvider::request_shutdown() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    stopped_ = true;
+    if (!proc_) return;
+    proc_->write_line(plugin::encode_shutdown());  // a failed write just means it gets killed after the wait
+    stopping_ = std::move(proc_);
+}
+
+void PluginProvider::finish_shutdown(std::chrono::milliseconds grace) {
+    const auto until = std::chrono::steady_clock::now() + grace;
+    // Wait out a search still using the process (it ends within its budget), so we own the last reference.
+    std::lock_guard<std::mutex> busy(search_mutex_);
+    std::shared_ptr<core::ChildProcess> p;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        p = std::move(stopping_);
+    }
+    if (p) p->terminate(std::max(std::chrono::milliseconds(0),
+                                 std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now())));
 }
 
 bool PluginProvider::on_executed(const core::SearchResult& result) {

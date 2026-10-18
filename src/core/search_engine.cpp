@@ -11,7 +11,7 @@ namespace nexus::core {
 // Fixed set of detached workers that share only `State`, so a worker stuck in a provider can outlive the
 // engine without touching it. The destructor waits a bounded time for workers to finish, then lets go.
 // Provider contract: an abandoned (over-budget) task can outlive the engine by up to that 1 s bound, so a
-// provider must not reference objects that may die before its search() returns (see P4.4 for plugins).
+// provider must not reference objects that may die before its search() returns (PluginProvider owns all it touches and returns {} after shutdown).
 class SearchEngine::Pool {
 public:
     explicit Pool(size_t threads) : state_(std::make_shared<State>()) {
@@ -85,6 +85,14 @@ SearchEngine::~SearchEngine() = default;
 void SearchEngine::register_provider(SearchProviderPtr provider) {
     if (!provider) return;
     std::lock_guard<std::mutex> lock(search_mutex_);
+    // Routing, busy flags and unregister all key on the id, so a second provider with it would be ambiguous (D-96).
+    for (const auto& p : providers_) {
+        if (p->id() == provider->id()) {
+            NEXUS_LOG_WARN("Provider id '" + provider->id() + "' already registered, duplicate rejected");
+            return;
+        }
+    }
+    // A rejected claimant of a prefix does not inherit it if the owner is unregistered later; re-register it then.
     for (const auto& prefix : provider->prefixes()) {
         if (prefix.empty()) continue;  // "" = unprefixed queries, shared by any number of providers
         const auto [it, inserted] = prefix_owner_.emplace(prefix, provider->id());

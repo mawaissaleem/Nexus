@@ -204,9 +204,12 @@ std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::
     }
 
     Services s = make_services(config, aliases);
-    if (cmd == "--rebuild-index") return run_rebuild_index(s, config, out);
-    if (cmd == "--list-apps") return run_list_apps(s, out);
-    return run_query(args, s, out);
+    int rc;
+    if (cmd == "--rebuild-index") rc = run_rebuild_index(s, config, out);
+    else if (cmd == "--list-apps") rc = run_list_apps(s, out);
+    else rc = run_query(args, s, out);
+    shutdown_services(s);  // a query may have spawned plugins
+    return rc;
 }
 
 } // namespace nexus::app

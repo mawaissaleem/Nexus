@@ -85,6 +85,7 @@ public:
         if (rebuild_thread_.joinable()) rebuild_thread_.join();  // quit during a rebuild: wait, never destroy a joinable thread
         file_watcher_.stop();
         services_.app_indexer->stop_watching();
+        app::shutdown_services(services_);
         return rc;
     }
 

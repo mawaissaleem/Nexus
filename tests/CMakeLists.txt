@@ -27,6 +27,7 @@ set(TEST_TARGETS
     test_cli
     test_plugin_protocol
     test_plugin_provider
+    test_plugin_loader
 )
 
 # Each test links the smallest layer it needs (see CMakeLists.txt), so layering is enforced at link time.
@@ -47,6 +48,7 @@ set(TEST_LIBS_test_app_watcher nexus_index)
 set(TEST_LIBS_test_desktop_entry nexus_core nexus_index)
 set(TEST_LIBS_test_file_watcher nexus_index)
 set(TEST_LIBS_test_cli nexus_app)
+set(TEST_LIBS_test_plugin_loader nexus_app)
 
 foreach(test_name ${TEST_TARGETS})
     add_executable(${test_name} ${test_name}.cpp)

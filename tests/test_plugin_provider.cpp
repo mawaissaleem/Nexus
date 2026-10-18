@@ -272,6 +272,32 @@ static void test_failed_executed_write_restarts() {
     assert(p->search("c").size() == 1 && p->spawns() == 2);
 }
 
+// Shutdown while a search waits on another thread (D-99/P4.4): the search ends cleanly, nothing is respawned,
+// and the process is reaped by the time finish_shutdown returns.
+static void test_shutdown_during_search() {
+    auto p = make_plugin("shutwait", 300);
+    assert(p->search("a").size() == 1);
+    bool empty = false;
+    std::thread t([&] { empty = p->search("hang").empty(); });  // never answered: waits its whole budget
+    std::this_thread::sleep_for(50ms);
+    const auto t0 = Clock::now();
+    p->provider->request_shutdown();
+    p->provider->finish_shutdown(500ms);
+    assert(elapsed_ms(t0) < 600 && p->dead());
+    t.join();
+    assert(empty && p->search("b").empty() && p->spawns() == 1);
+
+    // Shutdown during the hello handshake: the new process is never published and is killed.
+    auto q = make_plugin("shuthello", 1000, "sleep 0.2; echo '{\"type\":\"hello\",\"api_version\":1}'");
+    std::thread u([&] { empty = q->search("a").empty(); });
+    std::this_thread::sleep_for(50ms);
+    q->provider->request_shutdown();
+    q->provider->finish_shutdown(500ms);
+    u.join();
+    assert(empty && q->dead() && q->search("b").empty() && q->spawns() == 1);
+    q->provider->finish_shutdown(500ms);  // idempotent
+}
+
 int main() {
     root = fs::temp_directory_path() / ("nexus_plugin_prov_" + std::to_string(getpid()));
     fs::remove_all(root);
@@ -291,6 +317,7 @@ int main() {
     test_api_version_mismatch_disables();
     test_on_executed_while_search_waits();
     test_failed_executed_write_restarts();
+    test_shutdown_during_search();
 
     fs::remove_all(root);
     std::cout << "test_plugin_provider OK\n";

@@ -114,6 +114,18 @@ template <class F> static bool wait_for(F cond, ms limit = ms(3000)) {
 }
 
 int main() {
+    // duplicate provider id is rejected: the first registration stays, the second is not added (D-96)
+    {
+        SearchEngine engine;
+        engine.register_provider(std::make_shared<FakeProvider>("dup", "First", 0, false, 1));
+        engine.register_provider(std::make_shared<FakeProvider>("dup", "Second", 0, false, 3));
+        assert(engine.providers().size() == 1);
+        assert(engine.providers()[0]->name() == "First");
+        assert(engine.search(Query("x")).size() == 1);
+        engine.unregister_provider("dup");
+        assert(engine.providers().empty());
+    }
+
     // register_provider + search
     {
         SearchEngine engine;

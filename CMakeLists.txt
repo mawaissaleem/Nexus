@@ -84,6 +84,7 @@ add_library(nexus_providers STATIC
     src/providers/alias_provider.cpp
     src/providers/plugin_protocol.cpp
     src/providers/plugin_provider.cpp
+    src/providers/plugin_loader.cpp
 )
 target_link_libraries(nexus_providers PUBLIC nexus_core nexus_index)
 
