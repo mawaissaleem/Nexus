@@ -102,6 +102,7 @@ set(NEXUS_UI_HEADERS
     include/nexus/ui/settings_dialog.hpp
     include/nexus/ui/query_manager.hpp
     include/nexus/ui/theme.hpp
+    include/nexus/ui/copy_result.hpp
     include/nexus/ui/gui_app.hpp
 )
 
@@ -112,6 +113,7 @@ set(NEXUS_UI_SOURCES
     src/ui/settings_dialog.cpp
     src/ui/query_manager.cpp
     src/ui/theme.cpp
+    src/ui/copy_result.cpp
     src/ui/gui_app.cpp
 )
 

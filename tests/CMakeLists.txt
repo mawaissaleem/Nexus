@@ -28,6 +28,7 @@ set(TEST_TARGETS
     test_plugin_protocol
     test_plugin_provider
     test_plugin_loader
+    test_launcher_copy
 )
 
 # Each test links the smallest layer it needs (see CMakeLists.txt), so layering is enforced at link time.
@@ -49,6 +50,7 @@ set(TEST_LIBS_test_desktop_entry nexus_core nexus_index)
 set(TEST_LIBS_test_file_watcher nexus_index)
 set(TEST_LIBS_test_cli nexus_app)
 set(TEST_LIBS_test_plugin_loader nexus_app)
+set(TEST_LIBS_test_launcher_copy nexus_core)
 
 foreach(test_name ${TEST_TARGETS})
     add_executable(${test_name} ${test_name}.cpp)
@@ -68,3 +70,8 @@ add_test(NAME test_layering COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR} -
 target_compile_definitions(test_action_dispatcher PRIVATE NEXUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 # test_theme scans src/ui for stray colour literals.
 target_compile_definitions(test_theme PRIVATE NEXUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+# Qt-linked UI test: compiles the one ui source it needs and runs on the offscreen platform (no X server).
+target_sources(test_launcher_copy PRIVATE ${CMAKE_SOURCE_DIR}/src/ui/copy_result.cpp)
+target_link_libraries(test_launcher_copy PRIVATE Qt${QT_VERSION_MAJOR}::Gui)
+set_tests_properties(test_launcher_copy PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)

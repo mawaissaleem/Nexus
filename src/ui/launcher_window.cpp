@@ -1,6 +1,7 @@
 #include "nexus/ui/launcher_window.hpp"
 #include "nexus/core/action_dispatcher.hpp"
 #include "nexus/ui/result_widget.hpp"
+#include "nexus/ui/copy_result.hpp"
 #include "nexus/core/query.hpp"
 #include "nexus/core/config_manager.hpp"
 #include "nexus/utils/logger.hpp"
@@ -332,6 +333,7 @@ void LauncherWindow::run_result(const core::SearchResult& res) {
         return;
     }
     core::dispatch_action(res, search_engine_->providers());
+    copy_result(res);  // dispatcher treats Copy as handled; the clipboard is Qt, so it happens here
 }
 
 void LauncherWindow::execute_selected() {
