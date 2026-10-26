@@ -121,6 +121,9 @@ static void test_decode() {
     auto d = decode_line(results_line(7, item("open", ",\"payload\":\"http://x\",\"provider_id\":\"settings\",\"zzz\":1,\"confirm\":true")), all, 7);
     assert(d.kind == Decoded::Kind::Results && d.results.size() == 1);
     assert(d.results[0].provider_id == "web" && d.results[0].action_kind == K::Open && d.results[0].execution_payload == "http://x");
+    assert(d.results[0].confirm);  // "confirm": true is mapped; absent or non-bool means false
+    d = decode_line(results_line(1, item("open", ",\"payload\":\"x\"") + "," + item("open", ",\"payload\":\"x\",\"confirm\":\"yes\"")), all, 1);
+    assert(d.results.size() == 2 && !d.results[0].confirm && !d.results[1].confirm);
 
     // shell, unknown and unpermitted kinds are dropped; none needs no permission.
     d = decode_line(results_line(1, item("shell", ",\"payload\":\"rm\"") + "," + item("teleport") + "," + item("none")), all, 1);

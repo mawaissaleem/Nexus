@@ -2,6 +2,7 @@
 #include "nexus/providers/alias_provider.hpp"
 #include "nexus/providers/app_provider.hpp"
 #include "nexus/providers/calc_provider.hpp"
+#include "nexus/providers/clipboard_provider.hpp"
 #include "nexus/providers/file_provider.hpp"
 #include "nexus/providers/shell_provider.hpp"
 #include "nexus/providers/plugin_loader.hpp"
@@ -29,6 +30,9 @@ Services make_services(core::ConfigManager& config, core::AliasManager& aliases,
     s.engine->register_provider(std::make_shared<providers::FileProvider>(s.db));
     s.engine->register_provider(std::make_shared<providers::CalculatorProvider>());
     s.engine->register_provider(std::make_shared<providers::ShellProvider>());
+    s.clipboard = std::make_shared<providers::ClipboardProvider>(
+        static_cast<std::size_t>(config.get_clipboard_retention()), [&config] { return config.is_history_enabled(); });
+    s.engine->register_provider(s.clipboard);
 
     // Built-in ids, plus the names the Settings UI uses, can never be taken by a plugin.
     std::set<std::string> reserved{"settings", "aliases"};

@@ -3,6 +3,7 @@
 #include "nexus/core/config_manager.hpp"
 #include "nexus/core/search_engine.hpp"
 #include "nexus/ui/query_manager.hpp"
+#include "nexus/ui/run_action.hpp"
 #include "nexus/ui/theme.hpp"
 #include <QWidget>
 #include <QLineEdit>
@@ -23,6 +24,7 @@ public:
         std::shared_ptr<core::SearchEngine> search_engine,
         ThemeController& theme,
         core::ConfigManager& config,
+        ConfirmFn confirm = {},  // asked before results with `confirm` set; default is a yes/no QMessageBox
         QWidget* parent = nullptr
     );
 
@@ -52,13 +54,14 @@ private:
     void center_on_screen();
     void update_results(const std::vector<core::SearchResult>& results);
     void update_footer_hint();
-    void run_result(const core::SearchResult& res);
+    void run_result(core::SearchResult res);  // by value: must outlive current_results_ changes
     void select_next_result();
     void select_prev_result();
 
     std::shared_ptr<core::SearchEngine> search_engine_;
     ThemeController& theme_;
     core::ConfigManager& config_;
+    ConfirmFn confirm_;
     QLineEdit* search_input_{nullptr};
     QListWidget* result_list_{nullptr};
     QWidget* container_{nullptr};

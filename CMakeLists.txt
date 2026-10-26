@@ -80,6 +80,7 @@ add_library(nexus_providers STATIC
     src/providers/app_provider.cpp
     src/providers/calc_provider.cpp
     src/providers/shell_provider.cpp
+    src/providers/clipboard_provider.cpp
     src/providers/file_provider.cpp
     src/providers/alias_provider.cpp
     src/providers/plugin_protocol.cpp
@@ -103,6 +104,7 @@ set(NEXUS_UI_HEADERS
     include/nexus/ui/query_manager.hpp
     include/nexus/ui/theme.hpp
     include/nexus/ui/copy_result.hpp
+    include/nexus/ui/run_action.hpp
     include/nexus/ui/gui_app.hpp
 )
 
@@ -114,6 +116,7 @@ set(NEXUS_UI_SOURCES
     src/ui/query_manager.cpp
     src/ui/theme.cpp
     src/ui/copy_result.cpp
+    src/ui/run_action.cpp
     src/ui/gui_app.cpp
 )
 
@@ -137,6 +140,13 @@ if(UNIX AND NOT APPLE)
 elseif(WIN32)
     target_link_libraries(nexus PRIVATE user32 shell32)
 endif()
+
+# Shipped plugins (Python 3, stdlib only); plugin.json and the script must stay in one directory.
+include(GNUInstallDirs)
+install(FILES plugins/web/plugin.json DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/web)
+install(PROGRAMS plugins/web/web.py DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/web)
+install(FILES plugins/system/plugin.json DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/system)
+install(PROGRAMS plugins/system/system.py DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/system)
 
 # Benchmarks: built by default so they keep compiling, but never registered with ctest.
 option(NEXUS_BUILD_BENCH "Build bench/bench_nexus" ON)

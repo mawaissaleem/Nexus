@@ -222,6 +222,20 @@ int main() {
     config.set_file_exclusions({});
     assert(config.load(temp_config_file.string()) && config.get_file_exclusions().empty());
 
+    // Test 17: clipboard_retention defaults to 50, is clamped, and survives a save by another setter
+    std::ofstream(temp_config_file) << "{}";
+    assert(config.load(temp_config_file.string()) && config.get_clipboard_retention() == 50);
+    std::ofstream(temp_config_file) << "{\"clipboard_retention\": 5}";
+    assert(config.load(temp_config_file.string()) && config.get_clipboard_retention() == 5);
+    config.set_history_enabled(true);  // rewrites the file
+    assert(config.load(temp_config_file.string()) && config.get_clipboard_retention() == 5);
+    std::ofstream(temp_config_file) << "{\"clipboard_retention\": 0}";
+    assert(config.load(temp_config_file.string()) && config.get_clipboard_retention() == 1);
+    std::ofstream(temp_config_file) << "{\"clipboard_retention\": 99999999999999}";
+    assert(config.load(temp_config_file.string()) && config.get_clipboard_retention() == 1000);
+    std::ofstream(temp_config_file) << "{\"clipboard_retention\": \"ten\"}";
+    assert(config.load(temp_config_file.string()) && config.get_clipboard_retention() == 50);
+
     // Cleanup
     std::filesystem::remove(temp_config_file);
     fs::remove(temp_config_file.string() + ".malformed.1");  // from Test 8's wrong-shape file

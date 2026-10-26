@@ -6,6 +6,7 @@
 #include "nexus/index/app_indexer.hpp"
 #include "nexus/index/database.hpp"
 #include "nexus/index/file_indexer.hpp"
+#include "nexus/providers/clipboard_provider.hpp"
 #include "nexus/providers/plugin_loader.hpp"
 #include "nexus/providers/plugin_provider.hpp"
 #include <filesystem>
@@ -21,6 +22,7 @@ struct Services {
     std::shared_ptr<index::AppIndexer> app_indexer;
     std::shared_ptr<index::FileIndexer> file_indexer;
     std::shared_ptr<core::SearchEngine> engine;
+    std::shared_ptr<providers::ClipboardProvider> clipboard;  // also in `engine`; the GUI feeds it via add()
     std::vector<std::shared_ptr<providers::PluginProvider>> plugins;  // also registered in `engine`; nothing spawned until a search
 };
 

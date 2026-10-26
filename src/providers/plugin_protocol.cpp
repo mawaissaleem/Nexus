@@ -87,6 +87,7 @@ std::optional<core::SearchResult> decode_result(const JsonValue& item, const Man
         std::find(m.permissions.begin(), m.permissions.end(), kind) == m.permissions.end())
         return std::nullopt;
     r.action_kind = kind;
+    if (const JsonValue* c = item.find("confirm"); c && c->is_bool()) r.confirm = c->boolean;
 
     if (kind == core::ActionKind::Launch) {
         const JsonValue* argv = item.find("argv");

@@ -1,7 +1,6 @@
 #include "nexus/ui/launcher_window.hpp"
-#include "nexus/core/action_dispatcher.hpp"
 #include "nexus/ui/result_widget.hpp"
-#include "nexus/ui/copy_result.hpp"
+#include "nexus/ui/run_action.hpp"
 #include "nexus/core/query.hpp"
 #include "nexus/core/config_manager.hpp"
 #include "nexus/utils/logger.hpp"
@@ -21,8 +20,10 @@ LauncherWindow::LauncherWindow(
     std::shared_ptr<core::SearchEngine> search_engine,
     ThemeController& theme,
     core::ConfigManager& config,
+    ConfirmFn confirm,
     QWidget* parent
-) : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config) {
+) : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config),
+    confirm_(confirm ? std::move(confirm) : ConfirmFn(ask_yes_no)) {
     query_manager_ = std::make_unique<QueryManager>(search_engine_, this);
     connect(query_manager_.get(), &QueryManager::results_ready, this, &LauncherWindow::on_search_results);
 
@@ -240,6 +241,7 @@ void LauncherWindow::hide_launcher() {
     if (query_manager_) {
         query_manager_->cancel_all();
     }
+    debounce_timer_->stop();  // a pending search must not refill results after hiding (or under a confirm dialog)
     hide();
 }
 
@@ -327,30 +329,29 @@ void LauncherWindow::update_results(const std::vector<core::SearchResult>& resul
 }
 
 // "settings" is a launcher-owned result, not a provider's; everything else goes through the core dispatcher.
-void LauncherWindow::run_result(const core::SearchResult& res) {
+void LauncherWindow::run_result(core::SearchResult res) {
     if (res.provider_id == "settings") {
         open_settings();
         return;
     }
-    core::dispatch_action(res, search_engine_->providers());
-    copy_result(res);  // dispatcher treats Copy as handled; the clipboard is Qt, so it happens here
+    // The window is already hidden here; on "no" it simply stays hidden, like Esc.
+    if (!run_action(res, search_engine_->providers(), confirm_))
+        NEXUS_LOG_INFO("Declined: " + res.title);
 }
 
 void LauncherWindow::execute_selected() {
     int row = result_list_->currentRow();
     if (row >= 0 && row < static_cast<int>(current_results_.size())) {
-        const auto& res = current_results_[row];
         hide_launcher();
-        run_result(res);
+        run_result(current_results_[row]);  // copied: a modal confirm runs an event loop that may replace current_results_
     }
 }
 
 void LauncherWindow::on_item_clicked(QListWidgetItem* item) {
     int row = result_list_->row(item);
     if (row >= 0 && row < static_cast<int>(current_results_.size())) {
-        const auto& res = current_results_[row];
         hide_launcher();
-        run_result(res);
+        run_result(current_results_[row]);  // copied: a modal confirm runs an event loop that may replace current_results_
     }
 }
 

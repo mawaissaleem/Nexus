@@ -1,0 +1,9 @@
+{
+  "id": "web",
+  "name": "Web Search",
+  "version": "1.0.0",
+  "api_version": 1,
+  "exec": "web.py",
+  "prefixes": ["web "],
+  "permissions": ["open"]
+}

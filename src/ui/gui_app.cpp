@@ -7,6 +7,8 @@
 #include "nexus/utils/logger.hpp"
 #include "nexus/utils/shortcut.hpp"
 #include <QApplication>
+#include <QClipboard>
+#include <QMimeData>
 #include <QIcon>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -64,6 +66,13 @@ public:
             QMetaObject::invokeMethod(&app_, [this]() { rebuild_finished(); }, Qt::QueuedConnection);
         });
 
+        // Clipboard history: every change is offered to the provider, which applies the disable switch and dedup.
+        QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, [this]() {
+            const auto* data = QGuiApplication::clipboard()->mimeData();
+            if (!data || !data->hasText()) return;
+            const bool secret = data->data("x-kde-passwordManagerHint") == "secret";
+            services_.clipboard->add(data->text().toStdString(), secret);
+        });
         QObject::connect(launcher_.get(), &LauncherWindow::settings_requested, [this]() { show_settings(); });
         setup_ipc();
         setup_shortcut();

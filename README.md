@@ -73,7 +73,6 @@ Esc             Close
 
 Listed honestly so you know what you are getting. These are planned — see the [roadmap](#roadmap).
 
-- **Plugin system.** All providers are compiled into the core. There is no public API and no way to extend Nexus without editing it.
 - **Web search.** Not implemented yet. `web foo` is searched like any other text.
 - **Clipboard history.** Not implemented yet. `clip foo` is searched like any other text.
 - **System actions.** No shutdown, lock, logout or sleep entries.
@@ -350,7 +349,7 @@ Found a security problem? Open an issue, or mail the address on the author's Git
 
 ## Contributing
 
-Issues and pull requests are welcome. Because the plugin API does not exist yet, new search sources currently mean adding a provider to `src/providers/` and registering it in `src/main.cpp` — that will change in 0.5.0, so expect churn there.
+Issues and pull requests are welcome. A new search source can be written as a plugin, in any language, without touching Nexus: see the [plugin development guide](docs/plugins.md). The built-in providers live in `src/providers/`.
 
 Build with warnings on (`-Wall -Wextra -Wpedantic` are enabled by default) and keep `ctest` green.
 

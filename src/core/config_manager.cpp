@@ -63,6 +63,7 @@ std::vector<std::string> ConfigManager::default_file_exclusions() {
 void ConfigManager::set_defaults() {
     file_exclusions_ = default_file_exclusions();
     result_count_ = kDefaultResultCount;
+    clipboard_retention_ = kDefaultClipboardRetention;
     disabled_providers_.clear();
     enable_ctrl_np_navigation_ = true;
     history_enabled_ = true;
@@ -148,6 +149,16 @@ bool ConfigManager::load(const std::string& custom_path) {
             result_count_ = t[0] == '-' ? kMinResultCount : kMaxResultCount;
         }
     }
+    if (const auto* v = root.find("clipboard_retention"); v && v->type == utils::JsonValue::Type::Number) {
+        int n = 0;
+        const auto& t = v->string;  // raw number text, as for result_count
+        const auto r = std::from_chars(t.data(), t.data() + t.size(), n);
+        if (r.ec == std::errc() && r.ptr == t.data() + t.size()) {
+            clipboard_retention_ = std::clamp(n, kMinClipboardRetention, kMaxClipboardRetention);
+        } else if (r.ec == std::errc::result_out_of_range && !t.empty()) {
+            clipboard_retention_ = t[0] == '-' ? kMinClipboardRetention : kMaxClipboardRetention;
+        }
+    }
     if (const auto* v = root.find("disabled_providers"); v && v->is_array()) {
         for (const auto& item : v->array) {
             if (item.is_string() && !item.string.empty()) disabled_providers_.push_back(item.string);
@@ -180,6 +191,7 @@ bool ConfigManager::save() {
     file << "  \"theme\": " << utils::json_quote(utils::theme_mode_name(theme_)) << ",\n";
     file << "  \"global_shortcut\": " << utils::json_quote(shortcut_) << ",\n";
     file << "  \"result_count\": " << result_count_ << ",\n";
+    file << "  \"clipboard_retention\": " << clipboard_retention_ << ",\n";
     file << "  \"disabled_providers\": [";
     for (size_t i = 0; i < disabled_providers_.size(); ++i) {
         file << (i ? ", " : "") << utils::json_quote(disabled_providers_[i]);
@@ -269,6 +281,11 @@ void ConfigManager::set_file_exclusions(const std::vector<std::string>& names) {
 int ConfigManager::get_result_count() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return result_count_;
+}
+
+int ConfigManager::get_clipboard_retention() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return clipboard_retention_;
 }
 
 void ConfigManager::set_result_count(int count) {

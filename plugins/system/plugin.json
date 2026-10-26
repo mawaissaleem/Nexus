@@ -1,0 +1,9 @@
+{
+  "id": "system",
+  "name": "System Actions",
+  "version": "1.0.0",
+  "api_version": 1,
+  "exec": "system.py",
+  "prefixes": [""],
+  "permissions": ["launch"]
+}

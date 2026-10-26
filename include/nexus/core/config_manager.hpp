@@ -34,6 +34,12 @@ public:
     int get_result_count() const;
     void set_result_count(int count);
 
+    // "clipboard_retention": entries clipboard history keeps (default 50, clamped). Edited in config.json only.
+    static constexpr int kMinClipboardRetention = 1;
+    static constexpr int kMaxClipboardRetention = 1000;
+    static constexpr int kDefaultClipboardRetention = 50;
+    int get_clipboard_retention() const;
+
     // "disabled_providers": ids of providers switched off (default none). Unknown ids are kept.
     bool is_provider_enabled(const std::string& provider_id) const;
     void set_provider_enabled(const std::string& provider_id, bool enabled);
@@ -63,6 +69,7 @@ private:
     std::vector<std::string> search_directories_;
     std::vector<std::string> file_exclusions_;
     int result_count_{kDefaultResultCount};
+    int clipboard_retention_{kDefaultClipboardRetention};
     std::vector<std::string> disabled_providers_;
     bool enable_ctrl_np_navigation_{true};
     bool history_enabled_{true};
