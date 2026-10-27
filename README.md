@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.4.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: the plugin system, web search, and clipboard history are not built yet, and Wayland is not supported. See [Not implemented yet](#not-implemented-yet) before installing.
+> **Version 0.5.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland is not supported, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -51,6 +51,10 @@ Nexus collapses those into a single keystroke. It is built around four ideas:
 | File & folder search | `file thesis.pdf` searches an index of your configured directories, kept current as files change |
 | Shell commands | `> docker ps` — the `>` prefix is required, never implicit |
 | Aliases | `alias gh https://github.com`, then type `gh` |
+| Web search | `web rust lifetimes` opens a search in your browser (DuckDuckGo by default; a plugin, needs Python 3) |
+| Clipboard history | `clip` followed by text searches what you copied since Nexus started; Enter copies an entry again. `clip clear` empties the history |
+| System actions | Type `lock`, `sleep`, `logout`, `restart` or `shutdown` (a plugin, needs Python 3). Restart, shut down and log out ask "Run ...?" first; the answer defaults to No |
+| Plugins | Add your own search sources in any language, run as separate processes. See [docs/plugins.md](docs/plugins.md) |
 | Settings | Type `settings`, or run `nexus settings`: aliases, directories and exclusions, result count, search sources, shortcut, theme, history |
 | Themes | Dark (default), light, or follow the desktop |
 | History controls | Turn history off in Settings, or wipe it with `nexus history clear` |
@@ -73,12 +77,16 @@ Esc             Close
 
 Listed honestly so you know what you are getting. These are planned — see the [roadmap](#roadmap).
 
-- **Web search.** Not implemented yet. `web foo` is searched like any other text.
-- **Clipboard history.** Not implemented yet. `clip foo` is searched like any other text.
-- **System actions.** No shutdown, lock, logout or sleep entries.
 - **URL handling.** Pasting a bare URL does nothing unless you have made an alias for it.
 - **Wayland hotkey.** The global hotkey uses an X11 key grab, which does not work under a Wayland session. See [Wayland](#wayland).
 - **Unit conversion.** The calculator does arithmetic and functions only — no `120 km in miles`.
+
+
+## Known issues
+
+- Typing only `web ` or `clip ` (nothing after the space) shows nothing. Type a character after the space.
+- `cmake --install` does not install the `nexus` binary yet. Use the `install -Dm755` command under [Build](#build). It does install the web and system plugins.
+- `nexus history clear` does not clear the clipboard history of a running launcher. Type `clip clear` there.
 
 
 ## Requirements
@@ -88,6 +96,7 @@ Listed honestly so you know what you are getting. These are planned — see the 
 - A C++20 compiler (GCC 11+ or Clang 14+)
 - Qt — `Core`, `Gui`, `Widgets`, `Network`. Developed and tested against **Qt 5.15.3**. Qt 6 builds successfully and is covered by CI, but has had far less real-world testing — see [Known Qt6 differences](#known-qt6-differences) if you hit anything.
 - SQLite 3 development headers
+- Python 3 (standard library only), only for the shipped `web` and `system` plugins
 - libX11 development headers
 
 **Debian / Ubuntu**
@@ -135,6 +144,14 @@ Nexus starts in the background, registers the hotkey, and shows the window once 
 ```bash
 sudo install -Dm755 build/nexus /usr/local/bin/nexus
 ```
+
+**Install the web and system plugins**
+
+```bash
+sudo cmake --install build
+```
+
+This copies them to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
 
 **Start on login**
 
@@ -226,18 +243,19 @@ Nexus targets Qt 5.15.3 in day-to-day development. CI builds against Qt 6 to cat
 
 ## Where your data lives
 
-Everything stays on your machine. Nexus makes no network requests and requires no account.
+Everything stays on your machine. Nexus makes no network requests and requires no account. Plugins you install are your own responsibility, see [Security notes](#security-notes).
 
 ```
 ~/.local/share/nexus/nexus.db     Application and file indexes, usage events, query history
 ~/.config/nexus/config.json       Search directories, file exclusions, result count, disabled providers, aliases, shortcut, theme, navigation settings
 ```
 
-Both honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. Everything below can be set in Settings or edited in `config.json`; changes apply immediately.
+The database and config file honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. Plugins are read from `~/.local/share/nexus/plugins/` (or `$XDG_DATA_HOME/nexus/plugins/`) and the `nexus/plugins/` directory of each `XDG_DATA_DIRS` entry. Everything below can be set in Settings or edited in `config.json`; changes apply immediately.
 
 - **History.** Untick history in Settings or set `"history_enabled": false` to stop recording. Existing history stays until you run `nexus history clear`, which deletes usage events and query history and keeps the application and file indexes.
 - **Result count.** `"result_count"`, 1 to 15, default 7 (Settings > Search).
-- **Search sources.** Switch them off in Settings > Search, or list their ids (`alias`, `applications`, `files`, `calculator`, `shell`) in `"disabled_providers"`.
+- **Search sources.** Switch them off in Settings > Search, or list their ids (`alias`, `applications`, `files`, `calculator`, `shell`, `clipboard`, and plugin ids such as `web` and `system`) in `"disabled_providers"`.
+- **Clipboard history.** Kept in memory only, never written to disk, and gone when Nexus quits. `"clipboard_retention"` sets how many entries it keeps (default 50, edited in `config.json` only). It stops recording when history is off, and it skips copies that a password manager marks as secret.
 - **Theme.** `"theme"`: `"dark"` (default), `"light"` or `"system"` (Settings > Navigation). `system` follows the desktop on Qt 6.5+, or when a Qt platform theme such as qgnomeplatform or qt5ct reports the desktop palette; on a stock GNOME session with Qt 5 it stays light. An unknown value falls back to dark.
 - **Broken config files.** If `config.json` or `aliases.json` can't be read, Nexus copies it to `<file>.malformed` and starts with defaults, so nothing is silently lost.
 
@@ -256,7 +274,8 @@ Deleting `nexus.db` also works: it is rebuilt on the next launch, and schema upg
                       └────────┬─────────┘
           ┌──────────┬─────────┼─────────┬──────────┐
           ▼          ▼         ▼         ▼          ▼
-       Alias       Apps      Files     Calc      Shell
+       Alias       Apps      Files     Calc      Shell   Clipboard
+                                                    ... plus plugins
                      │
                      ▼
               ┌─────────────┐
@@ -268,14 +287,14 @@ Deleting `nexus.db` also works: it is rebuilt on the next launch, and schema upg
 include/nexus/ , src/
 ├── core/        Query parsing, search engine, ranking, executor, config, aliases
 ├── index/       Desktop-entry parsing, application and file indexers, watchers, SQLite layer
-├── providers/   Application, file, calculator, shell, alias
+├── providers/   Application, file, calculator, shell, alias, clipboard, plugin host
 ├── ui/          Launcher window, result widget, settings dialog, X11 hotkey
 └── utils/       Fuzzy matcher, logger, inotify wrapper, shortcut parsing
 ```
 
 Two rules hold throughout: the core never depends on Qt, and OS-level calls are confined to `Executor`. Every provider implements `ISearchProvider` and returns the same `SearchResult`, so the UI never needs to know where a result came from.
 
-**Search flow.** Each provider declares the prefixes it owns (`>`, `calc `, `file `, `alias `). `SearchEngine` matches the longest prefix the input starts with and sends the query only to that prefix's owner; unprefixed input goes to the providers that answer general queries. `Query` strips the prefix, keeping the original text for commands and a lowercased copy for matching. `SearchEngine` fans out to providers in priority order, catching exceptions per provider so one bad source cannot take down the window. `RankingEngine` then rescores everything with exact-match, prefix, token and usage signals, and sorts.
+**Search flow.** Each provider declares the prefixes it owns (`>`, `calc `, `file `, `alias `, `clip `, and whatever plugins claim, such as `web `). `SearchEngine` matches the longest prefix the input starts with and sends the query only to that prefix's owner; unprefixed input goes to the providers that answer general queries. `Query` strips the prefix, keeping the original text for commands and a lowercased copy for matching. `SearchEngine` searches the providers in parallel with a 200 ms budget per search, catching exceptions per provider so one bad or slow source cannot take down the window. `RankingEngine` then rescores everything with exact-match, prefix, token and usage signals, and sorts.
 
 
 ## Tests
@@ -286,7 +305,7 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
-Twenty-two suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, and async search cancellation. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
+Thirty-three suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history and confirm prompts. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
 
 
 ## Performance
@@ -322,7 +341,7 @@ The specification targets under 50 ms per query and under 20 ms for cached queri
 | ~~0.2.0~~ | **Shipped.** Search moved off the UI thread, search cancellation fixed, ranking no longer distorted by inconsistent provider score scales |
 | ~~0.3.0~~ | **Shipped.** File index with live inotify watching, automatic app indexing, schema migrations, configurable shortcut, published benchmarks |
 | ~~0.4.0~~ | **Shipped.** Themes, settings coverage, history controls, query-aware ranking with recency |
-| 0.5.0 | Plugin API, discovery, lifecycle and isolation; web, clipboard and system actions built as plugins |
+| ~~0.5.0~~ | **Shipped.** Out-of-process plugins, web search, clipboard history and system actions, parallel search |
 | 0.6.0 | Wayland support, packaging, tested across GNOME / KDE / XFCE |
 | 1.0.0 | Stable plugin API, accessibility, security review |
 
@@ -340,9 +359,10 @@ Nexus can launch processes, so a few things are deliberate:
 
 - Shell execution requires the explicit `>` prefix. A normal search will never run a command, no matter what you type.
 - The calculator is a hand-written recursive-descent parser. It does not call an interpreter or a shell.
-- No network access, no telemetry, no analytics endpoint.
+- No telemetry, no analytics endpoint. Nexus itself makes no network requests; the `web` plugin only hands a URL to your browser.
+- **Plugins are not sandboxed.** A plugin is a program that runs with your user's rights, so it can read your files and use the network. The permissions in its manifest limit only the kinds of result it may return, not what the process does. Install only plugins you trust and have read. Details are in [docs/plugins.md](docs/plugins.md).
 
-Known gaps at 0.1.0: there is no confirmation prompt before running a destructive shell command, and there is no plugin permission model because there are no plugins yet.
+Known gap: there is no confirmation prompt before running a destructive shell command typed after `>`. Results from plugins can ask for one (the shipped system actions do).
 
 Found a security problem? Open an issue, or mail the address on the author's GitHub profile if you would rather not disclose it publicly.
 

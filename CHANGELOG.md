@@ -8,10 +8,50 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
-## [Unreleased]
+## [0.5.0] — 2026-11-16
+
+Nexus can now be extended with plugins. Web search and system actions
+ship as plugins, clipboard history is built in, and search runs the
+sources in parallel.
+
+### Added
+
+- **Plugins.** A plugin is a program in any language that talks to Nexus
+  over stdin and stdout, one JSON object per line. Nexus finds plugins in
+  `~/.local/share/nexus/plugins/` and in `nexus/plugins/` under each
+  `XDG_DATA_DIRS` entry (restart Nexus after adding one). Each has a
+  `plugin.json` manifest with its prefixes and the kinds of result it may
+  return (`permissions`); an invalid manifest skips only that plugin. A
+  plugin starts on its first search. Each search gets 200 ms. After
+  failures it restarts after 1 s, 5 s, then 30 s, and after that it is
+  disabled until Nexus restarts. Plugins that crash, flood or send invalid
+  data are stopped without affecting the launcher. Plugins are not
+  sandboxed: they run with your rights, so install only ones you trust.
+  See `docs/plugins.md`.
+- **Web search plugin.** `web <text>` opens a search in your browser
+  (DuckDuckGo by default; a `config.json` next to the plugin can set
+  another engine). Needs Python 3.
+- **System actions plugin.** `lock`, `sleep`, `logout`, `restart` and
+  `shutdown` (partial words of two or more letters work; log out appears
+  only inside a login session). Needs Python 3.
+- **Clipboard history.** `clip <text>` searches what you copied while
+  Nexus was running and Enter copies it again; `clip clear` empties it.
+  It is kept in memory only, never written to disk. It keeps 50 entries
+  (`"clipboard_retention"` in `config.json`), stops recording when history
+  is off, and skips copies marked secret by password managers.
+- **Confirm prompt.** A result can ask "Run ...?" before it acts; the
+  default answer is No. Restart, shut down and log out use it.
+- **Plugin guide** in `docs/plugins.md`.
 
 ### Changed
 
+- **Providers are searched in parallel** with a 200 ms budget per search.
+  A slow source no longer delays the others; its results are left out of
+  that search.
+- **Copy results now copy.** Results that offer a copy (for example the
+  calculator) put their text on the clipboard when you press Enter.
+- A pending search no longer refills the result list after the window is
+  hidden.
 - **Aliases only use a shell when the target starts with `>`.** Any other
   command alias is split into words and run directly, so pipes, `&&`,
   `$VAR`, redirects and `~` are no longer interpreted, single quotes no
@@ -26,8 +66,27 @@ version is `0`, expect breaking changes between minor versions.
 - A prefixed query (`>`, `calc `, `file `, `alias `) now reaches only the
   source that owns the prefix. `alias x y` shows just the "save alias" result,
   and `alias x` without a target shows nothing.
-- `web foo` and `clip foo` are searched like ordinary text until web search
-  and clipboard history exist; before, they returned nothing.
+
+### Fixed
+
+- Applications installed while Nexus was not running now appear at the
+  next start, without a manual rebuild.
+- `nexus history clear` now compacts the database file, so cleared query
+  text can no longer be read from it. If that fails, the command says so.
+- Aliases no longer show up in `>`, `file ` or `calc ` searches.
+- `nexus query` now recognises `alias x y` typed after leading spaces.
+- The application scan no longer aborts when a directory disappears while
+  it is being read, and a hidden desktop-file override (`Hidden=true`) now
+  hides the system copy of that application.
+
+### Known issues
+
+- Typing only `web ` or `clip ` shows nothing; type a character after the
+  space.
+- `cmake --install` does not install the `nexus` binary yet. Copy
+  `build/nexus` by hand. It does install the web and system plugins.
+- `nexus history clear` does not clear the clipboard history of a running
+  launcher; use `clip clear` there.
 
 ---
 
@@ -143,10 +202,10 @@ is a benchmark harness with published numbers.
 - **Wayland session notice.** Under Wayland, the tray shows one notice
   explaining that global shortcuts don't work there and how to bind
   `nexus --toggle` in your compositor instead.
-- **Schema migrations (D-17).** The database now records its schema
+- **Schema migrations.** The database now records its schema
   version and applies numbered migrations in a transaction at startup.
   Future schema changes no longer require deleting `nexus.db`.
-- **Benchmark harness (D-16).** `bench_nexus` (in `bench/`, not run by
+- **Benchmark harness.** `bench_nexus` (in `bench/`, not run by
   `ctest`) measures app and file query p50/p95, index build time and
   startup time in an isolated temp directory. See
   [Performance](README.md#performance) for the numbers.
@@ -166,7 +225,7 @@ is a benchmark harness with published numbers.
   the UI thread. It now runs on a worker thread and shows a tray message
   when it finishes. A click while a rebuild is running is queued instead
   of starting a second one.
-- **Per-result usage queries (D-15, partial).** App search ran one SQL
+- **Per-result usage queries (partial).** App search ran one SQL
   query per matched application to fetch its launch count, and copied
   the whole application list on every keystroke. It now runs one grouped
   query per search and reads from a shared snapshot. Query cost still
@@ -212,14 +271,14 @@ and ranking is no longer distorted by inconsistent provider score scales.
 
 ### Fixed
 
-- **UI freezing during search (D-12).** `LauncherWindow` previously called
+- **UI freezing during search.** `LauncherWindow` previously called
   `SearchEngine::search()` directly and synchronously on the Qt main
   thread, so every provider's work — including any filesystem access —
   ran on the same thread responsible for the window responding to input.
   Search is now dispatched through a new `QueryManager` (UI layer) backed
   by `AsyncSearchCoordinator` (Qt-free, in `nexus_core`), so provider work
   runs off the UI thread and results are marshaled back safely.
-- **Broken search cancellation (D-14).** `SearchEngine::search_async()`
+- **Broken search cancellation.** `SearchEngine::search_async()`
   and `cancel()` shared a single reused cancellation token across
   overlapping calls, so a newer search could reset the flag before an
   older, still-running search ever read it — meaning cancellation
@@ -228,7 +287,7 @@ and ranking is no longer distorted by inconsistent provider score scales.
   results are discarded even if the search itself doesn't stop in time.
   `search_async()` and `cancel()` are left in place, unused — see Known
   issues.
-- **Ranking dominated by arbitrary provider score scale (D-29).** A
+- **Ranking dominated by arbitrary provider score scale.** A
   provider's raw `res.score` (ranging from ~400 to 2500 depending on
   provider) was added directly to `RankingEngine`'s own lexical/usage
   boosts (max ~800 combined), so a provider's arbitrary choice of raw
@@ -239,7 +298,7 @@ and ranking is no longer distorted by inconsistent provider score scales.
 
 ### Added
 
-- Unit tests for `Query`, `Executor`, and `SearchEngine` (D-40) — three
+- Unit tests for `Query`, `Executor`, and `SearchEngine` — three
   previously untested, central classes now have dedicated coverage.
 - `AsyncSearchCoordinator` tests covering generation ordering, discarding
   superseded results, and cancellation token delivery.
