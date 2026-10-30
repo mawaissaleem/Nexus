@@ -27,12 +27,14 @@ Query::Query(std::string raw_query, std::string prefix)
 }
 
 void Query::parse() {
-    std::string trimmed = trim(raw_);
-    if (!prefix_.empty() && trimmed.rfind(prefix_, 0) == 0) {
-        processed_text_ = trim(std::string_view(trimmed).substr(prefix_.size()));
+    // Trailing whitespace is kept for the prefix check only, so the bare prefix "web " matches (D-105).
+    const size_t lead = raw_.find_first_not_of(" \t\n\r\f\v");
+    const std::string_view head = lead == std::string::npos ? std::string_view{} : std::string_view(raw_).substr(lead);
+    if (!prefix_.empty() && head.rfind(prefix_, 0) == 0) {
+        processed_text_ = trim(head.substr(prefix_.size()));
     } else {
         prefix_.clear();
-        processed_text_ = trimmed;
+        processed_text_ = trim(head);
     }
     normalized_ = utils::FuzzyMatcher::to_lower(processed_text_);
 

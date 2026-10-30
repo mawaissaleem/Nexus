@@ -258,8 +258,9 @@ void LauncherWindow::on_text_changed(const QString& /*text*/) {
 }
 
 void LauncherWindow::perform_search() {
-    QString q_str = search_input_->text().trimmed();
-    if (q_str.isEmpty()) {
+    // Only leading space is dropped: a trailing one lets a bare "web " reach its prefix owner (D-105).
+    QString q_str = search_input_->text();
+    if (q_str.trimmed().isEmpty()) {
         if (query_manager_) {
             query_manager_->cancel_all();
         }
@@ -279,7 +280,7 @@ void LauncherWindow::on_search_results(const std::vector<core::SearchResult>& re
     }
 
     auto final_results = results;
-    QString lower = query_text.toLower();
+    QString lower = query_text.trimmed().toLower();
     if (lower == "settings" || lower == "setting" || lower == "config" || lower == "preferences" || lower == "prefs") {
         core::SearchResult settings_res;
         settings_res.title = "Nexus Settings";

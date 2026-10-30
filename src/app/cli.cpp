@@ -27,6 +27,7 @@ void print_help(std::ostream& out, const std::string& shortcut) {
         << "  --list-apps            List all currently indexed desktop applications\n"
         << "  settings, config       Open Nexus Settings GUI (aliases, search directories, global shortcut)\n"
         << "  --settings             Open Nexus Settings GUI\n"
+        << "  --version, -V          Print the Nexus version\n"
         << "  --help, -h             Show this help message\n\n"
         << "Directory Search Management:\n"
         << "  dir add <path>         Add a directory to file/folder search\n"
@@ -116,7 +117,8 @@ int run_alias(const Args& args, core::AliasManager& aliases, std::ostream& out, 
     return 0;
 }
 
-int run_history(const Args& args, std::ostream& out, std::ostream& err) {
+int run_history(const Args& args, std::ostream& out, std::ostream& err,
+                const std::function<bool()>& clear_running_clipboard) {
     if (args.size() < 2 || args[1] != "clear") {
         out << "Usage: nexus history clear\n";
         return 0;
@@ -137,7 +139,19 @@ int run_history(const Args& args, std::ostream& out, std::ostream& err) {
         err << "Could not compact the database file, so old entries may still be readable in it."
                " Run again when Nexus is closed.\n";
     }
+    if (clear_running_clipboard && clear_running_clipboard()) {
+        out << "Cleared the clipboard history of the running launcher.\n";
+    }
     return 0;
+}
+
+// What run_gui handles, plus Qt's own options, which QApplication consumes from argv.
+bool is_gui_arg(const std::string& a) {
+    for (const char* ok : {"--toggle", "-t", "--show", "--hide", "--settings", "settings", "config",
+                           "-platform", "-style", "-display", "-geometry", "-stylesheet", "-reverse"}) {
+        if (a == ok) return true;
+    }
+    return false;
 }
 
 double ms_since(std::chrono::high_resolution_clock::time_point start) {
@@ -182,7 +196,8 @@ int run_query(const Args& args, Services& s, std::ostream& out) {
 } // namespace
 
 std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::AliasManager& aliases,
-                           std::ostream& out, std::ostream& err) {
+                           std::ostream& out, std::ostream& err,
+                           std::function<bool()> clear_running_clipboard) {
     if (args.empty()) return std::nullopt;
     const std::string& cmd = args[0];
 
@@ -190,12 +205,21 @@ std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::
         print_help(out, config.get_shortcut());
         return 0;
     }
+    if (cmd == "--version" || cmd == "-V") {
+        out << "nexus " << NEXUS_VERSION << '\n';
+        return 0;
+    }
     if (cmd == "dir") return run_dir(args, config, out, err);
     if (cmd == "alias") return run_alias(args, aliases, out, err);
-    if (cmd == "history") return run_history(args, out, err);
+    if (cmd == "history") return run_history(args, out, err, clear_running_clipboard);
 
     const bool needs_services = cmd == "--rebuild-index" || cmd == "--list-apps" || cmd == "query" || cmd == "-q";
-    if (!needs_services) return std::nullopt;
+    if (!needs_services) {
+        if (is_gui_arg(cmd)) return std::nullopt;
+        err << "Error: unknown argument: " << cmd << "\n\n";
+        print_help(err, config.get_shortcut());
+        return 1;
+    }
 
     const bool is_query = cmd == "query" || cmd == "-q";
     if (is_query && args.size() < 2) {  // checked before the indexers are built

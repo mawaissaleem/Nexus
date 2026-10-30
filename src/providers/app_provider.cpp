@@ -83,7 +83,7 @@ std::vector<core::SearchResult> ApplicationProvider::search(
             res.execution_payload = app.exec;
             res.action_kind = core::ActionKind::Launch;
             res.terminal = app.terminal;
-            res.query = query.raw();
+            res.query = query.text();
 
             if (auto it = usage_counts.find(app.id); it != usage_counts.end() && it->second.count > 0) {
                 res.usage_count = it->second.count;

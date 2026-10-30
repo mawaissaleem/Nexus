@@ -32,6 +32,20 @@ int main() {
         assert(w.prefix().empty() && w.text() == "web robotics");
     }
 
+    // A bare space-terminated prefix matches; leading space ignored, trailing kept for the prefix check only (D-105)
+    {
+        Query w("web ", "web ");
+        assert(w.prefix() == "web " && w.text().empty());
+        Query l("   web ", "web ");
+        assert(l.prefix() == "web " && l.text().empty());
+        Query bare("web", "web ");
+        assert(bare.prefix().empty() && bare.text() == "web");
+        Query ws("   ");
+        assert(ws.prefix().empty() && ws.text().empty());
+        Query t("hello ");
+        assert(t.text() == "hello");
+    }
+
     // normalized() lowercases (note: it does not collapse internal multiple spaces)
     {
         Query q("  Fire   Fox  ");

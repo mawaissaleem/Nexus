@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.5.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland is not supported, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
+> **Version 0.5.1.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland is not supported, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -52,7 +52,7 @@ Nexus collapses those into a single keystroke. It is built around four ideas:
 | Shell commands | `> docker ps` — the `>` prefix is required, never implicit |
 | Aliases | `alias gh https://github.com`, then type `gh` |
 | Web search | `web rust lifetimes` opens a search in your browser (DuckDuckGo by default; a plugin, needs Python 3) |
-| Clipboard history | `clip` followed by text searches what you copied since Nexus started; Enter copies an entry again. `clip clear` empties the history |
+| Clipboard history | `clip` followed by text searches what you copied since Nexus started; Enter copies an entry again. `clip ` alone lists the whole history, newest first. `clip clear` empties the history |
 | System actions | Type `lock`, `sleep`, `logout`, `restart` or `shutdown` (a plugin, needs Python 3). Restart, shut down and log out ask "Run ...?" first; the answer defaults to No |
 | Plugins | Add your own search sources in any language, run as separate processes. See [docs/plugins.md](docs/plugins.md) |
 | Settings | Type `settings`, or run `nexus settings`: aliases, directories and exclusions, result count, search sources, shortcut, theme, history |
@@ -84,9 +84,7 @@ Listed honestly so you know what you are getting. These are planned — see the 
 
 ## Known issues
 
-- Typing only `web ` or `clip ` (nothing after the space) shows nothing. Type a character after the space.
-- `cmake --install` does not install the `nexus` binary yet. Use the `install -Dm755` command under [Build](#build). It does install the web and system plugins.
-- `nexus history clear` does not clear the clipboard history of a running launcher. Type `clip clear` there.
+None at the moment.
 
 
 ## Requirements
@@ -142,16 +140,10 @@ Nexus starts in the background, registers the hotkey, and shows the window once 
 **Install system-wide**
 
 ```bash
-sudo install -Dm755 build/nexus /usr/local/bin/nexus
-```
-
-**Install the web and system plugins**
-
-```bash
 sudo cmake --install build
 ```
 
-This copies them to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
+Install from the Release build above; the [Tests](#tests) steps reconfigure `build/` as Debug. This installs `nexus` to `/usr/local/bin/` and the web and system plugins to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
 
 **Start on login**
 
@@ -190,6 +182,7 @@ nexus --rebuild-index     Rebuild the application and file indexes
 nexus --list-apps         Print every indexed application
 nexus query <term>        Run one search and print ranked results with latency
 nexus history clear       Delete usage events and query history
+nexus --version, -V       Print the version
 nexus --help              Full usage
 ```
 
@@ -305,7 +298,7 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
-Thirty-three suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history and confirm prompts. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
+Thirty-four suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history and confirm prompts. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
 
 
 ## Performance
@@ -342,6 +335,7 @@ The specification targets under 50 ms per query and under 20 ms for cached queri
 | ~~0.3.0~~ | **Shipped.** File index with live inotify watching, automatic app indexing, schema migrations, configurable shortcut, published benchmarks |
 | ~~0.4.0~~ | **Shipped.** Themes, settings coverage, history controls, query-aware ranking with recency |
 | ~~0.5.0~~ | **Shipped.** Out-of-process plugins, web search, clipboard history and system actions, parallel search |
+| ~~0.5.1~~ | **Shipped.** Fixes for the 0.5.0 known issues, `--version`, `cmake --install` installs the binary |
 | 0.6.0 | Wayland support, packaging, tested across GNOME / KDE / XFCE |
 | 1.0.0 | Stable plugin API, accessibility, security review |
 

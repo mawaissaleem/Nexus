@@ -71,9 +71,13 @@ std::vector<core::SearchResult> ClipboardProvider::search(const core::Query& que
 
 bool ClipboardProvider::on_executed(const core::SearchResult& result) {
     if (result.id != kClearId) return true;  // Copy results need nothing here
+    clear();
+    return true;
+}
+
+void ClipboardProvider::clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     entries_.clear();
-    return true;
 }
 
 } // namespace nexus::providers

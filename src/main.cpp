@@ -2,8 +2,10 @@
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/core/config_manager.hpp"
 #include "nexus/ui/gui_app.hpp"
+#include "nexus/ui/ipc.hpp"
 #include "nexus/utils/logger.hpp"
 #include <QApplication>
+#include <QCoreApplication>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -18,7 +20,12 @@ int main(int argc, char* argv[]) {
     const std::vector<std::string> args(argv + 1, argv + argc);
 
     // CLI subcommands run before any QApplication exists, so they work without a display.
-    if (const auto rc = nexus::app::run_cli(args, config, aliases, std::cout, std::cerr)) return *rc;
+    // The CLI stays Qt-free; this is how `history clear` reaches a running launcher.
+    const auto clear_running_clipboard = [&]() {
+        QCoreApplication core(argc, argv);  // local sockets want one; it is gone again before the GUI's QApplication
+        return nexus::ui::send_ipc_command(nexus::ui::kIpcSocketName, nexus::ui::kIpcClearClipboard);
+    };
+    if (const auto rc = nexus::app::run_cli(args, config, aliases, std::cout, std::cerr, clear_running_clipboard)) return *rc;
 
     QApplication app(argc, argv);
     app.setApplicationName("Nexus");

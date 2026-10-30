@@ -141,7 +141,9 @@ std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<b
         current_providers = providers_;
         filter = provider_filter_;
         // Longest owned prefix wins; no match = unprefixed text for the general providers.
-        const std::string trimmed = Query(input.raw()).text();
+        // Leading whitespace is ignored, trailing kept so a bare "web " still matches its prefix.
+        const size_t lead = input.raw().find_first_not_of(" \t\n\r\f\v");
+        const std::string trimmed = lead == std::string::npos ? std::string{} : input.raw().substr(lead);
         for (const auto& [prefix, id] : prefix_owner_) {
             if (prefix.size() > matched.size() && trimmed.rfind(prefix, 0) == 0) {
                 matched = prefix;
@@ -150,6 +152,7 @@ std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<b
         }
     }
     const Query query(input.raw(), matched);
+    if (query.prefix().empty() && query.text().empty()) return combined_results;  // whitespace only
     // A prefixed query reaches only its owner; an unprefixed one only providers that claim "".
     current_providers.erase(std::remove_if(current_providers.begin(), current_providers.end(), [&](const auto& p) {
         if (!query.prefix().empty()) return p->id() != owner;

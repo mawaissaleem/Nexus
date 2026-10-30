@@ -47,7 +47,21 @@ int main() {
     assert(!run({}, config, aliases).rc);
     assert(!run({"--toggle"}, config, aliases).rc);
     assert(!run({"settings"}, config, aliases).rc);
-    assert(!run({"no-such-command"}, config, aliases).rc);
+    for (const char* flag : {"--show", "--hide", "--settings", "config", "-t", "-platform", "-style"})
+        assert(!run({flag}, config, aliases).rc);
+
+    // --version / -V
+    for (const char* flag : {"--version", "-V"}) {
+        const Run r = run({flag}, config, aliases);
+        assert(r.rc == 0 && r.out == std::string("nexus ") + NEXUS_VERSION + "\n" && r.err.empty());
+    }
+
+    // Unknown flag or word: error + usage on stderr, non-zero, never the GUI
+    for (const char* bad : {"--bogus", "foo", "no-such-command"}) {
+        const Run r = run({bad}, config, aliases);
+        assert(r.rc && *r.rc != 0 && r.out.empty());
+        assert(has(r.err, std::string("unknown argument: ") + bad) && has(r.err, "Usage:") && has(r.err, "--version"));
+    }
 
     // help
     for (const char* flag : {"--help", "-h"}) {
@@ -109,6 +123,17 @@ int main() {
     r = run({"history", "clear"}, config, aliases);
     assert(r.rc == 0 && has(r.out, "Cleared 0 usage events and 0 query history entries."));
     assert(fs::exists(data_home / "nexus" / "nexus.db"));
+
+    // A running launcher is told once and reported; a missing one adds no output.
+    int notified = 0;
+    std::ostringstream out, err;
+    assert(run_cli({"history", "clear"}, config, aliases, out, err, [&] { ++notified; return true; }) == 0);
+    assert(notified == 1 && has(out.str(), "Cleared the clipboard history of the running launcher."));
+    std::ostringstream out2, err2;
+    assert(run_cli({"history", "clear"}, config, aliases, out2, err2, [&] { return false; }) == 0);
+    assert(!has(out2.str(), "running launcher") && err2.str().empty());
+    // Usage text and failures never notify.
+    assert(run_cli({"history"}, config, aliases, out, err, [&] { ++notified; return true; }) == 0 && notified == 1);
 
     fs::remove_all(root);
     return 0;

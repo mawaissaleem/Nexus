@@ -8,6 +8,38 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
+## [0.5.1] — 2026-11-17
+
+Fixes the three known issues from 0.5.0 and makes unknown command-line
+arguments an error.
+
+### Added
+
+- `nexus --version` (or `-V`) prints the installed version.
+
+### Fixed
+
+- Typing only `clip ` (nothing after the space) now lists your whole
+  clipboard history, newest first.
+- Typing only `web ` no longer shows apps and files matching "web"; it
+  waits for your search term.
+- `cmake --install` now installs the `nexus` binary as well as the plugins,
+  so `sudo cmake --install build` is the whole install.
+- `nexus history clear` now also clears the clipboard history of a running
+  launcher. A launcher started before the upgrade ignores this until it is
+  restarted.
+
+### Changed
+
+- An unknown command-line argument now prints an error and the usage text
+  and exits with a non-zero status, instead of opening the launcher.
+  As the first argument, the Qt options `-platform`, `-style`, `-display`,
+  `-geometry`, `-stylesheet` and `-reverse` still work. Write a value with a
+  space (`-style fusion`); the `-style=fusion` form and other Qt options are
+  now rejected.
+
+---
+
 ## [0.5.0] — 2026-11-16
 
 Nexus can now be extended with plugins. Web search and system actions
@@ -433,6 +465,8 @@ See `nexus-SRS.md` for full detail and `docs/` (once written) for tracking.
 | Dependencies | Qt (`Core`, `Gui`, `Widgets`, `Network`), SQLite3, libX11 |
 | Desktop environments tested | Whatever the maintainer runs daily (X11-based). Not yet verified across GNOME, KDE, and XFCE independently |
 
+[0.5.1]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.5.1
+[0.5.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.2.0

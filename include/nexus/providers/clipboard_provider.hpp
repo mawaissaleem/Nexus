@@ -23,6 +23,8 @@ public:
     // An entry already in the list moves to the front, so copying one back never duplicates it.
     void add(const std::string& text, bool secret = false);
 
+    void clear();  // thread-safe; also what "clip clear" runs
+
     std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
     bool on_executed(const core::SearchResult& result) override;  // "clip clear" empties the list
 

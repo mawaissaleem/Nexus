@@ -2,6 +2,7 @@
 #include "nexus/app/services.hpp"
 #include "nexus/index/file_watcher.hpp"
 #include "nexus/ui/global_shortcut.hpp"
+#include "nexus/ui/ipc.hpp"
 #include "nexus/ui/launcher_window.hpp"
 #include "nexus/ui/settings_dialog.hpp"
 #include "nexus/utils/logger.hpp"
@@ -24,20 +25,7 @@
 namespace nexus::ui {
 namespace {
 
-const char* IPC_SOCKET_NAME = "nexus_launcher_ipc";
-
 bool is_settings_arg(const std::string& a) { return a == "--settings" || a == "settings" || a == "config"; }
-
-// Single-instance client: hands `cmd` to a running instance. False when none is listening.
-bool send_to_running_instance(const char* cmd) {
-    QLocalSocket socket;
-    socket.connectToServer(IPC_SOCKET_NAME);
-    if (!socket.waitForConnected(200)) return false;
-    socket.write(cmd);
-    socket.flush();
-    socket.waitForBytesWritten(200);
-    return true;
-}
 
 // Owns the launcher, tray, IPC server, shortcut grab, settings dialog, watchers and index threads.
 // Member order is destruction order in reverse: threads and watchers outlive the widgets their callbacks touch.
@@ -128,12 +116,12 @@ private:
     // Single-instance IPC server for instant toggle from shortcuts.
     void setup_ipc() {
         ipc_server_ = std::make_unique<QLocalServer>(&app_);
-        QLocalServer::removeServer(IPC_SOCKET_NAME);  // Clean any previous stale socket file
-        if (!ipc_server_->listen(IPC_SOCKET_NAME)) {
+        QLocalServer::removeServer(kIpcSocketName);  // Clean any previous stale socket file
+        if (!ipc_server_->listen(kIpcSocketName)) {
             NEXUS_LOG_WARN("Could not start IPC server: " + ipc_server_->errorString().toStdString());
             return;
         }
-        NEXUS_LOG_INFO("Nexus IPC server listening on: " + std::string(IPC_SOCKET_NAME));
+        NEXUS_LOG_INFO("Nexus IPC server listening on: " + std::string(kIpcSocketName));
         QObject::connect(ipc_server_.get(), &QLocalServer::newConnection, [this]() {
             QLocalSocket* client = ipc_server_->nextPendingConnection();
             if (!client) return;
@@ -147,6 +135,8 @@ private:
                     launcher_->hide_launcher();
                 } else if (msg == "SETTINGS") {
                     show_settings();
+                } else {
+                    handle_ipc_clipboard_command(msg, *services_.clipboard);  // unknown messages: ignored
                 }
             });
         });
@@ -260,7 +250,7 @@ int run_gui(QApplication& app, const std::vector<std::string>& args,
     else if (arg1 == "--show") cmd = "SHOW";
     else if (is_settings_arg(arg1)) cmd = "SETTINGS";
     else if (arg1 == "--toggle" || arg1 == "-t") cmd = "TOGGLE";
-    if (cmd && send_to_running_instance(cmd)) return 0;
+    if (cmd && send_ipc_command(kIpcSocketName, cmd)) return 0;
 
     // No instance and the user asked for settings: start one with the dialog open.
     GuiApp gui(app, config, aliases);

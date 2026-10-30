@@ -247,6 +247,14 @@ int main() {
         assert(engine.search(Query("web")).size() == 2);
         assert(web->seen.size() == 1);
 
+        // Bare prefix (D-105): reaches only its owner with empty text, even with leading spaces; "web" stays plain
+        r = engine.search(Query("web "));
+        assert(r.size() == 1 && r[0].provider_id == "web" && web->seen.back() == "web |");
+        r = engine.search(Query("   web "));
+        assert(r.size() == 1 && web->seen.back() == "web |" && web->seen.size() == 3);
+        // Whitespace only without a prefix: nothing, and no provider is asked
+        assert(engine.search(Query("   ")).empty() && web->seen.size() == 3);
+
         // Unowned prefix ("clip x") is plain text for the general providers
         r = engine.search(Query("clip x"));
         assert(r.size() == 2 && both->seen.back() == "|clip x");
@@ -311,6 +319,9 @@ int main() {
         for (const auto& res : engine.search(Query("2*3"))) plain_calc |= (res.provider_id == "calculator" && res.title == "6");
         assert(plain_calc);
         assert(engine.search(Query("> 2*3")).size() == 1);  // only the shell command, never a calc result
+        // Bare prefixes (empty text, D-105): nothing is produced, nothing runs, nothing leaks to other providers
+        for (const char* bare : {">", "  > ", "calc "}) assert(engine.search(Query(bare)).empty());
+        assert(other->seen.empty() || other->seen.back().find("|>") == std::string::npos);
     }
 
     // Providers run concurrently: two 200 ms providers finish in well under 2 x 200 ms

@@ -33,6 +33,7 @@ set(TEST_TARGETS
     test_run_action
     test_launcher_copy
     test_clipboard_provider
+    test_ipc
 )
 
 # Each test links the smallest layer it needs (see CMakeLists.txt), so layering is enforced at link time.
@@ -55,6 +56,7 @@ set(TEST_LIBS_test_file_watcher nexus_index)
 set(TEST_LIBS_test_cli nexus_app)
 set(TEST_LIBS_test_plugin_loader nexus_app)
 set(TEST_LIBS_test_launcher_copy nexus_core)
+set(TEST_LIBS_test_ipc nexus_providers)
 
 foreach(test_name ${TEST_TARGETS})
     add_executable(${test_name} ${test_name}.cpp)
@@ -85,3 +87,7 @@ set_tests_properties(test_launcher_copy PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=o
 target_sources(test_run_action PRIVATE ${CMAKE_SOURCE_DIR}/src/ui/copy_result.cpp ${CMAKE_SOURCE_DIR}/src/ui/run_action.cpp)
 target_link_libraries(test_run_action PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 set_tests_properties(test_run_action PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)
+
+# Local-socket test: uses a per-process socket name, never the running launcher's.
+target_sources(test_ipc PRIVATE ${CMAKE_SOURCE_DIR}/src/ui/ipc.cpp)
+target_link_libraries(test_ipc PRIVATE Qt${QT_VERSION_MAJOR}::Network)

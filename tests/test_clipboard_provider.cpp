@@ -7,8 +7,7 @@
 using namespace nexus;
 using providers::ClipboardProvider;
 
-// A bare "clip " is trimmed to "clip" by Query (D-105) and never reaches the provider, so tests list with "x":
-// every entry below contains an x.
+// Entries below contain an x only by habit; the bare "clip " (empty text) case is tested explicitly further down.
 static std::vector<core::SearchResult> clip(ClipboardProvider& p, const std::string& text, bool cancel = false) {
     std::atomic<bool> c{cancel};
     return p.search(core::Query("clip " + text, "clip "), c);
@@ -29,6 +28,9 @@ int main() {
         auto f = clip(p, "alph");
         assert(f.size() == 2 && f[0].execution_payload == "xalpha three");
         assert(clip(p, "zzzz").empty());
+        // Bare "clip " (empty text, D-105) lists the whole history newest first
+        auto bare = clip(p, "");
+        assert(bare.size() == 3 && bare[0].execution_payload == "xalpha three" && bare[2].execution_payload == "xalpha one");
         assert(clip(p, "x", true).empty());  // cancelled
         // Another prefix never reaches this provider's results
         std::atomic<bool> c{false};

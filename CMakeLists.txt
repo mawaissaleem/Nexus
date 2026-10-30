@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(nexus VERSION 0.5.0 LANGUAGES CXX C)
+project(nexus VERSION 0.5.1 LANGUAGES CXX C)
 
 # Enforce C++20 standard
 set(CMAKE_CXX_STANDARD 20)
@@ -94,6 +94,7 @@ add_library(nexus_app STATIC
     src/app/cli.cpp
 )
 target_link_libraries(nexus_app PUBLIC nexus_providers)
+target_compile_definitions(nexus_app PUBLIC NEXUS_VERSION="${PROJECT_VERSION}")
 
 # UI Sources and Headers for AUTOMOC
 set(NEXUS_UI_HEADERS
@@ -105,6 +106,7 @@ set(NEXUS_UI_HEADERS
     include/nexus/ui/theme.hpp
     include/nexus/ui/copy_result.hpp
     include/nexus/ui/run_action.hpp
+    include/nexus/ui/ipc.hpp
     include/nexus/ui/gui_app.hpp
 )
 
@@ -117,6 +119,7 @@ set(NEXUS_UI_SOURCES
     src/ui/theme.cpp
     src/ui/copy_result.cpp
     src/ui/run_action.cpp
+    src/ui/ipc.cpp
     src/ui/gui_app.cpp
 )
 
@@ -143,6 +146,7 @@ endif()
 
 # Shipped plugins (Python 3, stdlib only); plugin.json and the script must stay in one directory.
 include(GNUInstallDirs)
+install(TARGETS nexus RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES plugins/web/plugin.json DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/web)
 install(PROGRAMS plugins/web/web.py DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/web)
 install(FILES plugins/system/plugin.json DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/system)
