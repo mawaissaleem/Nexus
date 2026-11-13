@@ -13,12 +13,12 @@ namespace {
 
 using Args = std::vector<std::string>;
 
-void print_help(std::ostream& out, const std::string& shortcut) {
+void print_help(std::ostream& out) {
     out << "Nexus - Linux Productivity Launcher\n\n"
         << "Usage:\n"
         << "  nexus [options] [command]\n\n"
         << "Running without arguments starts the GUI launcher in the background.\n"
-        << "Global hotkey: " << shortcut << " (configurable in settings)\n\n"
+        << "Global hotkey: Alt+Space by default (configurable in settings)\n\n"
         << "Options:\n"
         << "  --toggle, -t           Toggle the launcher window (shows or hides running instance)\n"
         << "  --show                 Show the launcher window on the active monitor\n"
@@ -146,12 +146,14 @@ int run_history(const Args& args, std::ostream& out, std::ostream& err,
 }
 
 // What run_gui handles, plus Qt's own options, which QApplication consumes from argv.
+// shortcut: any single-dash arg (Qt style: -session, -platformtheme) or --opt=value goes to
+// the GUI without a list of Qt options, so -bogus and --bogus=1 also start it; a bare
+// --bogus is still rejected. Upgrade if Qt grows bare double-dash options.
 bool is_gui_arg(const std::string& a) {
-    for (const char* ok : {"--toggle", "-t", "--show", "--hide", "--settings", "settings", "config",
-                           "-platform", "-style", "-display", "-geometry", "-stylesheet", "-reverse"}) {
+    for (const char* ok : {"--toggle", "--show", "--hide", "--settings", "settings", "config"}) {
         if (a == ok) return true;
     }
-    return false;
+    return a.size() > 1 && a[0] == '-' && (a[1] != '-' || a.find('=') != std::string::npos);
 }
 
 double ms_since(std::chrono::high_resolution_clock::time_point start) {
@@ -195,31 +197,39 @@ int run_query(const Args& args, Services& s, std::ostream& out) {
 
 } // namespace
 
-std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::AliasManager& aliases,
-                           std::ostream& out, std::ostream& err,
-                           std::function<bool()> clear_running_clipboard) {
+std::optional<int> run_info_cli(const Args& args, std::ostream& out, std::ostream& err) {
     if (args.empty()) return std::nullopt;
     const std::string& cmd = args[0];
-
     if (cmd == "--help" || cmd == "-h") {
-        print_help(out, config.get_shortcut());
+        print_help(out);
         return 0;
     }
     if (cmd == "--version" || cmd == "-V") {
         out << "nexus " << NEXUS_VERSION << '\n';
         return 0;
     }
+    for (const char* known : {"dir", "alias", "history", "--rebuild-index", "--list-apps", "query", "-q"}) {
+        if (cmd == known) return std::nullopt;
+    }
+    if (is_gui_arg(cmd)) return std::nullopt;
+    err << "Error: unknown argument: " << cmd << "\n\n";
+    print_help(err);
+    return 1;
+}
+
+std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::AliasManager& aliases,
+                           std::ostream& out, std::ostream& err,
+                           std::function<bool()> clear_running_clipboard) {
+    if (const auto rc = run_info_cli(args, out, err)) return rc;
+    if (args.empty()) return std::nullopt;
+    const std::string& cmd = args[0];
+
     if (cmd == "dir") return run_dir(args, config, out, err);
     if (cmd == "alias") return run_alias(args, aliases, out, err);
     if (cmd == "history") return run_history(args, out, err, clear_running_clipboard);
 
     const bool needs_services = cmd == "--rebuild-index" || cmd == "--list-apps" || cmd == "query" || cmd == "-q";
-    if (!needs_services) {
-        if (is_gui_arg(cmd)) return std::nullopt;
-        err << "Error: unknown argument: " << cmd << "\n\n";
-        print_help(err, config.get_shortcut());
-        return 1;
-    }
+    if (!needs_services) return std::nullopt;  // run_info_cli already rejected unknown arguments
 
     const bool is_query = cmd == "query" || cmd == "-q";
     if (is_query && args.size() < 2) {  // checked before the indexers are built

@@ -13,11 +13,13 @@
 int main(int argc, char* argv[]) {
     nexus::utils::Logger::instance().set_level(nexus::utils::LogLevel::Info);
 
+    const std::vector<std::string> args(argv + 1, argv + argc);
+    // Before the managers exist: resolving their paths creates the config dir and loading may rewrite files.
+    if (const auto rc = nexus::app::run_info_cli(args, std::cout, std::cerr)) return *rc;
+
     // Created once; every provider, window and dialog holds a reference, so they must outlive those.
     nexus::core::ConfigManager config(nexus::core::ConfigManager::resolve_config_path());
     nexus::core::AliasManager aliases(nexus::core::AliasManager::resolve_aliases_path());
-
-    const std::vector<std::string> args(argv + 1, argv + argc);
 
     // CLI subcommands run before any QApplication exists, so they work without a display.
     // The CLI stays Qt-free; this is how `history clear` reaches a running launcher.

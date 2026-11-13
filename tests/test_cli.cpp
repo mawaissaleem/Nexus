@@ -49,6 +49,10 @@ int main() {
     assert(!run({"settings"}, config, aliases).rc);
     for (const char* flag : {"--show", "--hide", "--settings", "config", "-t", "-platform", "-style"})
         assert(!run({flag}, config, aliases).rc);
+    // Qt options and session restore: QApplication consumes them
+    assert(!run({"-session", "abc"}, config, aliases).rc);
+    assert(!run({"--style=fusion"}, config, aliases).rc);
+    assert(!run({"-platformtheme", "gtk3"}, config, aliases).rc);
 
     // --version / -V
     for (const char* flag : {"--version", "-V"}) {
@@ -68,7 +72,24 @@ int main() {
         const Run r = run({flag}, config, aliases);
         assert(r.rc == 0);
         assert(has(r.out, "Usage:") && has(r.out, "alias add <name> <target>"));
-        assert(has(r.out, "Global hotkey: " + config.get_shortcut()));
+        assert(has(r.out, "Global hotkey: Alt+Space by default"));
+    }
+
+    // --version, --help and unknown arguments need no config: run_info_cli with nothing on disk.
+    {
+        const fs::path empty_cfg = root / "empty_cfg";
+        fs::create_directories(empty_cfg);
+        setenv("XDG_CONFIG_HOME", empty_cfg.c_str(), 1);
+        for (const char* a : {"--version", "-V", "--help", "-h", "--bogus"}) {
+            std::ostringstream out, err;
+            const auto rc = nexus::app::run_info_cli({a}, out, err);
+            assert(rc && (std::string(a) == "--bogus") == (*rc != 0));
+        }
+        std::ostringstream o, e;
+        assert(!nexus::app::run_info_cli({"dir", "list"}, o, e) && !nexus::app::run_info_cli({}, o, e));
+        assert(!nexus::app::run_info_cli({"--toggle"}, o, e));
+        assert(fs::is_empty(empty_cfg));
+        unsetenv("XDG_CONFIG_HOME");
     }
 
     // alias add / list / remove, including multi-word and '>' targets

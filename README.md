@@ -143,7 +143,7 @@ Nexus starts in the background, registers the hotkey, and shows the window once 
 sudo cmake --install build
 ```
 
-Install from the Release build above; the [Tests](#tests) steps reconfigure `build/` as Debug. This installs `nexus` to `/usr/local/bin/` and the web and system plugins to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
+Install from the Release build above; the [Tests](#tests) steps use a separate `build-debug/` directory. This installs `nexus` to `/usr/local/bin/` and the web and system plugins to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
 
 **Start on login**
 
@@ -293,9 +293,9 @@ Two rules hold throughout: the core never depends on Qt, and OS-level calls are 
 ## Tests
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j$(nproc)
-ctest --test-dir build --output-on-failure
+cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-debug -j$(nproc)
+ctest --test-dir build-debug --output-on-failure
 ```
 
 Thirty-four suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history and confirm prompts. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
