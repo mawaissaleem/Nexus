@@ -13,14 +13,10 @@ public:
     [[nodiscard]] std::vector<std::string> prefixes() const override { return {"calc ", ""}; }
     [[nodiscard]] int priority() const override { return 90; }
 
-    std::vector<core::SearchResult> search(
-        const core::Query& query,
-        const std::atomic<bool>& cancel_token
-    ) override;
+    std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
 
     // Evaluate arithmetic expression safely without external interpreters
     static std::optional<double> evaluate(std::string_view expression);
 };
 
-} // namespace nexus::providers
-
+}  // namespace nexus::providers

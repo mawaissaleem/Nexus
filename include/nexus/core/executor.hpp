@@ -75,4 +75,4 @@ private:
     static bool spawn_detached(const std::vector<std::string>& args);
 };
 
-} // namespace nexus::core
+}  // namespace nexus::core

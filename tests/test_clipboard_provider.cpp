@@ -30,7 +30,8 @@ int main() {
         assert(clip(p, "zzzz").empty());
         // Bare "clip " (empty text) lists the whole history newest first
         auto bare = clip(p, "");
-        assert(bare.size() == 3 && bare[0].execution_payload == "xalpha three" && bare[2].execution_payload == "xalpha one");
+        assert(bare.size() == 3 && bare[0].execution_payload == "xalpha three" &&
+               bare[2].execution_payload == "xalpha one");
         assert(clip(p, "x", true).empty());  // cancelled
         // Another prefix never reaches this provider's results
         std::atomic<bool> c{false};
@@ -39,9 +40,11 @@ int main() {
     // Consecutive duplicates collapse; copying an older entry back moves it to the front, no duplicate
     {
         ClipboardProvider p(50);
-        p.add("xa"); p.add("xa");
+        p.add("xa");
+        p.add("xa");
         assert(clip(p, "x").size() == 1);
-        p.add("xb"); p.add("xc");
+        p.add("xb");
+        p.add("xc");
         p.add("xa");  // what the clipboard signal does after Enter on an old entry
         auto r = clip(p, "x");
         assert(r.size() == 3 && r[0].execution_payload == "xa" && r[1].execution_payload == "xc");
@@ -49,7 +52,9 @@ int main() {
     // Retention drops the oldest
     {
         ClipboardProvider p(2);
-        p.add("xone"); p.add("xtwo"); p.add("xthree");
+        p.add("xone");
+        p.add("xtwo");
+        p.add("xthree");
         auto r = clip(p, "x");
         assert(r.size() == 2 && r[0].execution_payload == "xthree" && r[1].execution_payload == "xtwo");
     }

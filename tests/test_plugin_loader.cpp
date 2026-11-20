@@ -18,11 +18,16 @@ using Clock = std::chrono::steady_clock;
 
 static fs::path root;
 
-static void write_plugin(const fs::path& base, const std::string& id, const std::string& dir_name = "", const std::string& body = "") {
+static void write_plugin(const fs::path& base, const std::string& id, const std::string& dir_name = "",
+                         const std::string& body = "") {
     const fs::path dir = base / (dir_name.empty() ? id : dir_name);
     fs::create_directories(dir);
-    std::ofstream(dir / "plugin.json") << "{\"id\":\"" << id << "\",\"api_version\":1,\"exec\":\"run.sh\",\"prefixes\":[\"\"]}";
-    std::ofstream(dir / "run.sh") << (body.empty() ? "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\nwhile read -r l; do :; done\n" : body);
+    std::ofstream(dir / "plugin.json") << "{\"id\":\"" << id
+                                       << "\",\"api_version\":1,\"exec\":\"run.sh\",\"prefixes\":[\"\"]}";
+    std::ofstream(dir / "run.sh")
+        << (body.empty()
+                ? "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\nwhile read -r l; do :; done\n"
+                : body);
     fs::permissions(dir / "run.sh", fs::perms::owner_all);
 }
 
@@ -38,12 +43,13 @@ static void test_discover() {
     write_plugin(user, "shared");
     write_plugin(sys, "shared");
     write_plugin(sys, "sysonly");
-    write_plugin(user, "settings");     // reserved
-    write_plugin(user, "files");        // built-in id
+    write_plugin(user, "settings");              // reserved
+    write_plugin(user, "files");                 // built-in id
     write_plugin(user, "mismatch", "otherdir");  // invalid: id != dir name
-    fs::create_directories(user / "empty");        // invalid: no plugin.json
+    fs::create_directories(user / "empty");      // invalid: no plugin.json
     std::ofstream(user / "stray.txt") << "x";
-    const auto found = providers::discover_plugins({user, sys, root / "d1" / "missing"}, {"settings", "aliases", "files"});
+    const auto found =
+        providers::discover_plugins({user, sys, root / "d1" / "missing"}, {"settings", "aliases", "files"});
     assert((ids(found) == std::set<std::string>{"good", "shared", "sysonly"}));
     for (const auto& m : found) {
         if (m.id == "shared") assert(m.dir == user / "shared");  // user dir wins
@@ -69,7 +75,11 @@ static void test_search_dirs() {
 }
 
 static bool gone(int pid) { return kill(pid, 0) != 0; }
-static int read_pid(const fs::path& dir) { int p = 0; std::ifstream(dir / "pid") >> p; return p; }
+static int read_pid(const fs::path& dir) {
+    int p = 0;
+    std::ifstream(dir / "pid") >> p;
+    return p;
+}
 
 static void test_services_and_shutdown() {
     const fs::path base = root / "d2";
@@ -77,13 +87,15 @@ static void test_services_and_shutdown() {
     write_plugin(base, "off");
     write_plugin(base, "applications");  // reserved: must not replace the built-in
     // Ignores both `shutdown` and EOF, so only SIGKILL ends it.
-    write_plugin(base, "deaf", "", "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\ntrap '' TERM HUP\nwhile :; do sleep 1; done\n");
+    write_plugin(
+        base, "deaf", "",
+        "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\ntrap '' TERM HUP\nwhile :; do sleep 1; done\n");
 
     core::ConfigManager config((root / "config.json").string());
     core::AliasManager aliases((root / "aliases.json").string());
     config.set_provider_enabled("off", false);
     auto s = app::make_services(config, aliases, {base});
-    assert(s.plugins.size() == 3);  // stubborn, off, deaf
+    assert(s.plugins.size() == 3);                   // stubborn, off, deaf
     assert(!fs::exists(base / "stubborn" / "pid"));  // lazy: nothing spawned by registration
 
     // a disabled plugin is never spawned; enabled ones start on the first search
@@ -99,7 +111,7 @@ static void test_services_and_shutdown() {
     assert(gone(deaf) && gone(stubborn));  // reaped, not zombies
     (void)s.engine->search(core::Query("again"));
     assert(read_pid(base / "stubborn") == stubborn && gone(stubborn));  // no respawn after shutdown
-    app::shutdown_services(s);                               // twice is fine
+    app::shutdown_services(s);                                          // twice is fine
 }
 
 int main() {

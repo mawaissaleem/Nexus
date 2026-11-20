@@ -31,5 +31,4 @@ struct DesktopEntry {
     }
 };
 
-} // namespace nexus::index
-
+}  // namespace nexus::index

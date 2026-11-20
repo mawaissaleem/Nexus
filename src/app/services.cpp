@@ -61,4 +61,4 @@ index::FileIndexOptions file_index_options(const core::ConfigManager& config) {
     return index::FileIndexOptions{config.get_search_directories(), config.get_file_exclusions()};
 }
 
-} // namespace nexus::app
+}  // namespace nexus::app

@@ -19,10 +19,9 @@ std::string trim(std::string_view s) {
     return std::string(s.substr(start, end - start));
 }
 
-} // namespace
+}  // namespace
 
-Query::Query(std::string raw_query, std::string prefix)
-    : raw_(std::move(raw_query)), prefix_(std::move(prefix)) {
+Query::Query(std::string raw_query, std::string prefix) : raw_(std::move(raw_query)), prefix_(std::move(prefix)) {
     parse();
 }
 
@@ -46,5 +45,4 @@ void Query::parse() {
     }
 }
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

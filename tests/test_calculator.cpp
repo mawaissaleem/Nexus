@@ -57,4 +57,3 @@ int main() {
     std::cout << "All CalculatorProvider tests passed successfully!\n";
     return 0;
 }
-

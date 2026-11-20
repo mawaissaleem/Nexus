@@ -25,5 +25,4 @@ private:
     core::AsyncSearchCoordinator coordinator_;
 };
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

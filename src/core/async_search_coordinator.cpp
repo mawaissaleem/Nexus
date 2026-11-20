@@ -3,8 +3,7 @@
 
 namespace nexus::core {
 
-AsyncSearchCoordinator::AsyncSearchCoordinator(std::shared_ptr<SearchEngine> engine)
-    : engine_(std::move(engine)) {
+AsyncSearchCoordinator::AsyncSearchCoordinator(std::shared_ptr<SearchEngine> engine) : engine_(std::move(engine)) {
     if (!engine_) {
         throw std::invalid_argument("SearchEngine cannot be null");
     }
@@ -24,11 +23,7 @@ AsyncSearchCoordinator::~AsyncSearchCoordinator() {
     worker_.join();  // engine->search returns promptly once its token is set
 }
 
-uint64_t AsyncSearchCoordinator::search(
-    const Query& query,
-    size_t max_results,
-    CompletionCallback on_complete)
-{
+uint64_t AsyncSearchCoordinator::search(const Query& query, size_t max_results, CompletionCallback on_complete) {
     auto token = std::make_shared<std::atomic<bool>>(false);
     uint64_t my_generation;
     {
@@ -71,4 +66,4 @@ void AsyncSearchCoordinator::run() {
     }
 }
 
-} // namespace nexus::core
+}  // namespace nexus::core

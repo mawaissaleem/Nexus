@@ -28,7 +28,7 @@ bool valid_exclusion(const std::string& name) {
     return !name.empty() && name.find_first_of("\"\\/") == std::string::npos;
 }
 
-} // namespace
+}  // namespace
 
 ConfigManager::ConfigManager(const std::string& config_path) : config_file_path_(config_path) {
     set_defaults();
@@ -56,8 +56,7 @@ std::string ConfigManager::resolve_config_path() {
 }
 
 std::vector<std::string> ConfigManager::default_file_exclusions() {
-    return {"node_modules", "build", "target", "__pycache__", "venv", ".venv",
-            "CMakeFiles", "Testing", "dist", "out"};
+    return {"node_modules", "build", "target", "__pycache__", "venv", ".venv", "CMakeFiles", "Testing", "dist", "out"};
 }
 
 void ConfigManager::set_defaults() {
@@ -76,12 +75,9 @@ void ConfigManager::set_defaults() {
         std::filesystem::path home_path(home);
         std::error_code ec;
 
-        std::vector<std::string> standard_dirs = {
-            (home_path / "Documents").string(),
-            (home_path / "Downloads").string(),
-            (home_path / "Desktop").string(),
-            (home_path / "Projects").string()
-        };
+        std::vector<std::string> standard_dirs = {(home_path / "Documents").string(),
+                                                  (home_path / "Downloads").string(), (home_path / "Desktop").string(),
+                                                  (home_path / "Projects").string()};
 
         for (const auto& d : standard_dirs) {
             if (std::filesystem::exists(d, ec) && std::filesystem::is_directory(d, ec)) {
@@ -208,7 +204,8 @@ bool ConfigManager::save() {
     file << "  ],\n";
     file << "  \"file_exclusions\": [\n";
     for (size_t i = 0; i < file_exclusions_.size(); ++i) {
-        file << "    " << utils::json_quote(file_exclusions_[i]) << (i + 1 < file_exclusions_.size() ? "," : "") << "\n";
+        file << "    " << utils::json_quote(file_exclusions_[i]) << (i + 1 < file_exclusions_.size() ? "," : "")
+             << "\n";
     }
     file << "  ]\n";
     file << "}\n";
@@ -248,9 +245,8 @@ bool ConfigManager::remove_search_directory(const std::string& path) {
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = std::remove_if(search_directories_.begin(), search_directories_.end(), [&](const std::string& d) {
-            return d == canonical || d == path || d == expanded;
-        });
+        auto it = std::remove_if(search_directories_.begin(), search_directories_.end(),
+                                 [&](const std::string& d) { return d == canonical || d == path || d == expanded; });
         if (it != search_directories_.end()) {
             search_directories_.erase(it, search_directories_.end());
         } else {
@@ -270,7 +266,8 @@ void ConfigManager::set_file_exclusions(const std::vector<std::string>& names) {
         std::lock_guard<std::mutex> lock(mutex_);
         file_exclusions_.clear();
         for (const auto& n : names) {
-            if (valid_exclusion(n) && std::find(file_exclusions_.begin(), file_exclusions_.end(), n) == file_exclusions_.end()) {
+            if (valid_exclusion(n) &&
+                std::find(file_exclusions_.begin(), file_exclusions_.end(), n) == file_exclusions_.end()) {
                 file_exclusions_.push_back(n);
             }
         }
@@ -364,4 +361,4 @@ bool ConfigManager::set_shortcut(const std::string& shortcut) {
     return save();
 }
 
-} // namespace nexus::core
+}  // namespace nexus::core

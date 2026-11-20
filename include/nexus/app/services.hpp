@@ -23,13 +23,15 @@ struct Services {
     std::shared_ptr<index::FileIndexer> file_indexer;
     std::shared_ptr<core::SearchEngine> engine;
     std::shared_ptr<providers::ClipboardProvider> clipboard;  // also in `engine`; the GUI feeds it via add()
-    std::vector<std::shared_ptr<providers::PluginProvider>> plugins;  // also registered in `engine`; nothing spawned until a search
+    std::vector<std::shared_ptr<providers::PluginProvider>>
+        plugins;  // also registered in `engine`; nothing spawned until a search
 };
 
 // `config` and `aliases` must outlive the returned services (providers hold references).
 // Plugins are discovered in `plugin_dirs` (default: the XDG plugin directories, user dir first).
-[[nodiscard]] Services make_services(core::ConfigManager& config, core::AliasManager& aliases,
-                                     const std::vector<std::filesystem::path>& plugin_dirs = providers::plugin_search_dirs());
+[[nodiscard]] Services
+make_services(core::ConfigManager& config, core::AliasManager& aliases,
+              const std::vector<std::filesystem::path>& plugin_dirs = providers::plugin_search_dirs());
 
 // Asks every plugin to exit and waits one shared `grace` for them, then kills the rest. Call it explicitly on
 // teardown (not from a destructor); safe to call twice.
@@ -38,4 +40,4 @@ void shutdown_services(Services& s, std::chrono::milliseconds grace = std::chron
 // What the file indexer needs, read on the calling thread so worker threads never race the Settings dialog.
 [[nodiscard]] index::FileIndexOptions file_index_options(const core::ConfigManager& config);
 
-} // namespace nexus::app
+}  // namespace nexus::app

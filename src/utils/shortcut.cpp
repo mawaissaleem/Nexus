@@ -27,7 +27,9 @@ std::optional<Shortcut> parse_shortcut(std::string_view text) {
         if (FuzzyMatcher::iequals(t, "ctrl") || FuzzyMatcher::iequals(t, "control")) sc.ctrl = true;
         else if (FuzzyMatcher::iequals(t, "alt")) sc.alt = true;
         else if (FuzzyMatcher::iequals(t, "shift")) sc.shift = true;
-        else if (FuzzyMatcher::iequals(t, "super") || FuzzyMatcher::iequals(t, "meta") || FuzzyMatcher::iequals(t, "win")) sc.super = true;
+        else if (FuzzyMatcher::iequals(t, "super") || FuzzyMatcher::iequals(t, "meta") ||
+                 FuzzyMatcher::iequals(t, "win"))
+            sc.super = true;
         else return std::nullopt;
     }
     if (!(sc.ctrl || sc.alt || sc.shift || sc.super)) return std::nullopt;
@@ -45,4 +47,4 @@ bool is_wayland_session() {
     return (type && std::strcmp(type, "wayland") == 0) || (display && *display);
 }
 
-} // namespace nexus::utils
+}  // namespace nexus::utils

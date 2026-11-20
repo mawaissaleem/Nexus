@@ -24,4 +24,4 @@ std::optional<Shortcut> parse_shortcut(std::string_view text);
 // Global key grabs don't work there, so the user must bind `nexus --toggle` in the compositor.
 bool is_wayland_session();
 
-} // namespace nexus::utils
+}  // namespace nexus::utils

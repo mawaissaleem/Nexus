@@ -44,8 +44,8 @@ void print_help(std::ostream& out) {
 }
 
 void print_results(std::ostream& out, const std::vector<core::SearchResult>& results, double latency_ms) {
-    out << "\nResults (" << results.size() << " matches found in "
-        << std::fixed << std::setprecision(2) << latency_ms << " ms):\n";
+    out << "\nResults (" << results.size() << " matches found in " << std::fixed << std::setprecision(2) << latency_ms
+        << " ms):\n";
     out << "------------------------------------------------------------\n";
 
     if (results.empty()) {
@@ -59,8 +59,8 @@ void print_results(std::ostream& out, const std::vector<core::SearchResult>& res
         if (!res.subtitle.empty()) {
             out << " - " << res.subtitle;
         }
-        out << "  (score: " << std::fixed << std::setprecision(1) << res.score
-            << ", provider: " << res.provider_id << ")\n";
+        out << "  (score: " << std::fixed << std::setprecision(1) << res.score << ", provider: " << res.provider_id
+            << ")\n";
     }
     out << "------------------------------------------------------------\n";
 }
@@ -195,7 +195,7 @@ int run_query(const Args& args, Services& s, std::ostream& out) {
     return 0;
 }
 
-} // namespace
+}  // namespace
 
 std::optional<int> run_info_cli(const Args& args, std::ostream& out, std::ostream& err) {
     if (args.empty()) return std::nullopt;
@@ -218,8 +218,7 @@ std::optional<int> run_info_cli(const Args& args, std::ostream& out, std::ostrea
 }
 
 std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::AliasManager& aliases,
-                           std::ostream& out, std::ostream& err,
-                           std::function<bool()> clear_running_clipboard) {
+                           std::ostream& out, std::ostream& err, std::function<bool()> clear_running_clipboard) {
     if (const auto rc = run_info_cli(args, out, err)) return rc;
     if (args.empty()) return std::nullopt;
     const std::string& cmd = args[0];
@@ -246,4 +245,4 @@ std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::
     return rc;
 }
 
-} // namespace nexus::app
+}  // namespace nexus::app

@@ -19,7 +19,10 @@ struct HookProvider : ISearchProvider {
     std::string id() const override { return "hook"; }
     std::string name() const override { return "hook"; }
     std::vector<SearchResult> search(const Query&, const std::atomic<bool>&) override { return {}; }
-    bool on_executed(const SearchResult&) override { ++calls; return outcome; }
+    bool on_executed(const SearchResult&) override {
+        ++calls;
+        return outcome;
+    }
 };
 
 SearchResult make(ActionKind kind, std::string payload, std::string provider = "x") {
@@ -29,7 +32,7 @@ SearchResult make(ActionKind kind, std::string payload, std::string provider = "
     r.provider_id = std::move(provider);
     return r;
 }
-} // namespace
+}  // namespace
 
 int main() {
     const fs::path dir = fs::temp_directory_path() / ("nexus_test_dispatch_" + std::to_string(getpid()));
@@ -39,8 +42,9 @@ int main() {
     // Fake programs on PATH record their name and every argv entry as [arg]; xdg-open and the terminal
     // are faked too, so nothing real starts. Write to a temp file then mv, so the reader never sees half a line.
     for (const char* name : {"nexus-fake-launch", "xdg-open", "x-terminal-emulator"}) {
-        std::ofstream(dir / name) << "#!/bin/sh\n{ printf '" << name << ":'; for a in \"$@\"; do printf '[%s]' \"$a\"; done; } > '"
-                                  << out.string() << ".tmp' && mv '" << out.string() << ".tmp' '" << out.string() << "'\n";
+        std::ofstream(dir / name) << "#!/bin/sh\n{ printf '" << name
+                                  << ":'; for a in \"$@\"; do printf '[%s]' \"$a\"; done; } > '" << out.string()
+                                  << ".tmp' && mv '" << out.string() << ".tmp' '" << out.string() << "'\n";
         fs::permissions(dir / name, fs::perms::owner_all);
     }
     const char* cp = std::getenv("PATH");

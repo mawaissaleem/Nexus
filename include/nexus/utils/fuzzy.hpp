@@ -35,5 +35,4 @@ public:
     static std::string to_lower(std::string_view s);
 };
 
-} // namespace nexus::utils
-
+}  // namespace nexus::utils

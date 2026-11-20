@@ -34,4 +34,4 @@ private:
     std::shared_ptr<Database> db_;
 };
 
-} // namespace nexus::index
+}  // namespace nexus::index

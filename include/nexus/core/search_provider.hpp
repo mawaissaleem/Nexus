@@ -24,10 +24,7 @@ public:
     [[nodiscard]] virtual std::vector<std::string> prefixes() const { return {""}; }
 
     // Execute search for query. If cancel_token becomes true, provider should abort early.
-    virtual std::vector<SearchResult> search(
-        const Query& query,
-        const std::atomic<bool>& cancel_token
-    ) = 0;
+    virtual std::vector<SearchResult> search(const Query& query, const std::atomic<bool>& cancel_token) = 0;
 
     // Post-execute hook, called by dispatch_action() before the action runs (so a failed launch still counts).
     // For ActionKind::Internal results this IS the action and its return value is the outcome.
@@ -36,5 +33,4 @@ public:
 
 using SearchProviderPtr = std::shared_ptr<ISearchProvider>;
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

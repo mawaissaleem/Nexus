@@ -114,10 +114,13 @@ std::optional<core::SearchResult> decode_result(const JsonValue& item, const Man
     return r;
 }
 
-} // namespace
+}  // namespace
 
 std::optional<Manifest> parse_manifest(const fs::path& dir, std::string* error) {
-    auto bad = [&](std::string msg) -> std::optional<Manifest> { fail(error, std::move(msg)); return std::nullopt; };
+    auto bad = [&](std::string msg) -> std::optional<Manifest> {
+        fail(error, std::move(msg));
+        return std::nullopt;
+    };
 
     fs::path name_path = dir.filename().empty() ? dir.parent_path().filename() : dir.filename();
     // O_NONBLOCK so a FIFO swapped in for plugin.json can't block startup; fstat on the opened file (not a
@@ -125,18 +128,26 @@ std::optional<Manifest> parse_manifest(const fs::path& dir, std::string* error) 
     const std::string json_path = (dir / "plugin.json").string();
     const int fd = ::open(json_path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) return bad("cannot read plugin.json");
-    struct stat st{};
-    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) { ::close(fd); return bad("plugin.json is not a regular file"); }
-    if (static_cast<std::uintmax_t>(st.st_size) > kMaxLineBytes) { ::close(fd); return bad("plugin.json is larger than 64 KiB"); }
+    struct stat st {};
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        ::close(fd);
+        return bad("plugin.json is not a regular file");
+    }
+    if (static_cast<std::uintmax_t>(st.st_size) > kMaxLineBytes) {
+        ::close(fd);
+        return bad("plugin.json is larger than 64 KiB");
+    }
     std::string text;
     char chunk[4096];
     ssize_t n;
-    while (text.size() <= kMaxLineBytes && (n = ::read(fd, chunk, sizeof chunk)) > 0) text.append(chunk, static_cast<size_t>(n));
+    while (text.size() <= kMaxLineBytes && (n = ::read(fd, chunk, sizeof chunk)) > 0)
+        text.append(chunk, static_cast<size_t>(n));
     ::close(fd);
     if (text.size() > kMaxLineBytes) return bad("plugin.json is larger than 64 KiB");
     JsonValue root;
     std::string perr;
-    if (!utils::parse_json(text, root, &perr) || !root.is_object()) return bad("plugin.json is not a JSON object: " + perr);
+    if (!utils::parse_json(text, root, &perr) || !root.is_object())
+        return bad("plugin.json is not a JSON object: " + perr);
 
     Manifest m;
     m.dir = dir;
@@ -176,7 +187,8 @@ std::optional<Manifest> parse_manifest(const fs::path& dir, std::string* error) 
         if (!p->is_array()) return bad("permissions must be an array");
         for (const JsonValue& e : p->array) {
             auto k = e.is_string() ? kind_from_name(e.string) : std::nullopt;
-            if (!k || *k == core::ActionKind::None) return bad("invalid permission (shell and unknown kinds are refused)");
+            if (!k || *k == core::ActionKind::None)
+                return bad("invalid permission (shell and unknown kinds are refused)");
             m.permissions.push_back(*k);
         }
     }
@@ -185,7 +197,8 @@ std::optional<Manifest> parse_manifest(const fs::path& dir, std::string* error) 
 
 std::string encode_hello() { return "{\"type\":\"hello\",\"api_version\":" + std::to_string(kApiVersion) + "}\n"; }
 
-std::string encode_search(std::int64_t id, std::string_view text, std::string_view prefix, std::string_view normalized) {
+std::string encode_search(std::int64_t id, std::string_view text, std::string_view prefix,
+                          std::string_view normalized) {
     return "{\"type\":\"search\",\"id\":" + std::to_string(id) + ",\"text\":" + json_quote(text) +
            ",\"prefix\":" + json_quote(prefix) + ",\"normalized\":" + json_quote(normalized) + "}\n";
 }
@@ -206,8 +219,10 @@ std::string argv_to_exec_line(const std::vector<std::string>& argv) {
         for (char c : a) {
             // Quoting level escapes " ` $ \ with a backslash; the string level then doubles every backslash.
             if (c == '\\') line += "\\\\\\\\";
-            else if (c == '"' || c == '`' || c == '$') { line += "\\\\"; line += c; }
-            else if (c == '%') line += "%%";
+            else if (c == '"' || c == '`' || c == '$') {
+                line += "\\\\";
+                line += c;
+            } else if (c == '%') line += "%%";
             else line += c;
         }
         line += '"';
@@ -239,4 +254,4 @@ Decoded decode_line(std::string_view line, const Manifest& manifest, std::int64_
     return out;
 }
 
-} // namespace nexus::providers::plugin
+}  // namespace nexus::providers::plugin

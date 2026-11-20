@@ -16,14 +16,10 @@
 
 namespace nexus::ui {
 
-LauncherWindow::LauncherWindow(
-    std::shared_ptr<core::SearchEngine> search_engine,
-    ThemeController& theme,
-    core::ConfigManager& config,
-    ConfirmFn confirm,
-    QWidget* parent
-) : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config),
-    confirm_(confirm ? std::move(confirm) : ConfirmFn(ask_yes_no)) {
+LauncherWindow::LauncherWindow(std::shared_ptr<core::SearchEngine> search_engine, ThemeController& theme,
+                               core::ConfigManager& config, ConfirmFn confirm, QWidget* parent)
+    : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config),
+      confirm_(confirm ? std::move(confirm) : ConfirmFn(ask_yes_no)) {
     query_manager_ = std::make_unique<QueryManager>(search_engine_, this);
     connect(query_manager_.get(), &QueryManager::results_ready, this, &LauncherWindow::on_search_results);
 
@@ -129,71 +125,79 @@ void LauncherWindow::setup_ui() {
 
 void LauncherWindow::apply_palette() {
     const Palette& p = theme_.palette();
-    container_->setStyleSheet(
-        "#container {"
-        "  background-color: " + p.container_bg + ";"
-        "  border: 1px solid " + p.overlay("0.16") + ";"
-        "  border-radius: 14px;"
-        "}"
-    );
+    container_->setStyleSheet("#container {"
+                              "  background-color: " +
+                              p.container_bg +
+                              ";"
+                              "  border: 1px solid " +
+                              p.overlay("0.16") +
+                              ";"
+                              "  border-radius: 14px;"
+                              "}");
     shadow_->setColor(p.shadow);
-    search_input_->setStyleSheet(
-        "QLineEdit {"
-        "  background: transparent;"
-        "  border: none;"
-        "  color: " + p.text_strong + ";"
-        "  font-size: 18px;"
-        "  font-weight: 500;"
-        "  padding: 4px;"
-        "  selection-background-color: " + p.accent + ";"
-        "}"
-    );
+    search_input_->setStyleSheet("QLineEdit {"
+                                 "  background: transparent;"
+                                 "  border: none;"
+                                 "  color: " +
+                                 p.text_strong +
+                                 ";"
+                                 "  font-size: 18px;"
+                                 "  font-weight: 500;"
+                                 "  padding: 4px;"
+                                 "  selection-background-color: " +
+                                 p.accent +
+                                 ";"
+                                 "}");
     separator_->setStyleSheet("background-color: " + p.overlay("0.08") + "; max-height: 1px;");
-    result_list_->setStyleSheet(
-        "QListWidget {"
-        "  background: transparent;"
-        "  border: none;"
-        "  outline: none;"
-        "}"
-        "QListWidget::item {"
-        "  border-radius: 8px;"
-        "  padding: 0px;"
-        "}"
-        "QListWidget::item:selected {"
-        "  background: transparent;"
-        "}"
-        "QScrollBar:vertical {"
-        "  border: none;"
-        "  background: transparent;"
-        "  width: 6px;"
-        "  margin: 0px;"
-        "}"
-        "QScrollBar::handle:vertical {"
-        "  background: " + p.overlay("0.2") + ";"
-        "  min-height: 20px;"
-        "  border-radius: 3px;"
-        "}"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
-        "  height: 0px;"
-        "}"
-    );
+    result_list_->setStyleSheet("QListWidget {"
+                                "  background: transparent;"
+                                "  border: none;"
+                                "  outline: none;"
+                                "}"
+                                "QListWidget::item {"
+                                "  border-radius: 8px;"
+                                "  padding: 0px;"
+                                "}"
+                                "QListWidget::item:selected {"
+                                "  background: transparent;"
+                                "}"
+                                "QScrollBar:vertical {"
+                                "  border: none;"
+                                "  background: transparent;"
+                                "  width: 6px;"
+                                "  margin: 0px;"
+                                "}"
+                                "QScrollBar::handle:vertical {"
+                                "  background: " +
+                                p.overlay("0.2") +
+                                ";"
+                                "  min-height: 20px;"
+                                "  border-radius: 3px;"
+                                "}"
+                                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+                                "  height: 0px;"
+                                "}");
     hint_label_->setStyleSheet("color: " + p.hint + "; font-size: 11px; font-weight: 500;");
     brand_label_->setStyleSheet("color: " + p.brand + "; font-size: 11px; font-weight: 600;");
-    settings_btn_->setStyleSheet(
-        "QPushButton {"
-        "  background: transparent;"
-        "  color: " + p.hint + ";"
-        "  border: none;"
-        "  font-size: 11px;"
-        "  font-weight: 600;"
-        "  padding: 2px 6px;"
-        "  border-radius: 4px;"
-        "}"
-        "QPushButton:hover {"
-        "  color: " + p.accent + ";"
-        "  background: " + p.overlay("0.05") + ";"
-        "}"
-    );
+    settings_btn_->setStyleSheet("QPushButton {"
+                                 "  background: transparent;"
+                                 "  color: " +
+                                 p.hint +
+                                 ";"
+                                 "  border: none;"
+                                 "  font-size: 11px;"
+                                 "  font-weight: 600;"
+                                 "  padding: 2px 6px;"
+                                 "  border-radius: 4px;"
+                                 "}"
+                                 "QPushButton:hover {"
+                                 "  color: " +
+                                 p.accent +
+                                 ";"
+                                 "  background: " +
+                                 p.overlay("0.05") +
+                                 ";"
+                                 "}");
     for (int i = 0; i < result_list_->count(); ++i) {
         if (auto* widget = qobject_cast<ResultWidget*>(result_list_->itemWidget(result_list_->item(i)))) {
             widget->set_palette(p);
@@ -212,7 +216,7 @@ void LauncherWindow::center_on_screen() {
 
     QRect geom = screen->geometry();
     int x = geom.x() + (geom.width() - width()) / 2;
-    int y = geom.y() + (geom.height() / 4); // Position in upper third of active monitor
+    int y = geom.y() + (geom.height() / 4);  // Position in upper third of active monitor
 
     // Update screen and geometry
     if (windowHandle()) {
@@ -254,7 +258,7 @@ void LauncherWindow::toggle_launcher() {
 }
 
 void LauncherWindow::on_text_changed(const QString& /*text*/) {
-    debounce_timer_->start(25); // 25 ms debounce
+    debounce_timer_->start(25);  // 25 ms debounce
 }
 
 void LauncherWindow::perform_search() {
@@ -336,15 +340,15 @@ void LauncherWindow::run_result(core::SearchResult res) {
         return;
     }
     // The window is already hidden here; on "no" it simply stays hidden, like Esc.
-    if (!run_action(res, search_engine_->providers(), confirm_))
-        NEXUS_LOG_INFO("Declined: " + res.title);
+    if (!run_action(res, search_engine_->providers(), confirm_)) NEXUS_LOG_INFO("Declined: " + res.title);
 }
 
 void LauncherWindow::execute_selected() {
     int row = result_list_->currentRow();
     if (row >= 0 && row < static_cast<int>(current_results_.size())) {
         hide_launcher();
-        run_result(current_results_[row]);  // copied: a modal confirm runs an event loop that may replace current_results_
+        run_result(
+            current_results_[row]);  // copied: a modal confirm runs an event loop that may replace current_results_
     }
 }
 
@@ -352,7 +356,8 @@ void LauncherWindow::on_item_clicked(QListWidgetItem* item) {
     int row = result_list_->row(item);
     if (row >= 0 && row < static_cast<int>(current_results_.size())) {
         hide_launcher();
-        run_result(current_results_[row]);  // copied: a modal confirm runs an event loop that may replace current_results_
+        run_result(
+            current_results_[row]);  // copied: a modal confirm runs an event loop that may replace current_results_
     }
 }
 
@@ -385,10 +390,9 @@ bool LauncherWindow::eventFilter(QObject* watched, QEvent* event) {
         bool ctrl_np_enabled = config_.is_ctrl_np_navigation_enabled();
         bool is_ctrl = (keyEvent->modifiers() == Qt::ControlModifier);
 
-        bool is_next = (keyEvent->key() == Qt::Key_Down) ||
-                       (ctrl_np_enabled && is_ctrl && keyEvent->key() == Qt::Key_N);
-        bool is_prev = (keyEvent->key() == Qt::Key_Up) ||
-                       (ctrl_np_enabled && is_ctrl && keyEvent->key() == Qt::Key_P);
+        bool is_next =
+            (keyEvent->key() == Qt::Key_Down) || (ctrl_np_enabled && is_ctrl && keyEvent->key() == Qt::Key_N);
+        bool is_prev = (keyEvent->key() == Qt::Key_Up) || (ctrl_np_enabled && is_ctrl && keyEvent->key() == Qt::Key_P);
 
         if (is_next) {
             select_next_result();
@@ -444,5 +448,4 @@ void LauncherWindow::open_settings() {
     emit settings_requested();
 }
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

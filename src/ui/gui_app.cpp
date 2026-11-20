@@ -32,13 +32,11 @@ bool is_settings_arg(const std::string& a) { return a == "--settings" || a == "s
 class GuiApp {
 public:
     GuiApp(QApplication& app, core::ConfigManager& config, core::AliasManager& aliases)
-        : app_(app), config_(config), aliases_(aliases),
-          services_(app::make_services(config, aliases)),
-          file_watcher_(services_.db, [this]() {
-              QMetaObject::invokeMethod(&app_, [this]() { start_rebuild(); }, Qt::QueuedConnection);
-          }),
-          theme_(config.get_theme()),
-          launcher_(std::make_unique<LauncherWindow>(services_.engine, theme_, config)) {
+        : app_(app), config_(config), aliases_(aliases), services_(app::make_services(config, aliases)),
+          file_watcher_(
+              services_.db,
+              [this]() { QMetaObject::invokeMethod(&app_, [this]() { start_rebuild(); }, Qt::QueuedConnection); }),
+          theme_(config.get_theme()), launcher_(std::make_unique<LauncherWindow>(services_.engine, theme_, config)) {
         // New/removed .desktop files update the app index on the watcher's own thread (a rebuild is ~5 ms, so a
         // full app rescan per change; the file index is left alone). Stopped (joined) in run().
         services_.app_indexer->start_watching();
@@ -79,7 +77,8 @@ public:
         const int rc = app_.exec();
         quitting_ = true;  // walkers poll this, so quit mid-build returns within one directory entry
         if (startup_index_thread_.joinable()) startup_index_thread_.join();
-        if (rebuild_thread_.joinable()) rebuild_thread_.join();  // quit during a rebuild: wait, never destroy a joinable thread
+        if (rebuild_thread_.joinable())
+            rebuild_thread_.join();  // quit during a rebuild: wait, never destroy a joinable thread
         file_watcher_.stop();
         services_.app_indexer->stop_watching();
         app::shutdown_services(services_);
@@ -182,7 +181,8 @@ private:
 
         // Once per process start. Without a tray only the log line is shown.
         if (utils::is_wayland_session()) {
-            const QString hint = "Global shortcuts don't work on Wayland. Bind `nexus --toggle` to a key in your compositor settings.";
+            const QString hint =
+                "Global shortcuts don't work on Wayland. Bind `nexus --toggle` to a key in your compositor settings.";
             NEXUS_LOG_WARN(hint.toStdString());
             if (tray_available) tray_icon_.showMessage("Nexus", hint, QSystemTrayIcon::Warning, 10000);
         }
@@ -204,17 +204,22 @@ private:
         }
         rebuilding_ = true;
         if (rebuild_thread_.joinable()) rebuild_thread_.join();  // previous worker already finished
-        tray_icon_.showMessage("Nexus", "Rebuilding application and file indexes...", QSystemTrayIcon::Information, 3000);
+        tray_icon_.showMessage("Nexus", "Rebuilding application and file indexes...", QSystemTrayIcon::Information,
+                               3000);
         rebuild_thread_ = std::thread([this, options = app::file_index_options(config_)]() {
             const size_t count = services_.app_indexer->rebuild_index();
             file_watcher_.arm(options, quitting_);
             const size_t files = services_.file_indexer->rebuild(options, quitting_);
             file_watcher_.resume();
-            QMetaObject::invokeMethod(&tray_icon_, [this, count, files]() {
-                tray_icon_.showMessage("Nexus", QString("Indexes rebuilt (%1 apps, %2 files)").arg(count).arg(files),
-                                       QSystemTrayIcon::Information, 3000);
-                rebuild_finished();
-            }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(
+                &tray_icon_,
+                [this, count, files]() {
+                    tray_icon_.showMessage("Nexus",
+                                           QString("Indexes rebuilt (%1 apps, %2 files)").arg(count).arg(files),
+                                           QSystemTrayIcon::Information, 3000);
+                    rebuild_finished();
+                },
+                Qt::QueuedConnection);
         });
     }
 
@@ -238,10 +243,10 @@ private:
     std::unique_ptr<SettingsDialog> settings_;
 };
 
-} // namespace
+}  // namespace
 
-int run_gui(QApplication& app, const std::vector<std::string>& args,
-            core::ConfigManager& config, core::AliasManager& aliases) {
+int run_gui(QApplication& app, const std::vector<std::string>& args, core::ConfigManager& config,
+            core::AliasManager& aliases) {
     const std::string arg1 = args.empty() ? "" : args[0];
 
     // Another instance already running: hand the command over and exit.
@@ -257,4 +262,4 @@ int run_gui(QApplication& app, const std::vector<std::string>& args,
     return gui.run(is_settings_arg(arg1));
 }
 
-} // namespace nexus::ui
+}  // namespace nexus::ui

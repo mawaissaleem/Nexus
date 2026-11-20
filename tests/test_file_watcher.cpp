@@ -33,11 +33,12 @@ bool wait_until(const std::function<bool()>& pred) {
 }
 
 bool indexed(index::Database& db, const fs::path& p) {
-    for (const auto& e : db.find_files(p.filename().string())) if (e.path == p.string()) return true;
+    for (const auto& e : db.find_files(p.filename().string()))
+        if (e.path == p.string()) return true;
     return false;
 }
 
-} // namespace
+}  // namespace
 
 int main() {
     const fs::path root = fs::temp_directory_path() / ("nexus_test_file_watcher_" + std::to_string(getpid()));
@@ -45,7 +46,7 @@ int main() {
     const fs::path tree = root / "tree";
     const fs::path outside = root / "outside";
     touch(tree / "docs" / "old.txt");
-    touch(tree / "a" / "b" / "c" / "shallow.txt");   // level 3 dir c: still in scope (max_depth 3)
+    touch(tree / "a" / "b" / "c" / "shallow.txt");  // level 3 dir c: still in scope (max_depth 3)
     touch(tree / "node_modules" / "pkg.js");
     fs::create_directories(outside);
 
@@ -62,11 +63,11 @@ int main() {
         assert(watcher.watch_count() == 5);
 
         // Protocol: events that happen while the rebuild runs are held, then replayed against the disk.
-        touch(tree / "docs" / "during.txt");      // seen by the rebuild; deleted again before resume
+        touch(tree / "docs" / "during.txt");  // seen by the rebuild; deleted again before resume
         indexer.rebuild(opts, kNoCancel);
         assert(indexed(*db, tree / "docs" / "during.txt"));
         fs::remove(tree / "docs" / "during.txt");
-        touch(tree / "docs" / "late.txt");        // created after the walk: only the held event knows
+        touch(tree / "docs" / "late.txt");  // created after the walk: only the held event knows
         assert(!indexed(*db, tree / "docs" / "late.txt"));
         watcher.resume();
         assert(wait_until([&] { return indexed(*db, tree / "docs" / "late.txt"); }));
@@ -80,7 +81,8 @@ int main() {
 
         // rename
         fs::rename(tree / "docs" / "old.txt", tree / "docs" / "renamed.txt");
-        assert(wait_until([&] { return indexed(*db, tree / "docs" / "renamed.txt") && !indexed(*db, tree / "docs" / "old.txt"); }));
+        assert(wait_until(
+            [&] { return indexed(*db, tree / "docs" / "renamed.txt") && !indexed(*db, tree / "docs" / "old.txt"); }));
 
         // new subdirectory with a file inside, created at once from outside (moved in): contents are indexed too
         touch(outside / "incoming" / "inner" / "payload.txt");
@@ -97,13 +99,17 @@ int main() {
 
         // rename of a directory within scope moves its rows and its watches
         fs::rename(tree / "fresh", tree / "fresher");
-        assert(wait_until([&] { return indexed(*db, tree / "fresher" / "inside.txt") && !indexed(*db, tree / "fresh" / "inside.txt"); }));
+        assert(wait_until([&] {
+            return indexed(*db, tree / "fresher" / "inside.txt") && !indexed(*db, tree / "fresh" / "inside.txt");
+        }));
         touch(tree / "fresher" / "after_rename.txt");
         assert(wait_until([&] { return indexed(*db, tree / "fresher" / "after_rename.txt"); }));
 
         // directory moved out of scope: its rows are gone, later changes there are not tracked
         fs::rename(tree / "incoming", outside / "gone");
-        assert(wait_until([&] { return !indexed(*db, tree / "incoming" / "inner" / "payload.txt") && !indexed(*db, tree / "incoming"); }));
+        assert(wait_until([&] {
+            return !indexed(*db, tree / "incoming" / "inner" / "payload.txt") && !indexed(*db, tree / "incoming");
+        }));
         touch(outside / "gone" / "inner" / "ghost.txt");
         touch(tree / "docs" / "sentinel_gone.txt");
         assert(wait_until([&] { return indexed(*db, tree / "docs" / "sentinel_gone.txt"); }));
@@ -182,7 +188,8 @@ int main() {
         const fs::path big = outside / "big";
         for (int i = 0; i < 15; ++i)
             for (int j = 0; j < 15; ++j)
-                for (int k = 0; k < 4; ++k) touch(big / std::to_string(i) / std::to_string(j) / (std::to_string(k) + ".txt"));
+                for (int k = 0; k < 4; ++k)
+                    touch(big / std::to_string(i) / std::to_string(j) / (std::to_string(k) + ".txt"));
         const index::FileIndexOptions bopts{{tree.string()}, {}, 3};
         for (const int delay_ms : {0, 20, 52, 80}) {
             index::FileWatcher watcher(db, [] {});
@@ -201,18 +208,24 @@ int main() {
     {
         auto db2 = std::make_shared<index::Database>((root / "t2.db").string());
         assert(db2->open());
-        assert(db2->replace_files({{"/r", "r", true, true}, {"/r/a", "a", true, false}, {"/r/a/x.txt", "x.txt", false, false},
-                                   {"/r/a b", "a b", true, false}, {"/r/a0", "a0", true, false}, {"/r/a%", "a%", true, false}}));
+        assert(db2->replace_files({{"/r", "r", true, true},
+                                   {"/r/a", "a", true, false},
+                                   {"/r/a/x.txt", "x.txt", false, false},
+                                   {"/r/a b", "a b", true, false},
+                                   {"/r/a0", "a0", true, false},
+                                   {"/r/a%", "a%", true, false}}));
         assert(db2->apply_file_changes({"/r/a"}, {{"/r", "r", true, false}, {"/r/new", "new", false, false}}));
         auto has = [&](const std::string& pattern, const std::string& path) {
-            for (const auto& e : db2->find_files(pattern)) if (e.path == path) return true;
+            for (const auto& e : db2->find_files(pattern))
+                if (e.path == path) return true;
             return false;
         };
         assert(!has("a", "/r/a") && !has("x.txt", "/r/a/x.txt"));
         assert(has("a b", "/r/a b") && has("a0", "/r/a0") && has("a%", "/r/a%"));
         assert(has("new", "/r/new"));
         bool root_kept = false;
-        for (const auto& e : db2->find_files("r")) if (e.path == "/r" && e.is_root) root_kept = true;
+        for (const auto& e : db2->find_files("r"))
+            if (e.path == "/r" && e.is_root) root_kept = true;
         assert(root_kept);
     }
 

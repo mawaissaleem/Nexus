@@ -12,4 +12,4 @@ struct FileEntry {
     bool is_root{false};  // a configured search directory itself
 };
 
-} // namespace nexus::index
+}  // namespace nexus::index

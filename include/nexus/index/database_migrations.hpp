@@ -38,4 +38,4 @@ namespace internal {
 void set_database_migrations_for_testing(Database& db, std::vector<Migration> migrations);
 }
 
-} // namespace nexus::index
+}  // namespace nexus::index

@@ -14,4 +14,4 @@ const char* theme_mode_name(ThemeMode mode);
 // True when the dark palette should be used. `system_is_dark` only matters for ThemeMode::System.
 bool resolve_dark(ThemeMode mode, bool system_is_dark);
 
-} // namespace nexus::utils
+}  // namespace nexus::utils

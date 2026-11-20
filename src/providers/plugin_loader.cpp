@@ -24,7 +24,8 @@ std::vector<fs::path> plugin_search_dirs() {
     return dirs;
 }
 
-std::vector<plugin::Manifest> discover_plugins(const std::vector<fs::path>& roots, const std::set<std::string>& reserved) {
+std::vector<plugin::Manifest> discover_plugins(const std::vector<fs::path>& roots,
+                                               const std::set<std::string>& reserved) {
     std::vector<plugin::Manifest> found;
     std::set<std::string> seen;
     for (const auto& root : roots) {
@@ -42,7 +43,8 @@ std::vector<plugin::Manifest> discover_plugins(const std::vector<fs::path>& root
             } else if (reserved.count(manifest->id)) {
                 NEXUS_LOG_WARN("Plugin " + dir.string() + " skipped: id '" + manifest->id + "' is reserved");
             } else if (!seen.insert(manifest->id).second) {
-                NEXUS_LOG_INFO("Plugin " + dir.string() + " skipped: id '" + manifest->id + "' already loaded from an earlier directory");
+                NEXUS_LOG_INFO("Plugin " + dir.string() + " skipped: id '" + manifest->id +
+                               "' already loaded from an earlier directory");
             } else {
                 found.push_back(std::move(*manifest));
             }
@@ -51,4 +53,4 @@ std::vector<plugin::Manifest> discover_plugins(const std::vector<fs::path>& root
     return found;
 }
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

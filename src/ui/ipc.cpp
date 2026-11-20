@@ -19,4 +19,4 @@ bool handle_ipc_clipboard_command(const QString& msg, providers::ClipboardProvid
     return true;
 }
 
-} // namespace nexus::ui
+}  // namespace nexus::ui

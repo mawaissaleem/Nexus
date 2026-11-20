@@ -27,7 +27,8 @@ int main(int argc, char* argv[]) {
         QCoreApplication core(argc, argv);  // local sockets want one; it is gone again before the GUI's QApplication
         return nexus::ui::send_ipc_command(nexus::ui::kIpcSocketName, nexus::ui::kIpcClearClipboard);
     };
-    if (const auto rc = nexus::app::run_cli(args, config, aliases, std::cout, std::cerr, clear_running_clipboard)) return *rc;
+    if (const auto rc = nexus::app::run_cli(args, config, aliases, std::cout, std::cerr, clear_running_clipboard))
+        return *rc;
 
     QApplication app(argc, argv);
     app.setApplicationName("Nexus");

@@ -10,8 +10,8 @@ enum class AliasType {
     Url,
     Directory,
     File,
-    Command,   // run directly, no shell
-    Shell      // target starts with ">": the only alias type that runs through /bin/sh
+    Command,  // run directly, no shell
+    Shell     // target starts with ">": the only alias type that runs through /bin/sh
 };
 
 struct AliasEntry {
@@ -43,4 +43,4 @@ private:
     std::vector<AliasEntry> aliases_;
 };
 
-} // namespace nexus::core
+}  // namespace nexus::core

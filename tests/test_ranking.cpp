@@ -16,7 +16,8 @@
 
 // Provider output for `q` (the two test apps only), ranked.
 static std::vector<nexus::core::SearchResult> ranked_pair(nexus::providers::ApplicationProvider& provider,
-                                                          const nexus::core::RankingEngine& ranker, const std::string& q) {
+                                                          const nexus::core::RankingEngine& ranker,
+                                                          const std::string& q) {
     std::atomic<bool> cancel{false};
     std::vector<nexus::core::SearchResult> out;
     for (auto& r : provider.search(nexus::core::Query(q), cancel)) out.push_back(std::move(r));
@@ -103,7 +104,8 @@ int main() {
         SearchResult zero = make("zero", 0);
         zero.usage_count = 0;
         SearchResult bare = make("bare", 0);
-        bare.usage_count = 0; bare.last_used = 0;
+        bare.usage_count = 0;
+        bare.last_used = 0;
         std::vector<SearchResult> rs3 = {zero, bare};
         ranker.rank(app_q, rs3, now);
         assert(rs3[0].score == rs3[1].score);
@@ -193,7 +195,8 @@ int main() {
         // A global usage count would raise X's score here; a query-conditioned one must not.
         const auto fi_after = ranked_pair(provider, ranker, "fi");
         assert(fi_after[0].id == fi_before[0].id && fi_after[1].id == fi_before[1].id);
-        assert(std::abs(fi_after[0].score - fi_before[0].score) < 1e-9 && std::abs(fi_after[1].score - fi_before[1].score) < 1e-9);
+        assert(std::abs(fi_after[0].score - fi_before[0].score) < 1e-9 &&
+               std::abs(fi_after[1].score - fi_before[1].score) < 1e-9);
 
         db->close();
         fs::remove_all(root);
@@ -205,20 +208,27 @@ int main() {
         const double cap = 0.5 * (w.exact_match - w.provider_relevance_weight);
         auto mk = [](const char* id, const char* title, double score, int count) {
             SearchResult r;
-            r.id = id; r.title = title; r.score = score;
-            if (count) { r.usage_count = count; r.last_used = 1000; }
+            r.id = id;
+            r.title = title;
+            r.score = score;
+            if (count) {
+                r.usage_count = count;
+                r.last_used = 1000;
+            }
             return r;
         };
         // Worst case: exact title with minimum provider score and no usage vs a non-exact with the
         // maximum provider score, a prefix match and maximal usage/recency.
-        std::vector<SearchResult> v = {mk("rival", "terminal", w.max_provider_score, 2000000000), mk("exact", "term", 0.0, 0)};
+        std::vector<SearchResult> v = {mk("rival", "terminal", w.max_provider_score, 2000000000),
+                                       mk("exact", "term", 0.0, 0)};
         ranker.rank(Query("term"), v, 1000);
         assert(v[0].id == "exact");
         const double rival_base = w.provider_relevance_weight + w.prefix_match + w.token_match;
-        assert(std::abs(v[1].score - (rival_base + cap)) < 1e-9);   // personalisation saturates exactly at the cap
+        assert(std::abs(v[1].score - (rival_base + cap)) < 1e-9);  // personalisation saturates exactly at the cap
 
         // Pathological weights (huge usage_boost) still cannot outrank.
-        RankingWeights big; big.usage_boost = 1e12;
+        RankingWeights big;
+        big.usage_boost = 1e12;
         v = {mk("rival", "terminal", big.max_provider_score, 2000000000), mk("exact", "term", 0.0, 0)};
         RankingEngine(big).rank(Query("term"), v, 1000);
         assert(v[0].id == "exact");
@@ -229,7 +239,9 @@ int main() {
         assert(std::abs(v[0].score - (5.0 * std::log(2.0) + 2.0)) < 1e-9);
 
         // Gap <= 0 disables personalisation instead of going negative.
-        RankingWeights flat; flat.exact_match = 100.0; flat.provider_relevance_weight = 400.0;
+        RankingWeights flat;
+        flat.exact_match = 100.0;
+        flat.provider_relevance_weight = 400.0;
         v = {mk("a", "x", 0.0, 5)};
         RankingEngine(flat).rank(Query("zzz"), v, 1000);
         assert(v[0].score == 0.0);
@@ -243,25 +255,31 @@ int main() {
         nexus::utils::Logger::instance().set_level(nexus::utils::LogLevel::Warning);
 
         auto mk = [](const char* id, double score) {
-            SearchResult r; r.id = id; r.title = "item"; r.score = score; return r;
+            SearchResult r;
+            r.id = id;
+            r.title = "item";
+            r.score = score;
+            return r;
         };
         std::vector<SearchResult> ok = {mk("ok", 2500.0)};
         ranker.rank(Query("zzz"), ok);
-        assert(captured.str().empty());                       // at the limit: no warning
+        assert(captured.str().empty());  // at the limit: no warning
         std::vector<SearchResult> over = {mk("over", 2500.5)};
         ranker.rank(Query("zzz"), over);
         assert(captured.str().find("exceeds max_provider_score") != std::string::npos);
-        assert(std::abs(over[0].score - 400.0) < 1e-9);       // still clamped
+        assert(std::abs(over[0].score - 400.0) < 1e-9);  // still clamped
 
         captured.str("");
         const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();
-        std::vector<SearchResult> bad = {mk("nan", nan), mk("good", 1250.0), mk("pinf", inf), mk("ninf", -inf), mk("good2", 1250.0)};
+        std::vector<SearchResult> bad = {mk("nan", nan), mk("good", 1250.0), mk("pinf", inf), mk("ninf", -inf),
+                                         mk("good2", 1250.0)};
         ranker.rank(Query("zzz"), bad);
         assert(captured.str().find("non-finite") != std::string::npos);
         for (const auto& r : bad) assert(std::isfinite(r.score));
         assert(bad[0].id == "good" && bad[1].id == "good2");  // finite 200 beats the zeroed ones
         assert(bad[2].score == 0.0 && bad[3].score == 0.0 && bad[4].score == 0.0);
-        assert(std::is_sorted(bad.begin(), bad.end(), [](const SearchResult& a, const SearchResult& b) { return a.score > b.score; }));
+        assert(std::is_sorted(bad.begin(), bad.end(),
+                              [](const SearchResult& a, const SearchResult& b) { return a.score > b.score; }));
 
         std::cerr.rdbuf(old);
         nexus::utils::Logger::instance().set_level(saved_level);
@@ -270,4 +288,3 @@ int main() {
     std::cout << "All RankingEngine tests passed successfully!\n";
     return 0;
 }
-

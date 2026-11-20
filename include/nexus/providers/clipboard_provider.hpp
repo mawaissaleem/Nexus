@@ -35,4 +35,4 @@ private:
     std::deque<std::string> entries_;  // newest first
 };
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

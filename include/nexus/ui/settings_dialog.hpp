@@ -25,10 +25,8 @@ class AliasEditDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit AliasEditDialog(const Palette& palette,
-                            QWidget* parent = nullptr,
-                            const QString& initial_name = "",
-                            const QString& initial_target = "");
+    explicit AliasEditDialog(const Palette& palette, QWidget* parent = nullptr, const QString& initial_name = "",
+                             const QString& initial_target = "");
 
     QString name() const;
     QString target() const;
@@ -134,5 +132,4 @@ private:
     core::AliasManager& aliases_;
 };
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

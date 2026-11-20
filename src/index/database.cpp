@@ -32,18 +32,15 @@ std::vector<std::string> split_string(const std::string& s, char delim) {
     return tokens;
 }
 
-} // namespace
+}  // namespace
 
-Database::Database(std::string db_path)
-    : db_path_(std::move(db_path)) {
+Database::Database(std::string db_path) : db_path_(std::move(db_path)) {
     if (db_path_.empty()) {
         db_path_ = default_db_path();
     }
 }
 
-Database::~Database() {
-    close();
-}
+Database::~Database() { close(); }
 
 std::string Database::default_db_path() {
     const char* xdg_data = std::getenv("XDG_DATA_HOME");
@@ -66,17 +63,14 @@ bool validate_migrations(const std::vector<Migration>& migrations) {
     for (size_t i = 0; i < migrations.size(); ++i) {
         int expected_version = static_cast<int>(i + 1);
         if (migrations[i].version != expected_version) {
-            NEXUS_LOG_ERROR("Migration list validation failed: migration at index " +
-                            std::to_string(i) + " has version " +
-                            std::to_string(migrations[i].version) +
-                            ", expected " + std::to_string(expected_version));
+            NEXUS_LOG_ERROR("Migration list validation failed: migration at index " + std::to_string(i) +
+                            " has version " + std::to_string(migrations[i].version) + ", expected " +
+                            std::to_string(expected_version));
             return false;
         }
         if (migrations[i].sql.empty() && !migrations[i].step) {
-            NEXUS_LOG_ERROR("Migration list validation failed: migration at index " +
-                            std::to_string(i) + " (version " +
-                            std::to_string(migrations[i].version) +
-                            ") has both empty SQL and null step function.");
+            NEXUS_LOG_ERROR("Migration list validation failed: migration at index " + std::to_string(i) + " (version " +
+                            std::to_string(migrations[i].version) + ") has both empty SQL and null step function.");
             return false;
         }
     }
@@ -101,6 +95,7 @@ int get_schema_version(sqlite3* db) {
 }
 
 const std::vector<Migration>& default_migrations() {
+    // clang-format off
     static const std::vector<Migration> migrations = {
         {
             1,
@@ -168,6 +163,7 @@ const std::vector<Migration>& default_migrations() {
             )"
         }
     };
+    // clang-format on
     return migrations;
 }
 
@@ -182,14 +178,15 @@ bool bootstrap_schema(sqlite3* db) {
     char* err_msg = nullptr;
     int rc = sqlite3_exec(db, bootstrap_sql, nullptr, nullptr, &err_msg);
     if (rc != SQLITE_OK) {
-        NEXUS_LOG_ERROR("Failed to bootstrap schema_version table: " + std::string(err_msg ? err_msg : "unknown error"));
+        NEXUS_LOG_ERROR("Failed to bootstrap schema_version table: " +
+                        std::string(err_msg ? err_msg : "unknown error"));
         if (err_msg) sqlite3_free(err_msg);
         return false;
     }
     return true;
 }
 
-} // namespace
+}  // namespace
 
 bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
     if (!db) {
@@ -215,8 +212,8 @@ bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
 
     if (current_version > max_known_version) {
         NEXUS_LOG_ERROR("Database schema version (" + std::to_string(current_version) +
-                        ") is newer than newest supported migration version (" +
-                        std::to_string(max_known_version) + "). Aborting.");
+                        ") is newer than newest supported migration version (" + std::to_string(max_known_version) +
+                        "). Aborting.");
         return false;
     }
 
@@ -228,9 +225,8 @@ bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
         char* err_msg = nullptr;
         int rc = sqlite3_exec(db, "BEGIN IMMEDIATE;", nullptr, nullptr, &err_msg);
         if (rc != SQLITE_OK) {
-            NEXUS_LOG_ERROR("Failed to begin immediate transaction for migration " +
-                            std::to_string(migration.version) + ": " +
-                            (err_msg ? err_msg : "unknown error"));
+            NEXUS_LOG_ERROR("Failed to begin immediate transaction for migration " + std::to_string(migration.version) +
+                            ": " + (err_msg ? err_msg : "unknown error"));
             if (err_msg) sqlite3_free(err_msg);
             return false;
         }
@@ -253,8 +249,7 @@ bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
         if (!migration.sql.empty()) {
             rc = sqlite3_exec(db, migration.sql.c_str(), nullptr, nullptr, &err_msg);
             if (rc != SQLITE_OK) {
-                NEXUS_LOG_ERROR("Failed to execute SQL for migration " +
-                                std::to_string(migration.version) + ": " +
+                NEXUS_LOG_ERROR("Failed to execute SQL for migration " + std::to_string(migration.version) + ": " +
                                 (err_msg ? err_msg : "unknown error"));
                 if (err_msg) sqlite3_free(err_msg);
                 sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
@@ -264,19 +259,17 @@ bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
 
         if (migration.step) {
             if (!migration.step(db)) {
-                NEXUS_LOG_ERROR("Step function failed for migration " +
-                                std::to_string(migration.version));
+                NEXUS_LOG_ERROR("Step function failed for migration " + std::to_string(migration.version));
                 sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
                 return false;
             }
         }
 
-        std::string record_sql = "INSERT INTO schema_version (version) VALUES (" +
-                                 std::to_string(migration.version) + ");";
+        std::string record_sql =
+            "INSERT INTO schema_version (version) VALUES (" + std::to_string(migration.version) + ");";
         rc = sqlite3_exec(db, record_sql.c_str(), nullptr, nullptr, &err_msg);
         if (rc != SQLITE_OK) {
-            NEXUS_LOG_ERROR("Failed to record schema version " +
-                            std::to_string(migration.version) + ": " +
+            NEXUS_LOG_ERROR("Failed to record schema version " + std::to_string(migration.version) + ": " +
                             (err_msg ? err_msg : "unknown error"));
             if (err_msg) sqlite3_free(err_msg);
             sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
@@ -285,8 +278,7 @@ bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
 
         rc = sqlite3_exec(db, "COMMIT;", nullptr, nullptr, &err_msg);
         if (rc != SQLITE_OK) {
-            NEXUS_LOG_ERROR("Failed to commit migration " +
-                            std::to_string(migration.version) + ": " +
+            NEXUS_LOG_ERROR("Failed to commit migration " + std::to_string(migration.version) + ": " +
                             (err_msg ? err_msg : "unknown error"));
             if (err_msg) sqlite3_free(err_msg);
             sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
@@ -306,7 +298,7 @@ void set_database_migrations_for_testing(Database& db, std::vector<Migration> mi
     std::lock_guard<std::mutex> lock(db.mutex_);
     db.custom_migrations_ = std::move(migrations);
 }
-} // namespace internal
+}  // namespace internal
 
 bool Database::open() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -379,9 +371,7 @@ int Database::schema_version() const {
 
 bool Database::init_schema() {
     if (!db_) return false;
-    const auto& migrations = custom_migrations_.has_value()
-        ? *custom_migrations_
-        : default_migrations();
+    const auto& migrations = custom_migrations_.has_value() ? *custom_migrations_ : default_migrations();
     return run_migrations(db_, migrations);
 }
 
@@ -492,7 +482,7 @@ bool step_file_entry(sqlite3_stmt* stmt, const FileEntry& e) {
     return ok;
 }
 
-} // namespace
+}  // namespace
 
 bool Database::replace_files(const std::vector<FileEntry>& entries) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -504,8 +494,8 @@ bool Database::replace_files(const std::vector<FileEntry>& entries) {
     }
     sqlite3_stmt* stmt = nullptr;
     bool ok = sqlite3_exec(db_, "DELETE FROM files;", nullptr, nullptr, nullptr) == SQLITE_OK &&
-              sqlite3_prepare_v2(db_,
-                  "INSERT OR IGNORE INTO files (path, name, name_lower, is_dir, is_root) VALUES (?, ?, ?, ?, ?);",
+              sqlite3_prepare_v2(
+                  db_, "INSERT OR IGNORE INTO files (path, name, name_lower, is_dir, is_root) VALUES (?, ?, ?, ?, ?);",
                   -1, &stmt, nullptr) == SQLITE_OK;
     for (size_t i = 0; ok && i < entries.size(); ++i) {
         ok = step_file_entry(stmt, entries[i]);
@@ -518,7 +508,8 @@ bool Database::replace_files(const std::vector<FileEntry>& entries) {
     return false;
 }
 
-bool Database::apply_file_changes(const std::vector<std::string>& removed_trees, const std::vector<FileEntry>& upserts) {
+bool Database::apply_file_changes(const std::vector<std::string>& removed_trees,
+                                  const std::vector<FileEntry>& upserts) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!db_) return false;
 
@@ -529,13 +520,13 @@ bool Database::apply_file_changes(const std::vector<std::string>& removed_trees,
     sqlite3_stmt* del = nullptr;
     sqlite3_stmt* ins = nullptr;
     // Subtree = the path itself plus keys in ["path/", "path0"): '0' is the character after '/', so no LIKE escaping.
-    bool ok = sqlite3_prepare_v2(db_,
-                  "DELETE FROM files WHERE path = ?1 OR (path >= ?1 || '/' AND path < ?1 || '0');",
-                  -1, &del, nullptr) == SQLITE_OK &&
-              sqlite3_prepare_v2(db_,
-                  "INSERT INTO files (path, name, name_lower, is_dir, is_root) VALUES (?1, ?2, ?3, ?4, ?5) "
-                  "ON CONFLICT(path) DO UPDATE SET name = ?2, name_lower = ?3, is_dir = ?4;",
-                  -1, &ins, nullptr) == SQLITE_OK;
+    bool ok =
+        sqlite3_prepare_v2(db_, "DELETE FROM files WHERE path = ?1 OR (path >= ?1 || '/' AND path < ?1 || '0');", -1,
+                           &del, nullptr) == SQLITE_OK &&
+        sqlite3_prepare_v2(db_,
+                           "INSERT INTO files (path, name, name_lower, is_dir, is_root) VALUES (?1, ?2, ?3, ?4, ?5) "
+                           "ON CONFLICT(path) DO UPDATE SET name = ?2, name_lower = ?3, is_dir = ?4;",
+                           -1, &ins, nullptr) == SQLITE_OK;
     for (size_t i = 0; ok && i < removed_trees.size(); ++i) {
         sqlite3_bind_text(del, 1, removed_trees[i].c_str(), -1, SQLITE_TRANSIENT);
         ok = sqlite3_step(del) == SQLITE_DONE;
@@ -563,7 +554,8 @@ std::vector<FileEntry> Database::find_files(const std::string& pattern) {
         const char c = lower[i];
         if (c == '%' || c == '_' || c == '\\') like.push_back('\\');
         like.push_back(c);
-        const bool next_is_continuation = i + 1 < lower.size() && (static_cast<unsigned char>(lower[i + 1]) & 0xC0) == 0x80;
+        const bool next_is_continuation =
+            i + 1 < lower.size() && (static_cast<unsigned char>(lower[i + 1]) & 0xC0) == 0x80;
         if (!next_is_continuation) like.push_back('%');
     }
 
@@ -571,9 +563,8 @@ std::vector<FileEntry> Database::find_files(const std::string& pattern) {
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_,
-            "SELECT path, name, is_dir, is_root FROM files WHERE name_lower LIKE ?1 ESCAPE '\\';",
-            -1, &stmt, nullptr) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db_, "SELECT path, name, is_dir, is_root FROM files WHERE name_lower LIKE ?1 ESCAPE '\\';",
+                           -1, &stmt, nullptr) != SQLITE_OK) {
         NEXUS_LOG_ERROR("Failed to query file index: " + std::string(sqlite3_errmsg(db_)));
         return results;
     }
@@ -641,7 +632,8 @@ std::unordered_map<std::string, Database::UsageStat> Database::get_usage_counts(
     // shortcut: `query` must already be lower-case/trimmed (Query::normalized); only the first 64 bytes
     // are checked as prefixes.
     const size_t n = std::min<size_t>(query.size(), 64);
-    std::string sql = "SELECT app_id, COUNT(*), CAST(strftime('%s', MAX(timestamp)) AS INTEGER) FROM usage_events WHERE (query_norm >= ?1 AND query_norm < ?1 || char(1114111))";
+    std::string sql =
+        "SELECT app_id, COUNT(*), CAST(strftime('%s', MAX(timestamp)) AS INTEGER) FROM usage_events WHERE (query_norm >= ?1 AND query_norm < ?1 || char(1114111))";
     if (n > 0) {
         sql += " OR query_norm IN (?2";
         for (size_t i = 1; i < n; ++i) sql += ",?" + std::to_string(i + 2);
@@ -651,17 +643,20 @@ std::unordered_map<std::string, Database::UsageStat> Database::get_usage_counts(
     sqlite3_stmt* stmt = nullptr;
     if (query.empty() || sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) return counts;
     sqlite3_bind_text(stmt, 1, query.c_str(), -1, SQLITE_TRANSIENT);
-    for (size_t i = 1; i <= n; ++i) sqlite3_bind_text(stmt, static_cast<int>(i + 1), query.c_str(), static_cast<int>(i), SQLITE_TRANSIENT);
+    for (size_t i = 1; i <= n; ++i)
+        sqlite3_bind_text(stmt, static_cast<int>(i + 1), query.c_str(), static_cast<int>(i), SQLITE_TRANSIENT);
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         const unsigned char* id = sqlite3_column_text(stmt, 0);
-        if (id) counts[reinterpret_cast<const char*>(id)] = {sqlite3_column_int(stmt, 1), sqlite3_column_int64(stmt, 2)};
+        if (id)
+            counts[reinterpret_cast<const char*>(id)] = {sqlite3_column_int(stmt, 1), sqlite3_column_int64(stmt, 2)};
     }
     sqlite3_finalize(stmt);
     return counts;
 }
 
-bool Database::record_query(const std::string& query_text, const std::string& selected_id, const std::string& provider_id) {
+bool Database::record_query(const std::string& query_text, const std::string& selected_id,
+                            const std::string& provider_id) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!db_) return false;
 
@@ -678,7 +673,7 @@ bool Database::record_query(const std::string& query_text, const std::string& se
     return ok;
 }
 
-} // namespace nexus::index
+}  // namespace nexus::index
 
 namespace nexus::index {
 
@@ -698,8 +693,9 @@ std::optional<Database::ClearedHistory> Database::clear_history() {
     }
     // Rewrite the file so no free page (from this or any earlier delete) keeps old query text.
     cleared.file_compacted = sqlite3_exec(db_, "VACUUM;", nullptr, nullptr, nullptr) == SQLITE_OK;
-    if (!cleared.file_compacted) NEXUS_LOG_WARN(std::string("VACUUM after history clear failed: ") + sqlite3_errmsg(db_));
+    if (!cleared.file_compacted)
+        NEXUS_LOG_WARN(std::string("VACUUM after history clear failed: ") + sqlite3_errmsg(db_));
     return cleared;
 }
 
-} // namespace nexus::index
+}  // namespace nexus::index

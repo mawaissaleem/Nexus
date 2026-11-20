@@ -5,8 +5,7 @@
 
 namespace nexus::index {
 
-FileIndexer::FileIndexer(std::shared_ptr<Database> db)
-    : db_(std::move(db)) {}
+FileIndexer::FileIndexer(std::shared_ptr<Database> db) : db_(std::move(db)) {}
 
 bool is_skipped_name(const std::string& name, const std::vector<std::string>& exclusions) {
     return name.empty() || name.front() == '.' ||
@@ -56,4 +55,4 @@ size_t FileIndexer::rebuild(const FileIndexOptions& options, const std::atomic<b
     return entries.size();
 }
 
-} // namespace nexus::index
+}  // namespace nexus::index

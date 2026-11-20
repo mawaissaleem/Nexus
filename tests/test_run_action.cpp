@@ -15,7 +15,10 @@ struct Recorder : core::ISearchProvider {
     std::string id() const override { return "rec"; }
     std::string name() const override { return "rec"; }
     std::vector<core::SearchResult> search(const core::Query&, const std::atomic<bool>&) override { return {}; }
-    bool on_executed(const core::SearchResult&) override { ++executed; return true; }
+    bool on_executed(const core::SearchResult&) override {
+        ++executed;
+        return true;
+    }
 };
 }  // namespace
 
@@ -30,7 +33,10 @@ int main(int argc, char** argv) {
 
     int asked = 0;
     bool answer = false;
-    const ui::ConfirmFn confirm = [&](const core::SearchResult&) { ++asked; return answer; };
+    const ui::ConfirmFn confirm = [&](const core::SearchResult&) {
+        ++asked;
+        return answer;
+    };
 
     res.confirm = true;
     assert(!ui::run_action(res, providers, confirm));  // "no": nothing dispatched

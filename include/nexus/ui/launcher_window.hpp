@@ -21,12 +21,9 @@ class LauncherWindow : public QWidget {
 
 public:
     explicit LauncherWindow(
-        std::shared_ptr<core::SearchEngine> search_engine,
-        ThemeController& theme,
-        core::ConfigManager& config,
+        std::shared_ptr<core::SearchEngine> search_engine, ThemeController& theme, core::ConfigManager& config,
         ConfirmFn confirm = {},  // asked before results with `confirm` set; default is a yes/no QMessageBox
-        QWidget* parent = nullptr
-    );
+        QWidget* parent = nullptr);
 
     void toggle_launcher();
     void show_launcher();
@@ -76,5 +73,4 @@ private:
     std::unique_ptr<QueryManager> query_manager_{nullptr};
 };
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

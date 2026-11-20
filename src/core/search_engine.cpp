@@ -70,14 +70,13 @@ struct Batch {
     size_t pending{0};
     bool closed{false};  // search() stopped waiting; late results are discarded
     std::vector<std::optional<std::vector<SearchResult>>> slots;  // by provider order, not completion order
-    std::vector<char> done;                                        // provider returned (or threw) in time
+    std::vector<char> done;                                       // provider returned (or threw) in time
 };
 
-} // namespace
+}  // namespace
 
 SearchEngine::SearchEngine(RankingEngine ranking_engine, std::chrono::milliseconds provider_budget)
-    : provider_budget_(provider_budget),
-      ranking_engine_(std::move(ranking_engine)),
+    : provider_budget_(provider_budget), ranking_engine_(std::move(ranking_engine)),
       pool_(std::make_unique<Pool>(std::clamp(std::thread::hardware_concurrency(), 2u, 8u))) {}
 
 SearchEngine::~SearchEngine() = default;
@@ -97,21 +96,20 @@ void SearchEngine::register_provider(SearchProviderPtr provider) {
         if (prefix.empty()) continue;  // "" = unprefixed queries, shared by any number of providers
         const auto [it, inserted] = prefix_owner_.emplace(prefix, provider->id());
         if (!inserted) {
-            NEXUS_LOG_WARN("Prefix '" + prefix + "' of provider " + provider->id() + " rejected: already owned by " + it->second);
+            NEXUS_LOG_WARN("Prefix '" + prefix + "' of provider " + provider->id() + " rejected: already owned by " +
+                           it->second);
         }
     }
     providers_.push_back(provider);
-    std::stable_sort(providers_.begin(), providers_.end(), [](const auto& a, const auto& b) {
-        return a->priority() > b->priority();
-    });
+    std::stable_sort(providers_.begin(), providers_.end(),
+                     [](const auto& a, const auto& b) { return a->priority() > b->priority(); });
     NEXUS_LOG_DEBUG("Registered provider: " + provider->name() + " (" + provider->id() + ")");
 }
 
 void SearchEngine::unregister_provider(const std::string& provider_id) {
     std::lock_guard<std::mutex> lock(search_mutex_);
-    auto it = std::remove_if(providers_.begin(), providers_.end(), [&](const auto& p) {
-        return p->id() == provider_id;
-    });
+    auto it =
+        std::remove_if(providers_.begin(), providers_.end(), [&](const auto& p) { return p->id() == provider_id; });
     providers_.erase(it, providers_.end());
     std::erase_if(prefix_owner_, [&](const auto& kv) { return kv.second == provider_id; });
 }
@@ -126,7 +124,8 @@ std::vector<SearchResult> SearchEngine::search(const Query& query, size_t max_re
     return search(query, never_cancelled, max_results);
 }
 
-std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<bool>& cancel_token, size_t max_results) {
+std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<bool>& cancel_token,
+                                               size_t max_results) {
     std::vector<SearchResult> combined_results;
 
     if (input.empty()) {
@@ -154,11 +153,13 @@ std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<b
     const Query query(input.raw(), matched);
     if (query.prefix().empty() && query.text().empty()) return combined_results;  // whitespace only
     // A prefixed query reaches only its owner; an unprefixed one only providers that claim "".
-    current_providers.erase(std::remove_if(current_providers.begin(), current_providers.end(), [&](const auto& p) {
-        if (!query.prefix().empty()) return p->id() != owner;
-        const auto prefixes = p->prefixes();
-        return std::find(prefixes.begin(), prefixes.end(), "") == prefixes.end();
-    }), current_providers.end());
+    current_providers.erase(std::remove_if(current_providers.begin(), current_providers.end(),
+                                           [&](const auto& p) {
+                                               if (!query.prefix().empty()) return p->id() != owner;
+                                               const auto prefixes = p->prefixes();
+                                               return std::find(prefixes.begin(), prefixes.end(), "") == prefixes.end();
+                                           }),
+                            current_providers.end());
     if (filter) {
         current_providers.erase(std::remove_if(current_providers.begin(), current_providers.end(),
                                                [&](const auto& p) { return !filter(p->id()); }),
@@ -214,7 +215,8 @@ std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<b
         // wait (up to the deadline) for the tasks to return, so their busy flags are clear for the next search.
         while (batch->pending > 0 && std::chrono::steady_clock::now() < deadline) {
             if (cancel_token.load()) batch->cancel.store(true);
-            batch->cv.wait_until(lock, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(5)));
+            batch->cv.wait_until(lock,
+                                 std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(5)));
         }
         batch->closed = true;
         if (batch->pending > 0) {
@@ -251,5 +253,4 @@ std::vector<SearchResult> SearchEngine::search(const Query& input, std::atomic<b
     return combined_results;
 }
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

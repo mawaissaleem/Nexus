@@ -53,5 +53,4 @@ private:
     std::unique_ptr<Pool> pool_;  // last member: destroyed first
 };
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

@@ -14,7 +14,7 @@ std::string one_line(const std::string& s) {
     std::replace(t.begin(), t.end(), '\r', ' ');
     return t;
 }
-} // namespace
+}  // namespace
 
 ClipboardProvider::ClipboardProvider(std::size_t retention, std::function<bool()> recording_enabled)
     : retention_(std::max<std::size_t>(1, retention)), recording_enabled_(std::move(recording_enabled)) {}
@@ -61,7 +61,8 @@ std::vector<core::SearchResult> ClipboardProvider::search(const core::Query& que
         r.icon = "edit-paste";
         r.provider_id = id();
         r.score = 500.0 / (1.0 + static_cast<double>(i));  // newest first
-        for (auto idx : m.matched_indices) if (idx < r.title.size()) r.matched_indices.push_back(idx);
+        for (auto idx : m.matched_indices)
+            if (idx < r.title.size()) r.matched_indices.push_back(idx);
         r.action_kind = core::ActionKind::Copy;
         r.execution_payload = snapshot[i];
         results.push_back(std::move(r));
@@ -80,4 +81,4 @@ void ClipboardProvider::clear() {
     entries_.clear();
 }
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

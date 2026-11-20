@@ -365,6 +365,16 @@ Issues and pull requests are welcome. A new search source can be written as a pl
 
 Build with warnings on (`-Wall -Wextra -Wpedantic` are enabled by default) and keep `ctest` green.
 
+C++ is formatted with clang-format, pinned to one version so local and CI results match. Install it in a virtual env inside the repo (not globally):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install clang-format==18.1.8
+.venv/bin/clang-format -i $(git ls-files '*.cpp' '*.hpp')
+.venv/bin/clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.hpp')
+```
+
+The second line formats; the third is the check CI runs. One formatting pass is not always enough (comment alignment can shift), so run the format command again until the check prints nothing.
+
 
 ## Licence
 

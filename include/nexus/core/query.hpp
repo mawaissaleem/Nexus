@@ -24,10 +24,9 @@ private:
 
     std::string raw_;
     std::string prefix_;
-    std::string processed_text_; // Trimmed, prefix stripped, case kept
-    std::string normalized_;     // processed_text_ lowercased
+    std::string processed_text_;  // Trimmed, prefix stripped, case kept
+    std::string normalized_;      // processed_text_ lowercased
     std::vector<std::string> tokens_;
 };
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

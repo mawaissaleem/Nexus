@@ -30,7 +30,7 @@ Run run(const std::vector<std::string>& args, nexus::core::ConfigManager& config
 
 bool has(const std::string& hay, const std::string& needle) { return hay.find(needle) != std::string::npos; }
 
-} // namespace
+}  // namespace
 
 int main() {
     const fs::path root = fs::temp_directory_path() / ("nexus_test_cli_" + std::to_string(getpid()));
@@ -104,7 +104,8 @@ int main() {
     assert(r.rc == 0 && has(r.out, "Removed alias: gh"));
     r = run({"alias", "remove", "gh"}, config, aliases);
     assert(r.rc == 1 && has(r.err, "Alias not found: gh") && r.out.empty());
-    for (const auto& usage : std::vector<std::vector<std::string>>{{"alias"}, {"alias", "add", "x"}, {"alias", "bogus"}}) {
+    for (const auto& usage :
+         std::vector<std::vector<std::string>>{{"alias"}, {"alias", "add", "x"}, {"alias", "bogus"}}) {
         r = run(usage, config, aliases);
         assert(r.rc == 0 && has(r.out, "Usage: nexus alias"));
     }
@@ -148,13 +149,21 @@ int main() {
     // A running launcher is told once and reported; a missing one adds no output.
     int notified = 0;
     std::ostringstream out, err;
-    assert(run_cli({"history", "clear"}, config, aliases, out, err, [&] { ++notified; return true; }) == 0);
+    assert(run_cli({"history", "clear"}, config, aliases, out, err, [&] {
+               ++notified;
+               return true;
+           }) == 0);
     assert(notified == 1 && has(out.str(), "Cleared the clipboard history of the running launcher."));
     std::ostringstream out2, err2;
     assert(run_cli({"history", "clear"}, config, aliases, out2, err2, [&] { return false; }) == 0);
     assert(!has(out2.str(), "running launcher") && err2.str().empty());
     // Usage text and failures never notify.
-    assert(run_cli({"history"}, config, aliases, out, err, [&] { ++notified; return true; }) == 0 && notified == 1);
+    assert(run_cli({"history"}, config, aliases, out, err,
+                   [&] {
+                       ++notified;
+                       return true;
+                   }) == 0 &&
+           notified == 1);
 
     fs::remove_all(root);
     return 0;

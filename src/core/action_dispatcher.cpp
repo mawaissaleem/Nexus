@@ -14,15 +14,20 @@ bool dispatch_action(const SearchResult& result, const std::vector<SearchProvide
     }
 
     switch (result.action_kind) {
-        case ActionKind::Launch: return Executor::launch_desktop_exec(result.execution_payload, result.terminal);
-        case ActionKind::Open: return Executor::open_path_or_url(result.execution_payload);
+        case ActionKind::Launch:
+            return Executor::launch_desktop_exec(result.execution_payload, result.terminal);
+        case ActionKind::Open:
+            return Executor::open_path_or_url(result.execution_payload);
         case ActionKind::Shell:
             return !result.execution_payload.empty() && Executor::launch_shell_command(result.execution_payload);
-        case ActionKind::Copy: return true;
-        case ActionKind::Internal: return hook_ok;
-        case ActionKind::None: break;
+        case ActionKind::Copy:
+            return true;
+        case ActionKind::Internal:
+            return hook_ok;
+        case ActionKind::None:
+            break;
     }
     return false;
 }
 
-} // namespace nexus::core
+}  // namespace nexus::core

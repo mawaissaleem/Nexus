@@ -15,4 +15,4 @@ bool send_ipc_command(const QString& socket_name, const char* cmd);
 // Server side of the commands that touch services rather than windows. True when `msg` was one of them.
 bool handle_ipc_clipboard_command(const QString& msg, providers::ClipboardProvider& clipboard);
 
-} // namespace nexus::ui
+}  // namespace nexus::ui

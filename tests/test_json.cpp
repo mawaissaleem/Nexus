@@ -25,8 +25,8 @@ int main() {
     assert(parse_json(R"({"k":1,"k":2})", v) && v.find("k")->string == "2");  // last duplicate wins
 
     // Malformed input is rejected and reports an offset
-    for (const char* bad : {"", "{", "[,]", "[1,,]", "{,}", "{\"a\" 1}", "{'a':1}", "[1] x", "\"abc", "\"\\ud800\"", "\"\\ud800\\uzzzz\"", "\"a\\\nb\"",
-                            "tru", "01x", "-", "1.", "\"a\nb\"", "{\"a\":}"}) {
+    for (const char* bad : {"", "{", "[,]", "[1,,]", "{,}", "{\"a\" 1}", "{'a':1}", "[1] x", "\"abc", "\"\\ud800\"",
+                            "\"\\ud800\\uzzzz\"", "\"a\\\nb\"", "tru", "01x", "-", "1.", "\"a\nb\"", "{\"a\":}"}) {
         assert(!parse_json(bad, v, &err));
         assert(err.find("offset") != std::string::npos);
     }

@@ -72,4 +72,3 @@ int main() {
     std::cout << "All DesktopEntry tests passed successfully!\n";
     return 0;
 }
-

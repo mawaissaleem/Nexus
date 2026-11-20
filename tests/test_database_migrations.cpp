@@ -200,7 +200,8 @@ void test_legacy_db() {
     }
 
     assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM query_history;") == 2);
-    assert(raw_query_text(temp_file.string(), "SELECT query FROM query_history WHERE selected_id='legacy.app.1';") == "legacy");
+    assert(raw_query_text(temp_file.string(), "SELECT query FROM query_history WHERE selected_id='legacy.app.1';") ==
+           "legacy");
     assert(raw_query_int(temp_file.string(), "SELECT COUNT(*) FROM schema_version;") == 4);
     assert(raw_query_int(temp_file.string(), "SELECT MAX(version) FROM schema_version;") == 4);
 }
@@ -232,9 +233,9 @@ void test_multistep_migrations() {
 
     std::vector<nexus::index::Migration> migrations = {
         nexus::index::default_migrations()[0],
-        {2, "add test column to applications", "ALTER TABLE applications ADD COLUMN custom_tag TEXT DEFAULT 'default_tag';"},
-        {3, "add audit table", "CREATE TABLE audit_log (id INTEGER PRIMARY KEY, note TEXT);"}
-    };
+        {2, "add test column to applications",
+         "ALTER TABLE applications ADD COLUMN custom_tag TEXT DEFAULT 'default_tag';"},
+        {3, "add audit table", "CREATE TABLE audit_log (id INTEGER PRIMARY KEY, note TEXT);"}};
 
     // Case 1: Multi-step migration from fresh DB to version 3
     {
@@ -295,8 +296,7 @@ void test_failure_rollback() {
     std::vector<nexus::index::Migration> injected = {
         nexus::index::default_migrations()[0],
         {2, "failing migration", "CREATE TABLE temp_table_should_rollback (id INT); INVALID SQL SYNTAX ERROR;"},
-        {3, "subsequent migration", "CREATE TABLE should_never_exist (id INT);"}
-    };
+        {3, "subsequent migration", "CREATE TABLE should_never_exist (id INT);"}};
 
     {
         nexus::index::Database db(temp_file.string());
@@ -359,24 +359,18 @@ void test_invalid_migration_list() {
     std::cout << "Running test_invalid_migration_list...\n";
 
     // Gap: [1, 3]
-    std::vector<nexus::index::Migration> gap = {
-        {1, "m1", "CREATE TABLE t1 (id INT);"},
-        {3, "m3", "CREATE TABLE t3 (id INT);"}
-    };
+    std::vector<nexus::index::Migration> gap = {{1, "m1", "CREATE TABLE t1 (id INT);"},
+                                                {3, "m3", "CREATE TABLE t3 (id INT);"}};
     assert(!nexus::index::validate_migrations(gap));
 
     // Duplicate: [1, 1]
-    std::vector<nexus::index::Migration> duplicate = {
-        {1, "m1", "CREATE TABLE t1 (id INT);"},
-        {1, "m1_dup", "CREATE TABLE t2 (id INT);"}
-    };
+    std::vector<nexus::index::Migration> duplicate = {{1, "m1", "CREATE TABLE t1 (id INT);"},
+                                                      {1, "m1_dup", "CREATE TABLE t2 (id INT);"}};
     assert(!nexus::index::validate_migrations(duplicate));
 
     // Not starting at 1: [2, 3]
-    std::vector<nexus::index::Migration> not_starting_at_one = {
-        {2, "m2", "CREATE TABLE t2 (id INT);"},
-        {3, "m3", "CREATE TABLE t3 (id INT);"}
-    };
+    std::vector<nexus::index::Migration> not_starting_at_one = {{2, "m2", "CREATE TABLE t2 (id INT);"},
+                                                                {3, "m3", "CREATE TABLE t3 (id INT);"}};
     assert(!nexus::index::validate_migrations(not_starting_at_one));
 
     // Empty list
@@ -384,9 +378,7 @@ void test_invalid_migration_list() {
     assert(!nexus::index::validate_migrations(empty));
 
     // Migration with empty SQL and null step function
-    std::vector<nexus::index::Migration> empty_content = {
-        {1, "empty content", "", nullptr}
-    };
+    std::vector<nexus::index::Migration> empty_content = {{1, "empty content", "", nullptr}};
     assert(!nexus::index::validate_migrations(empty_content));
 
     // Database rejects invalid injected list on open
@@ -447,9 +439,8 @@ void test_busy_timeout_lowered_after_open() {
     auto start = std::chrono::steady_clock::now();
     // Try an operation that requires write lock on db; with 250 ms timeout, it fails quickly
     bool ok = db.record_usage("app_timeout_test", "query");
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start
-    ).count();
+    auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
 
     assert(!ok);
     // Confirm it returned within roughly 1 second (>= 150 ms and < 2000 ms), NOT 5000 ms
@@ -500,10 +491,14 @@ void test_files_migration_from_v1() {
         assert(db.save_applications({entry}));
         db.close();
     }
-    {   // v1 schema has no query_norm column, so insert the usage row directly
+    {  // v1 schema has no query_norm column, so insert the usage row directly
         sqlite3* raw = nullptr;
         assert(sqlite3_open(temp_file.string().c_str(), &raw) == SQLITE_OK);
-        assert(sqlite3_exec(raw, "INSERT INTO usage_events (app_id, query, timestamp) VALUES ('v1.app', ' V1 ', '2020-01-01 00:00:00'), ('v1.app', 'v1', '2021-01-01 00:00:10');", nullptr, nullptr, nullptr) == SQLITE_OK);
+        assert(
+            sqlite3_exec(
+                raw,
+                "INSERT INTO usage_events (app_id, query, timestamp) VALUES ('v1.app', ' V1 ', '2020-01-01 00:00:00'), ('v1.app', 'v1', '2021-01-01 00:00:10');",
+                nullptr, nullptr, nullptr) == SQLITE_OK);
         sqlite3_close(raw);
     }
     assert(!raw_table_exists(temp_file.string(), "files"));
@@ -515,7 +510,8 @@ void test_files_migration_from_v1() {
     assert(db.load_applications().size() == 1);
     assert(db.get_usage_count("v1.app") == 2);
     assert(db.get_usage_counts("v1").at("v1.app").count == 2);  // migration 3 backfilled query_norm
-    assert(db.get_usage_counts("v1").at("v1.app").last_used == 1609459210);  // newest of the two: 2021-01-01 00:00:10 UTC
+    assert(db.get_usage_counts("v1").at("v1.app").last_used ==
+           1609459210);  // newest of the two: 2021-01-01 00:00:10 UTC
 
     assert(db.replace_files({{"/x/Report.txt", "Report.txt", false, false}}));
     auto rows = db.find_files("rpt");
@@ -523,7 +519,7 @@ void test_files_migration_from_v1() {
     assert(db.find_files("zzz").empty());
 }
 
-} // namespace
+}  // namespace
 
 int main() {
     test_fresh_db();

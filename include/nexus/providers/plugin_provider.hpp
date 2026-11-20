@@ -22,7 +22,8 @@ public:
     struct Options {
         std::chrono::milliseconds budget{200};  // one search, including a spawn + handshake
         // Wait after the 1st, 2nd, ... failed start; one more failure than there are entries disables the plugin.
-        std::vector<std::chrono::milliseconds> backoff{std::chrono::seconds(1), std::chrono::seconds(5), std::chrono::seconds(30)};
+        std::vector<std::chrono::milliseconds> backoff{std::chrono::seconds(1), std::chrono::seconds(5),
+                                                       std::chrono::seconds(30)};
         std::function<std::chrono::steady_clock::time_point()> clock = [] { return std::chrono::steady_clock::now(); };
     };
 
@@ -44,13 +45,17 @@ public:
     void finish_shutdown(std::chrono::milliseconds grace);
 
 private:
-    struct Pending { std::int64_t id; std::chrono::steady_clock::time_point written_at; };
+    struct Pending {
+        std::int64_t id;
+        std::chrono::steady_clock::time_point written_at;
+    };
     enum class Handled { Skip, Reply, Bad };
 
     [[nodiscard]] std::chrono::steady_clock::time_point real_deadline(std::chrono::steady_clock::time_point d) const;
     bool start(std::chrono::steady_clock::time_point deadline, const std::atomic<bool>& cancel);
     Handled handle_line(const std::string& line, std::int64_t current, std::vector<core::SearchResult>* out);
-    void drain(core::ChildProcess& proc, std::chrono::steady_clock::time_point deadline, const std::atomic<bool>& cancel);
+    void drain(core::ChildProcess& proc, std::chrono::steady_clock::time_point deadline,
+               const std::atomic<bool>& cancel);
     [[nodiscard]] std::shared_ptr<core::ChildProcess> current_proc();
     void expire_pending();
     void fail(const char* why);
@@ -68,9 +73,9 @@ private:
 
     std::mutex mutex_;  // guards proc_, write_failed_ and writes to proc_; never held while waiting for a reply
     std::shared_ptr<core::ChildProcess> proc_;
-    bool write_failed_{false};  // on_executed could not write to proc_
+    bool write_failed_{false};                      // on_executed could not write to proc_
     std::shared_ptr<core::ChildProcess> stopping_;  // detached by request_shutdown, reaped by finish_shutdown
     std::atomic<bool> stopped_{false};
 };
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

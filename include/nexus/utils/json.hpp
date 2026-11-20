@@ -41,4 +41,4 @@ bool parse_json(std::string_view text, JsonValue& out, std::string* error = null
 // Reuses an existing backup with identical bytes. Returns the backup path, or "" on failure.
 std::string preserve_malformed_file(const std::string& path, const std::string& contents);
 
-} // namespace nexus::utils
+}  // namespace nexus::utils

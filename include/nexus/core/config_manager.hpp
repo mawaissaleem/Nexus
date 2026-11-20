@@ -77,4 +77,4 @@ private:
     std::string shortcut_{"Alt+Space"};
 };
 
-} // namespace nexus::core
+}  // namespace nexus::core

@@ -20,7 +20,7 @@
 #include <poll.h>
 #include <signal.h>
 
-extern char **environ;
+extern char** environ;
 
 namespace nexus::core {
 
@@ -31,11 +31,31 @@ std::optional<std::vector<std::string>> Executor::parse_desktop_exec(std::string
         char c = exec_line[i];
         if (c == '\\' && i + 1 < exec_line.size()) {
             const char n = exec_line[i + 1];
-            if (n == 's') { text.push_back(' '); ++i; continue; }
-            if (n == 'n') { text.push_back('\n'); ++i; continue; }
-            if (n == 't') { text.push_back('\t'); ++i; continue; }
-            if (n == 'r') { text.push_back('\r'); ++i; continue; }
-            if (n == '\\') { text.push_back('\\'); ++i; continue; }
+            if (n == 's') {
+                text.push_back(' ');
+                ++i;
+                continue;
+            }
+            if (n == 'n') {
+                text.push_back('\n');
+                ++i;
+                continue;
+            }
+            if (n == 't') {
+                text.push_back('\t');
+                ++i;
+                continue;
+            }
+            if (n == 'r') {
+                text.push_back('\r');
+                ++i;
+                continue;
+            }
+            if (n == '\\') {
+                text.push_back('\\');
+                ++i;
+                continue;
+            }
         }
         text.push_back(c);
     }
@@ -43,18 +63,25 @@ std::optional<std::vector<std::string>> Executor::parse_desktop_exec(std::string
     // Pass 2: the Exec quoting rules, plus field-code handling.
     std::vector<std::string> args;
     std::string cur;
-    bool has_arg = false;   // a quoted or literal char was seen (field codes alone don't count)
+    bool has_arg = false;  // a quoted or literal char was seen (field codes alone don't count)
     bool in_quotes = false;
     for (size_t i = 0; i < text.size(); ++i) {
         const char c = text[i];
         if (in_quotes) {
-            if (c == '"') { in_quotes = false; continue; }
+            if (c == '"') {
+                in_quotes = false;
+                continue;
+            }
             if (c == '\\' && i + 1 < text.size() && strchr("\"`$\\", text[i + 1])) {
                 cur.push_back(text[++i]);
                 continue;
             }
         } else {
-            if (c == '"') { in_quotes = true; has_arg = true; continue; }
+            if (c == '"') {
+                in_quotes = true;
+                has_arg = true;
+                continue;
+            }
             if (c == ' ' || c == '\t' || c == '\n') {
                 if (has_arg) args.push_back(std::move(cur));
                 cur.clear();
@@ -64,9 +91,17 @@ std::optional<std::vector<std::string>> Executor::parse_desktop_exec(std::string
         }
         if (c == '%' && i + 1 < text.size()) {
             const char n = text[i + 1];
-            if (n == '%') { cur.push_back('%'); has_arg = true; ++i; continue; }
+            if (n == '%') {
+                cur.push_back('%');
+                has_arg = true;
+                ++i;
+                continue;
+            }
             // Nexus never passes files/URLs, so every known field code expands to nothing.
-            if (strchr("fFuUdDnNikvmc", n) != nullptr) { ++i; continue; }
+            if (strchr("fFuUdDnNikvmc", n) != nullptr) {
+                ++i;
+                continue;
+            }
         }
         cur.push_back(c);
         has_arg = true;
@@ -104,7 +139,7 @@ bool Executor::launch_shell_command(std::string_view command) {
 
     if (pid == 0) {
         // Child process
-        setsid(); // Detach from session
+        setsid();  // Detach from session
 
         pid_t second_pid = fork();
         if (second_pid < 0) {
@@ -118,8 +153,7 @@ bool Executor::launch_shell_command(std::string_view command) {
         // Grandchild process
         signal(SIGPIPE, SIG_DFL);  // Nexus ignores SIGPIPE (spawn_with_pipes); commands expect the default
         // Redirect standard descriptors to /dev/null
-        if (freopen("/dev/null", "r", stdin) == nullptr ||
-            freopen("/dev/null", "w", stdout) == nullptr ||
+        if (freopen("/dev/null", "r", stdin) == nullptr || freopen("/dev/null", "w", stdout) == nullptr ||
             freopen("/dev/null", "w", stderr) == nullptr) {
             // Ignore failure, proceed
         }
@@ -187,7 +221,8 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
     try {
         std::thread([pid] {
             int st = 0;
-            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
+            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {
+            }
         }).detach();
     } catch (const std::system_error&) {
         // No thread available: reap only if already done; never block the UI thread.
@@ -270,13 +305,17 @@ void ChildProcess::terminate(std::chrono::milliseconds grace) {
     bool reaped = false;
     while (!reaped) {
         const pid_t r = waitpid(pid_, &st, WNOHANG);
-        if (r == pid_ || (r < 0 && errno != EINTR)) { reaped = true; break; }
+        if (r == pid_ || (r < 0 && errno != EINTR)) {
+            reaped = true;
+            break;
+        }
         if (std::chrono::steady_clock::now() >= until) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     if (!reaped) {
         kill(pid_, SIGKILL);
-        while (waitpid(pid_, &st, 0) < 0 && errno == EINTR) {}
+        while (waitpid(pid_, &st, 0) < 0 && errno == EINTR) {
+        }
     }
     pid_ = -1;
     buf_.clear();
@@ -290,10 +329,13 @@ ChildProcess Executor::spawn_with_pipes(const std::vector<std::string>& args, co
     int to_child[2], from_child[2];
     if (pipe2(to_child, O_CLOEXEC) != 0) return {};
     if (pipe2(from_child, O_CLOEXEC) != 0) {
-        close(to_child[0]); close(to_child[1]);
+        close(to_child[0]);
+        close(to_child[1]);
         return {};
     }
-    int log_fd = cwd.empty() ? -1 : open((cwd / "plugin.log").c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
+    int log_fd = cwd.empty()
+                     ? -1
+                     : open((cwd / "plugin.log").c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
 
     std::vector<char*> argv;
     for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
@@ -336,5 +378,4 @@ bool Executor::open_path_or_url(std::string_view target) {
     return spawn_detached({"xdg-open", std::string(target)});
 }
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

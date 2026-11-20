@@ -3,11 +3,9 @@
 
 namespace nexus::providers {
 
-ApplicationProvider::ApplicationProvider(
-    std::shared_ptr<index::AppIndexer> indexer,
-    std::shared_ptr<index::Database> db,
-    std::function<bool()> history_enabled
-) : indexer_(std::move(indexer)), db_(std::move(db)), history_enabled_(std::move(history_enabled)) {}
+ApplicationProvider::ApplicationProvider(std::shared_ptr<index::AppIndexer> indexer,
+                                         std::shared_ptr<index::Database> db, std::function<bool()> history_enabled)
+    : indexer_(std::move(indexer)), db_(std::move(db)), history_enabled_(std::move(history_enabled)) {}
 
 bool ApplicationProvider::on_executed(const core::SearchResult& result) {
     if (result.action_kind != core::ActionKind::Launch) return true;  // only real app launches count as usage
@@ -18,10 +16,8 @@ bool ApplicationProvider::on_executed(const core::SearchResult& result) {
     return true;
 }
 
-std::vector<core::SearchResult> ApplicationProvider::search(
-    const core::Query& query,
-    const std::atomic<bool>& cancel_token
-) {
+std::vector<core::SearchResult> ApplicationProvider::search(const core::Query& query,
+                                                            const std::atomic<bool>& cancel_token) {
     std::vector<core::SearchResult> results;
     if (!indexer_ || !query.prefix().empty()) {
         return results;
@@ -35,7 +31,7 @@ std::vector<core::SearchResult> ApplicationProvider::search(
     auto apps = indexer_->get_applications();
     // One usage query per search, not one per matched app. Counts only launches from similar queries.
     const auto usage_counts = (db_ && db_->is_open()) ? db_->get_usage_counts(search_term)
-                                                       : std::unordered_map<std::string, index::Database::UsageStat>{};
+                                                      : std::unordered_map<std::string, index::Database::UsageStat>{};
 
     for (const auto& app : *apps) {
         if (cancel_token.load()) {
@@ -98,5 +94,4 @@ std::vector<core::SearchResult> ApplicationProvider::search(
     return results;
 }
 
-} // namespace nexus::providers
-
+}  // namespace nexus::providers

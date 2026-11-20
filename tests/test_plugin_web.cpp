@@ -46,18 +46,20 @@ int main() {
         assert(child.valid());
         const auto line = [&] {
             std::string l;
-            const auto st = child.read_line(l, std::chrono::steady_clock::now() + std::chrono::seconds(5), no_cancel, providers::plugin::kMaxLineBytes);
+            const auto st = child.read_line(l, std::chrono::steady_clock::now() + std::chrono::seconds(5), no_cancel,
+                                            providers::plugin::kMaxLineBytes);
             assert(st == core::ChildProcess::ReadStatus::Line);
             return l;
         };
         assert(line() == R"({"type": "hello", "api_version": 1})");
-        for (const char* l : {R"({"type":"hello","api_version":1})", "[]", "garbage", R"({"type":"search"})",
-                              R"({"type":"search","id":7,"text":"x","prefix":"web ","normalized":"x"})", R"({"type":"shutdown"})"})
+        for (const char* l :
+             {R"({"type":"hello","api_version":1})", "[]", "garbage", R"({"type":"search"})",
+              R"({"type":"search","id":7,"text":"x","prefix":"web ","normalized":"x"})", R"({"type":"shutdown"})"})
             assert(child.write_line(std::string(l) + "\n"));
         assert(line().rfind(R"({"type": "results", "id": 7, "results": [{"id": "web")", 0) == 0);
         std::string rest;  // exits on shutdown: nothing more, then EOF
-        assert(child.read_line(rest, std::chrono::steady_clock::now() + std::chrono::seconds(5), no_cancel, providers::plugin::kMaxLineBytes) ==
-               core::ChildProcess::ReadStatus::Closed);
+        assert(child.read_line(rest, std::chrono::steady_clock::now() + std::chrono::seconds(5), no_cancel,
+                               providers::plugin::kMaxLineBytes) == core::ChildProcess::ReadStatus::Closed);
     }  // ~ChildProcess kills and reaps it if still running
 
     fs::remove_all(root);

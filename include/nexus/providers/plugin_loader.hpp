@@ -19,4 +19,4 @@ namespace nexus::providers {
 [[nodiscard]] std::vector<plugin::Manifest> discover_plugins(const std::vector<std::filesystem::path>& roots,
                                                              const std::set<std::string>& reserved);
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

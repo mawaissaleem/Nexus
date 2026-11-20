@@ -48,9 +48,9 @@ private:
     std::optional<std::vector<std::filesystem::path>> directories_;
     std::mutex rebuild_mutex_;  // serialises rebuild_index() (scan + save + swap)
     std::unique_ptr<utils::FsWatcher> watcher_;
-    std::shared_ptr<const std::vector<DesktopEntry>> applications_ = std::make_shared<const std::vector<DesktopEntry>>();
+    std::shared_ptr<const std::vector<DesktopEntry>> applications_ =
+        std::make_shared<const std::vector<DesktopEntry>>();
     mutable std::mutex mutex_;
 };
 
-} // namespace nexus::index
-
+}  // namespace nexus::index

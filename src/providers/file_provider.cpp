@@ -13,29 +13,26 @@ std::string get_icon_for_path(const std::filesystem::path& p, bool is_dir) {
     if (is_dir) return "folder";
 
     std::string ext = p.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
     if (ext == ".pdf") return "application-pdf";
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".svg" || ext == ".webp") return "image-x-generic";
     if (ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".webm") return "video-x-generic";
     if (ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg") return "audio-x-generic";
     if (ext == ".zip" || ext == ".tar" || ext == ".gz" || ext == ".xz" || ext == ".7z") return "package-x-generic";
-    if (ext == ".cpp" || ext == ".hpp" || ext == ".c" || ext == ".h" || ext == ".py" || ext == ".rs" || ext == ".js" || ext == ".ts" || ext == ".html") return "text-x-script";
+    if (ext == ".cpp" || ext == ".hpp" || ext == ".c" || ext == ".h" || ext == ".py" || ext == ".rs" || ext == ".js" ||
+        ext == ".ts" || ext == ".html")
+        return "text-x-script";
 
     return "text-x-generic";
 }
 
-} // namespace
+}  // namespace
 
-FileProvider::FileProvider(std::shared_ptr<index::Database> db)
-    : db_(std::move(db)) {}
+FileProvider::FileProvider(std::shared_ptr<index::Database> db) : db_(std::move(db)) {}
 
-std::vector<core::SearchResult> FileProvider::search(
-    const core::Query& query,
-    const std::atomic<bool>& cancel_token
-) {
+std::vector<core::SearchResult> FileProvider::search(const core::Query& query, const std::atomic<bool>& cancel_token) {
     std::vector<core::SearchResult> results;
 
     if (query.prefix() != "file " || !db_) {
@@ -89,4 +86,4 @@ std::vector<core::SearchResult> FileProvider::search(
     return results;
 }
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

@@ -16,12 +16,13 @@ static void write_desktop(const fs::path& dir, const std::string& id, const std:
                           const std::string& extra = "") {
     fs::create_directories(dir);
     std::ofstream(dir / (id + ".desktop"))
-        << "[Desktop Entry]\nType=Application\nName=" << name << "\nExec=" << id << "\n" << extra;
+        << "[Desktop Entry]\nType=Application\nName=" << name << "\nExec=" << id << "\n"
+        << extra;
 }
 
-
 static const DesktopEntry* find(const std::vector<DesktopEntry>& apps, const std::string& id) {
-    for (const auto& a : apps) if (a.id == id) return &a;
+    for (const auto& a : apps)
+        if (a.id == id) return &a;
     return nullptr;
 }
 
@@ -126,7 +127,11 @@ int main() {
         std::ofstream(root / "notadir") << "x";
         AppIndexer err(nullptr, std::vector<fs::path>{root / "notadir", bad, root / "vanished", good});
         bool threw = false;
-        try { err.rebuild_index(); } catch (...) { threw = true; }
+        try {
+            err.rebuild_index();
+        } catch (...) {
+            threw = true;
+        }
         fs::permissions(bad / "locked", fs::perms::owner_all);  // restore before asserts so cleanup works
         assert(!threw);
         assert(find(*err.get_applications(), "goodapp") && find(*err.get_applications(), "badtop"));
@@ -151,7 +156,11 @@ int main() {
         low.rlim_cur = static_cast<rlim_t>(probe) + 8;  // rlim_max untouched so restoring needs no privilege
         assert(setrlimit(RLIMIT_NOFILE, &low) == 0);
         bool threw = false;
-        try { err.rebuild_index(); } catch (...) { threw = true; }
+        try {
+            err.rebuild_index();
+        } catch (...) {
+            threw = true;
+        }
         assert(setrlimit(RLIMIT_NOFILE, &old) == 0);  // restore before any assert can abort
         assert(!threw);
         assert(find(*err.get_applications(), "afterapp"));

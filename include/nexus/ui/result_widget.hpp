@@ -32,5 +32,4 @@ private:
     QLabel* badge_label_{nullptr};
 };
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

@@ -33,3 +33,5 @@ Testing/
 
 commands_to_build.txt
 
+# Local Python virtual env (pinned clang-format)
+.venv/

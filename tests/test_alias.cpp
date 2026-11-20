@@ -64,7 +64,8 @@ int main() {
     }
 
     // Bare prefixes (empty text) never create or run anything
-    assert(provider.search(Query("alias ", "alias "), cancel).empty() || provider.search(Query("alias ", "alias "), cancel)[0].id.rfind("alias:create:", 0) != 0);
+    assert(provider.search(Query("alias ", "alias "), cancel).empty() ||
+           provider.search(Query("alias ", "alias "), cancel)[0].id.rfind("alias:create:", 0) != 0);
 
     // Inline creation, with and without leading/trailing spaces; missing target offers no create result.
     for (const char* q_str : {"alias zz /tmp", "  alias zz /tmp  "}) {
@@ -72,10 +73,11 @@ int main() {
         assert(r.size() == 1 && r[0].id == "alias:create:zz" && r[0].score == 2500.0);
     }
     for (const char* q_str : {"alias", "alias zz", " alias zz "}) {
-        for (const auto& r : provider.search(Query(q_str, "alias "), cancel)) assert(r.id.rfind("alias:create:", 0) != 0);
+        for (const auto& r : provider.search(Query(q_str, "alias "), cancel))
+            assert(r.id.rfind("alias:create:", 0) != 0);
     }
 
-    // Inline creation keeps the whole rest of the line (multi-word and '>' targets); 
+    // Inline creation keeps the whole rest of the line (multi-word and '>' targets);
     for (const char* q_str : {"alias up >sudo apt update", "  alias up   >sudo apt update  "}) {
         auto r = provider.search(Query(q_str, "alias "), cancel);
         assert(r.size() == 1 && r[0].id == "alias:create:up");
@@ -128,7 +130,8 @@ int main() {
         const fs::path out = dir / "args.txt";
         {
             std::ofstream f(dir / "nexus-fake-rec");
-            f << "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done > '" << out.string() << ".tmp' && mv '" << out.string() << ".tmp' '" << out.string() << "'\n";
+            f << "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done > '" << out.string() << ".tmp' && mv '"
+              << out.string() << ".tmp' '" << out.string() << "'\n";
         }
         fs::permissions(dir / "nexus-fake-rec", fs::perms::owner_all);
         const char* cp = std::getenv("PATH");
@@ -177,7 +180,11 @@ int main() {
     assert(mgr.add_alias("q", "echo \"hi\" \\n"));
     mgr.load(temp_alias_file.string());
     bool found = false;
-    for (const auto& a : mgr.get_aliases()) if (a.name == "q") { found = true; assert(a.target == "echo \"hi\" \\n"); }
+    for (const auto& a : mgr.get_aliases())
+        if (a.name == "q") {
+            found = true;
+            assert(a.target == "echo \"hi\" \\n");
+        }
     assert(found);
     { std::ofstream(temp_alias_file) << "[{\"name\": \"x\", "; }
     assert(!mgr.load(temp_alias_file.string()));

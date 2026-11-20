@@ -28,11 +28,12 @@ std::vector<core::SearchResult> search(providers::FileProvider& fp, const std::s
 }
 
 bool has_title(const std::vector<core::SearchResult>& r, const std::string& title) {
-    for (const auto& x : r) if (x.title == title) return true;
+    for (const auto& x : r)
+        if (x.title == title) return true;
     return false;
 }
 
-} // namespace
+}  // namespace
 
 int main() {
     const fs::path root = fs::temp_directory_path() / ("nexus_test_file_indexer_" + std::to_string(getpid()));

@@ -29,8 +29,8 @@ void FileWatcher::arm(const FileIndexOptions& options, const std::atomic<bool>& 
     stopping_ = false;
     if (!db_) return;
     options_ = options;
-    watcher_ = std::make_unique<utils::FsWatcher>(
-        [this](const std::vector<utils::FsEvent>& events) { handle(events); }, on_overflow_, max_watches_);
+    watcher_ = std::make_unique<utils::FsWatcher>([this](const std::vector<utils::FsEvent>& events) { handle(events); },
+                                                  on_overflow_, max_watches_);
     if (!watcher_->start(true)) {
         watcher_.reset();
         return;
@@ -76,7 +76,8 @@ void FileWatcher::handle(const std::vector<utils::FsEvent>& events) {
             watcher_->remove_watches_under(path);
             const std::string prefix = path + "/";
             for (auto it = levels_.begin(); it != levels_.end();) {
-                it = (it->first == path || it->first.compare(0, prefix.size(), prefix) == 0) ? levels_.erase(it) : std::next(it);
+                it = (it->first == path || it->first.compare(0, prefix.size(), prefix) == 0) ? levels_.erase(it)
+                                                                                             : std::next(it);
             }
         }
         if (ev.mask & (IN_CREATE | IN_MOVED_TO)) {
@@ -97,4 +98,4 @@ void FileWatcher::handle(const std::vector<utils::FsEvent>& events) {
     if (!removed.empty() || !upserts.empty()) db_->apply_file_changes(removed, upserts);
 }
 
-} // namespace nexus::index
+}  // namespace nexus::index

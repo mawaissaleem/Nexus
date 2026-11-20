@@ -31,8 +31,18 @@ struct Plugin {
     std::shared_ptr<FakeClock> clock = std::make_shared<FakeClock>();
     std::unique_ptr<PluginProvider> provider;
 
-    int pid() const { int p = 0; std::ifstream(dir / "pid") >> p; return p; }
-    int spawns() const { std::ifstream f(dir / "spawns"); int n = 0; std::string l; while (std::getline(f, l)) ++n; return n; }
+    int pid() const {
+        int p = 0;
+        std::ifstream(dir / "pid") >> p;
+        return p;
+    }
+    int spawns() const {
+        std::ifstream f(dir / "spawns");
+        int n = 0;
+        std::string l;
+        while (std::getline(f, l)) ++n;
+        return n;
+    }
     // Dead means reaped by Nexus: a zombie would still answer kill(pid, 0).
     bool dead() const { return kill(pid(), 0) != 0; }
     std::vector<core::SearchResult> search(const std::string& text, const std::atomic<bool>& cancel = no_cancel) {
@@ -47,7 +57,8 @@ static std::unique_ptr<Plugin> make_plugin(const std::string& id, int budget_ms 
     auto p = std::make_unique<Plugin>();
     p->dir = root / id;
     fs::create_directories(p->dir);
-    std::ofstream(p->dir / "plugin.json") << "{\"id\":\"" << id << "\",\"api_version\":1,\"exec\":\"run.sh\",\"prefixes\":[\"\"]}";
+    std::ofstream(p->dir / "plugin.json")
+        << "{\"id\":\"" << id << "\",\"api_version\":1,\"exec\":\"run.sh\",\"prefixes\":[\"\"]}";
     std::ofstream(p->dir / "run.sh") << R"(#!/bin/sh
 echo $$ > pid
 echo s >> spawns
@@ -60,7 +71,8 @@ while read -r line; do
       id=${line#*\"id\":}; id=${id%%,*}
       case "$line" in
         *'"text":"hang"'*) ;;
-        *'"text":"slow"'*) sleep )" << slow_delay << R"(; reply ;;
+        *'"text":"slow"'*) sleep )" << slow_delay
+                                     << R"(; reply ;;
         *'"text":"split"'*) printf '{"type":"results","id":%s,' "$id"; sleep 0.4; echo '"results":[{"id":"late","title":"Late"}]}' ;;
         *'"text":"bad"'*) echo 'not json' ;;
         *'"text":"zero"'*) reply; echo '{"type":"results","id":0,"results":[]}' ;;
@@ -125,7 +137,7 @@ static void test_partial_line_and_late_reply() {
     assert(p->search("a").size() == 1);
     assert(p->search("split").empty());  // first half of the reply arrives, the rest after the budget
     std::this_thread::sleep_for(400ms);
-    auto r = p->search("b");             // the buffered halves form the late reply to #2: skipped by id
+    auto r = p->search("b");  // the buffered halves form the late reply to #2: skipped by id
     assert(r.size() == 1 && r[0].id == "r3");
 }
 
@@ -170,7 +182,10 @@ static void test_early_cancel_is_not_a_miss() {
     const int pid = p->pid();
     for (int i = 0; i < 4; ++i) {  // 3 misses would kill it
         std::atomic<bool> cancel{false};
-        std::thread t([&] { std::this_thread::sleep_for(5ms); cancel = true; });
+        std::thread t([&] {
+            std::this_thread::sleep_for(5ms);
+            cancel = true;
+        });
         assert(p->search("slow", cancel).empty());
         t.join();
         std::this_thread::sleep_for(330ms);  // reply arrived at ~50 ms, the budget has run out since
@@ -185,7 +200,11 @@ static void test_silent_plugin_killed_even_when_cancel_ends_the_wait() {
         assert(!p->dead());
         std::atomic<bool> cancel{false};
         // The engine overran: the budget is gone on the provider's clock when the cancel arrives.
-        std::thread t([&] { std::this_thread::sleep_for(20ms); p->clock->advance(300ms); cancel = true; });
+        std::thread t([&] {
+            std::this_thread::sleep_for(20ms);
+            p->clock->advance(300ms);
+            cancel = true;
+        });
         assert(p->search("hang", cancel).empty());
         t.join();
     }
@@ -252,7 +271,8 @@ static void test_on_executed_while_search_waits() {
         std::ifstream(p->dir / "executed.log") >> line;
         if (line.empty()) std::this_thread::sleep_for(10ms);
     }
-    assert(line == providers::plugin::encode_executed(res.id).substr(0, providers::plugin::encode_executed(res.id).size() - 1));
+    assert(line ==
+           providers::plugin::encode_executed(res.id).substr(0, providers::plugin::encode_executed(res.id).size() - 1));
 }
 
 // on_executed that cannot write the whole line (pipe full) leaves the stream desynchronised: the next
@@ -263,9 +283,9 @@ static void test_failed_executed_write_restarts() {
     const std::atomic<bool> cancelled{true};
     assert(p->search("slow", cancelled).empty());  // the plugin now sleeps 0.3 s without reading stdin
     core::SearchResult res;
-    res.id = std::string(100000, 'z');             // more than a pipe holds
+    res.id = std::string(100000, 'z');  // more than a pipe holds
     assert(!p->provider->on_executed(res));
-    std::this_thread::sleep_for(500ms);            // the plugin drains the pipe, waits for the line's end
+    std::this_thread::sleep_for(500ms);  // the plugin drains the pipe, waits for the line's end
     const auto t0 = Clock::now();
     assert(p->search("b").empty() && p->dead() && elapsed_ms(t0) < 1000);
     p->clock->advance(2s);

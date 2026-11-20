@@ -80,7 +80,9 @@ size_t AppIndexer::rebuild_index() {
     for (const auto& dir : dirs) {
         std::error_code ec;
         // Non-throwing iteration: a range-for's operator++ throws on e.g. a directory vanishing mid-scan.
-        std::filesystem::recursive_directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec), end;
+        std::filesystem::recursive_directory_iterator it(
+            dir, std::filesystem::directory_options::skip_permission_denied, ec),
+            end;
         if (ec) {
             NEXUS_LOG_WARN("Cannot scan " + dir.string() + ": " + ec.message());
             continue;
@@ -91,12 +93,13 @@ size_t AppIndexer::rebuild_index() {
             if (entry.is_regular_file(ec) && entry.path().extension() == ".desktop") {
                 std::string id = entry.path().stem().string();
                 if (seen_ids.count(id)) {
-                    continue; // earlier directories (e.g. user overrides) have priority
+                    continue;  // earlier directories (e.g. user overrides) have priority
                 }
 
                 auto parsed = DesktopEntry::parse(entry.path());
                 if (!parsed) {
-                    NEXUS_LOG_WARN("Unparseable desktop file, not masking lower-priority copies: " + entry.path().string());
+                    NEXUS_LOG_WARN("Unparseable desktop file, not masking lower-priority copies: " +
+                                   entry.path().string());
                     continue;
                 }
                 seen_ids.insert(id);  // hidden/no-display overrides claim the ID too, masking system copies
@@ -130,7 +133,9 @@ void AppIndexer::watch_directories() {
         if (ec) dir = configured;
         ec.clear();
         if (watcher_->add_watch(dir.string()) != utils::FsWatcher::AddResult::Ok) continue;
-        for (std::filesystem::recursive_directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec), end;
+        for (std::filesystem::recursive_directory_iterator
+                 it(dir, std::filesystem::directory_options::skip_permission_denied, ec),
+             end;
              !ec && it != end; it.increment(ec)) {
             if (it->is_directory(ec) && !it->is_symlink(ec)) watcher_->add_watch(it->path().string());
         }
@@ -148,7 +153,8 @@ bool AppIndexer::start_watching() {
         [rebuild](const std::vector<utils::FsEvent>& events) {
             for (const auto& ev : events) {
                 // Installers write via rename (IN_MOVED_TO); directory events cover moved-in/new subdirectories.
-                if ((ev.mask & IN_ISDIR) || (ev.name.size() > 8 && ev.name.compare(ev.name.size() - 8, 8, ".desktop") == 0)) {
+                if ((ev.mask & IN_ISDIR) ||
+                    (ev.name.size() > 8 && ev.name.compare(ev.name.size() - 8, 8, ".desktop") == 0)) {
                     rebuild();
                     return;
                 }
@@ -187,5 +193,4 @@ std::shared_ptr<const std::vector<DesktopEntry>> AppIndexer::get_applications() 
     return applications_;
 }
 
-} // namespace nexus::index
-
+}  // namespace nexus::index

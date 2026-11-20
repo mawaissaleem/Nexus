@@ -102,9 +102,12 @@ ThemeController::ThemeController(utils::ThemeMode mode, QObject* parent)
 bool ThemeController::system_is_dark() {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     switch (QGuiApplication::styleHints()->colorScheme()) {
-        case Qt::ColorScheme::Dark: return true;
-        case Qt::ColorScheme::Light: return false;
-        case Qt::ColorScheme::Unknown: break;
+        case Qt::ColorScheme::Dark:
+            return true;
+        case Qt::ColorScheme::Light:
+            return false;
+        case Qt::ColorScheme::Unknown:
+            break;
     }
 #endif
     const QPalette p = QGuiApplication::palette();
@@ -131,4 +134,4 @@ bool ThemeController::eventFilter(QObject* watched, QEvent* event) {
     return QObject::eventFilter(watched, event);
 }
 
-} // namespace nexus::ui
+}  // namespace nexus::ui

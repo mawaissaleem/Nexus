@@ -2,10 +2,7 @@
 
 namespace nexus::providers {
 
-std::vector<core::SearchResult> ShellProvider::search(
-    const core::Query& query,
-    const std::atomic<bool>& cancel_token
-) {
+std::vector<core::SearchResult> ShellProvider::search(const core::Query& query, const std::atomic<bool>& cancel_token) {
     if (cancel_token.load() || query.prefix() != ">") {
         return {};
     }
@@ -28,5 +25,4 @@ std::vector<core::SearchResult> ShellProvider::search(
     return {res};
 }
 
-} // namespace nexus::providers
-
+}  // namespace nexus::providers

@@ -9,16 +9,20 @@ namespace {
 
 std::string get_icon_for_type(core::AliasType type) {
     switch (type) {
-        case core::AliasType::Url: return "web-browser";
-        case core::AliasType::Directory: return "folder";
-        case core::AliasType::File: return "text-x-generic";
+        case core::AliasType::Url:
+            return "web-browser";
+        case core::AliasType::Directory:
+            return "folder";
+        case core::AliasType::File:
+            return "text-x-generic";
         case core::AliasType::Command:
-        case core::AliasType::Shell: return "utilities-terminal";
+        case core::AliasType::Shell:
+            return "utilities-terminal";
     }
     return "emblem-favorite";
 }
 
-} // namespace
+}  // namespace
 
 bool AliasProvider::on_executed(const core::SearchResult& result) {
     if (result.action_kind != core::ActionKind::Internal) return true;
@@ -26,10 +30,7 @@ bool AliasProvider::on_executed(const core::SearchResult& result) {
     return name != result.metadata.end() && aliases_.add_alias(name->second, result.execution_payload);
 }
 
-std::vector<core::SearchResult> AliasProvider::search(
-    const core::Query& query,
-    const std::atomic<bool>& cancel_token
-) {
+std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, const std::atomic<bool>& cancel_token) {
     std::vector<core::SearchResult> results;
     // Any other prefix (>, file, calc, ...) states intent; aliases only answer unprefixed or "alias " queries.
     const bool creating = query.prefix() == "alias ";
@@ -89,7 +90,8 @@ std::vector<core::SearchResult> AliasProvider::search(
             core::SearchResult res;
             res.id = "alias:" + alias.name;
             res.title = alias.name;
-            res.subtitle = (alias.type == core::AliasType::Shell ? "Alias (runs in shell) → " : "Alias → ") + alias.target;
+            res.subtitle =
+                (alias.type == core::AliasType::Shell ? "Alias (runs in shell) → " : "Alias → ") + alias.target;
             res.icon = get_icon_for_type(alias.type);
             res.provider_id = id();
             res.score = score;
@@ -104,8 +106,12 @@ std::vector<core::SearchResult> AliasProvider::search(
                     res.execution_payload = cmd == std::string::npos ? "" : alias.target.substr(cmd);
                     break;
                 }
-                case core::AliasType::Command: res.action_kind = core::ActionKind::Launch; break;
-                default: res.action_kind = core::ActionKind::Open; break;
+                case core::AliasType::Command:
+                    res.action_kind = core::ActionKind::Launch;
+                    break;
+                default:
+                    res.action_kind = core::ActionKind::Open;
+                    break;
             }
 
             results.push_back(std::move(res));
@@ -115,4 +121,4 @@ std::vector<core::SearchResult> AliasProvider::search(
     return results;
 }
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

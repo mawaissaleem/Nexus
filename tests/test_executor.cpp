@@ -22,9 +22,9 @@ static bool has_child() {
         if (!std::getline(f, line)) continue;
         auto p = line.rfind(')');  // comm may contain spaces
         if (p == std::string::npos) continue;
-        char state = 0; long ppid = 0;
-        if (sscanf(line.c_str() + p + 1, " %c %ld", &state, &ppid) == 2 &&
-            ppid == getpid()) return true;
+        char state = 0;
+        long ppid = 0;
+        if (sscanf(line.c_str() + p + 1, " %c %ld", &state, &ppid) == 2 && ppid == getpid()) return true;
     }
     return false;
 }
@@ -64,8 +64,7 @@ int main() {
 
     // launch_desktop_exec runs argv directly: a fake program records what it received.
     {
-        const auto dir = std::filesystem::temp_directory_path() /
-                         ("nexus_test_desktop_" + std::to_string(getpid()));
+        const auto dir = std::filesystem::temp_directory_path() / ("nexus_test_desktop_" + std::to_string(getpid()));
         std::filesystem::remove_all(dir);
         std::filesystem::create_directories(dir);
         const auto out = dir / "args.txt";
@@ -175,7 +174,8 @@ int main() {
         }
         // Over-long line without a newline is refused instead of buffered forever.
         {
-            auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "head -c 100000 /dev/zero | tr '\\0' x; sleep 5"}, {});
+            auto p =
+                Executor::spawn_with_pipes({"/bin/sh", "-c", "head -c 100000 /dev/zero | tr '\\0' x; sleep 5"}, {});
             assert(p.read_line(line, soon(3000), no_cancel, 1000) == RS::TooLong);
         }
         // Writing to a dead child fails (EPIPE) and must not kill us (SIGPIPE ignored); a full pipe fails instead of blocking.
@@ -183,7 +183,10 @@ int main() {
             auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "exit 0"}, {});
             assert(p.read_line(line, soon(2000), no_cancel) == RS::Closed);
             bool ok = true;
-            for (int i = 0; i < 50 && ok; ++i) { ok = p.write_line("x\n"); std::this_thread::sleep_for(ms(5)); }
+            for (int i = 0; i < 50 && ok; ++i) {
+                ok = p.write_line("x\n");
+                std::this_thread::sleep_for(ms(5));
+            }
             assert(!ok);
             auto q = Executor::spawn_with_pipes({"/bin/sh", "-c", "sleep 5"}, {});
             const std::string big(1 << 20, 'y');
@@ -200,14 +203,14 @@ int main() {
             auto p = Executor::spawn_with_pipes({"/bin/grep", "SigIgn", "/proc/self/status"}, {});
             assert(p.read_line(line, soon(2000), no_cancel) == RS::Line && !sigpipe_ignored(line));
             auto file_line = [&](const std::filesystem::path& f) {
-                for (int i = 0; i < 250 && !std::filesystem::exists(f); ++i)
-                    std::this_thread::sleep_for(ms(20));
+                for (int i = 0; i < 250 && !std::filesystem::exists(f); ++i) std::this_thread::sleep_for(ms(20));
                 std::this_thread::sleep_for(ms(50));  // let the writer finish the line
                 std::string l;
                 std::getline(std::ifstream(f), l);
                 return l;
             };
-            assert(Executor::launch_desktop_exec("/bin/sh -c \"grep SigIgn /proc/self/status > '" + (dir / "app").string() + "'\""));
+            assert(Executor::launch_desktop_exec("/bin/sh -c \"grep SigIgn /proc/self/status > '" +
+                                                 (dir / "app").string() + "'\""));
             assert(!sigpipe_ignored(file_line(dir / "app")));
             assert(Executor::launch_shell_command("grep SigIgn /proc/self/status > '" + (dir / "cmd").string() + "'"));
             assert(!sigpipe_ignored(file_line(dir / "cmd")));

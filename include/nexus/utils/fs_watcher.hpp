@@ -66,8 +66,8 @@ private:
     std::atomic<bool> paused_{false};
     std::atomic<bool> limit_reached_{false};
 
-    mutable std::mutex mutex_;                     // guards watches_ (add_watch + insert must be atomic vs. the reader)
+    mutable std::mutex mutex_;  // guards watches_ (add_watch + insert must be atomic vs. the reader)
     std::unordered_map<int, std::string> watches_;  // wd -> path
 };
 
-} // namespace nexus::utils
+}  // namespace nexus::utils

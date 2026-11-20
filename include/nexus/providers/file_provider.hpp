@@ -19,13 +19,10 @@ public:
     [[nodiscard]] std::vector<std::string> prefixes() const override { return {"file "}; }
     [[nodiscard]] int priority() const override { return 70; }
 
-    std::vector<core::SearchResult> search(
-        const core::Query& query,
-        const std::atomic<bool>& cancel_token
-    ) override;
+    std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
 
 private:
     std::shared_ptr<index::Database> db_;
 };
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

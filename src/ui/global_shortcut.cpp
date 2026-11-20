@@ -16,12 +16,9 @@
 
 namespace nexus::ui {
 
-GlobalShortcutManager::GlobalShortcutManager(QObject* parent)
-    : QObject(parent) {}
+GlobalShortcutManager::GlobalShortcutManager(QObject* parent) : QObject(parent) {}
 
-GlobalShortcutManager::~GlobalShortcutManager() {
-    stop();
-}
+GlobalShortcutManager::~GlobalShortcutManager() { stop(); }
 
 bool GlobalShortcutManager::start() {
     if (running_.load()) return true;
@@ -85,7 +82,7 @@ int on_x_error(Display*, XErrorEvent*) {
     g_x_error.store(true);
     return 0;
 }
-} // namespace
+}  // namespace
 
 void GlobalShortcutManager::run_x11_listener() {
     Display* display = XOpenDisplay(nullptr);
@@ -114,7 +111,8 @@ void GlobalShortcutManager::run_x11_listener() {
     if (code == 0) {
         std::string msg = "Unknown key in shortcut '" + shortcut_ + "'";
         NEXUS_LOG_ERROR(msg);
-        QMetaObject::invokeMethod(this, "grab_failed", Qt::QueuedConnection, Q_ARG(QString, QString::fromStdString(msg)));
+        QMetaObject::invokeMethod(this, "grab_failed", Qt::QueuedConnection,
+                                  Q_ARG(QString, QString::fromStdString(msg)));
         running_.store(false);
         XCloseDisplay(display);
         return;
@@ -139,7 +137,8 @@ void GlobalShortcutManager::run_x11_listener() {
         for (unsigned int mod : modifiers) XUngrabKey(display, code, mod, root);
         std::string msg = "Could not grab global shortcut '" + shortcut_ + "': another application already uses it.";
         NEXUS_LOG_ERROR(msg);
-        QMetaObject::invokeMethod(this, "grab_failed", Qt::QueuedConnection, Q_ARG(QString, QString::fromStdString(msg)));
+        QMetaObject::invokeMethod(this, "grab_failed", Qt::QueuedConnection,
+                                  Q_ARG(QString, QString::fromStdString(msg)));
         running_.store(false);
         XCloseDisplay(display);
         return;
@@ -200,5 +199,4 @@ void GlobalShortcutManager::run_windows_listener() {
 }
 #endif
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

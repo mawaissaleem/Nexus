@@ -98,43 +98,45 @@ void ResultWidget::set_selected(bool selected) {
     const Palette& p = palette_;
     if (selected) {
         indicator_bar_->setStyleSheet("background-color: " + p.accent + "; border-radius: 2px;");
-        setStyleSheet(
-            "#resultWidget {"
-            "  background-color: " + p.row_selected_bg + ";"
-            "  border: 1px solid " + p.row_selected_border + ";"
-            "  border-radius: 8px;"
-            "}"
-        );
+        setStyleSheet("#resultWidget {"
+                      "  background-color: " +
+                      p.row_selected_bg +
+                      ";"
+                      "  border: 1px solid " +
+                      p.row_selected_border +
+                      ";"
+                      "  border-radius: 8px;"
+                      "}");
         title_label_->setStyleSheet("color: " + p.text_strong + "; font-weight: 700; font-size: 14px;");
         subtitle_label_->setStyleSheet("color: " + p.subtitle_selected + "; font-size: 12px;");
-        badge_label_->setStyleSheet(
-            "background-color: " + p.accent + ";"
-            "color: " + p.on_accent + ";"
-            "border-radius: 4px;"
-            "padding: 3px 8px;"
-            "font-size: 11px;"
-            "font-weight: 600;"
-        );
+        badge_label_->setStyleSheet("background-color: " + p.accent +
+                                    ";"
+                                    "color: " +
+                                    p.on_accent +
+                                    ";"
+                                    "border-radius: 4px;"
+                                    "padding: 3px 8px;"
+                                    "font-size: 11px;"
+                                    "font-weight: 600;");
     } else {
         indicator_bar_->setStyleSheet("background-color: transparent;");
-        setStyleSheet(
-            "#resultWidget {"
-            "  background-color: transparent;"
-            "  border: 1px solid transparent;"
-            "  border-radius: 8px;"
-            "}"
-        );
+        setStyleSheet("#resultWidget {"
+                      "  background-color: transparent;"
+                      "  border: 1px solid transparent;"
+                      "  border-radius: 8px;"
+                      "}");
         title_label_->setStyleSheet("color: " + p.title + "; font-weight: 500; font-size: 14px;");
         subtitle_label_->setStyleSheet("color: " + p.subtitle_dim + "; font-size: 12px;");
-        badge_label_->setStyleSheet(
-            "background-color: " + p.overlay("0.08") + ";"
-            "color: " + p.text_dim + ";"
-            "border-radius: 4px;"
-            "padding: 2px 8px;"
-            "font-size: 11px;"
-            "font-weight: 500;"
-        );
+        badge_label_->setStyleSheet("background-color: " + p.overlay("0.08") +
+                                    ";"
+                                    "color: " +
+                                    p.text_dim +
+                                    ";"
+                                    "border-radius: 4px;"
+                                    "padding: 2px 8px;"
+                                    "font-size: 11px;"
+                                    "font-weight: 500;");
     }
 }
 
-} // namespace nexus::ui
+}  // namespace nexus::ui

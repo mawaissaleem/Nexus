@@ -12,11 +12,7 @@ public:
     [[nodiscard]] std::vector<std::string> prefixes() const override { return {">"}; }
     [[nodiscard]] int priority() const override { return 80; }
 
-    std::vector<core::SearchResult> search(
-        const core::Query& query,
-        const std::atomic<bool>& cancel_token
-    ) override;
+    std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
 };
 
-} // namespace nexus::providers
-
+}  // namespace nexus::providers

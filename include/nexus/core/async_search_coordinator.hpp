@@ -33,9 +33,7 @@ public:
 
     void cancel_all();
 
-    [[nodiscard]] uint64_t current_generation() const noexcept {
-        return generation_.load();
-    }
+    [[nodiscard]] uint64_t current_generation() const noexcept { return generation_.load(); }
 
 private:
     struct Job {
@@ -57,4 +55,4 @@ private:
     std::thread worker_;  // last member: starts after everything above exists
 };
 
-} // namespace nexus::core
+}  // namespace nexus::core

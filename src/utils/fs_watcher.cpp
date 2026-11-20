@@ -12,8 +12,8 @@ namespace nexus::utils {
 
 namespace {
 
-constexpr int kDebounceMs = 50;       // a burst (git checkout, unpacking) is delivered once it goes quiet for this long
-constexpr size_t kMaxBatch = 4096;    // ...or when this many events are waiting, so a never-ending stream still flows
+constexpr int kDebounceMs = 50;     // a burst (git checkout, unpacking) is delivered once it goes quiet for this long
+constexpr size_t kMaxBatch = 4096;  // ...or when this many events are waiting, so a never-ending stream still flows
 
 std::string system_watch_limit() {
     std::ifstream in("/proc/sys/fs/inotify/max_user_watches");
@@ -21,7 +21,7 @@ std::string system_watch_limit() {
     return (in >> value) ? value : "unknown";
 }
 
-} // namespace
+}  // namespace
 
 FsWatcher::FsWatcher(EventsHandler on_events, std::function<void()> on_overflow, size_t max_watches)
     : on_events_(std::move(on_events)), on_overflow_(std::move(on_overflow)), max_watches_(max_watches) {}
@@ -92,7 +92,8 @@ FsWatcher::AddResult FsWatcher::add_watch(const std::string& dir) {
         }
         return AddResult::LimitReached;
     }
-    if (err != ENOENT && err != ENOTDIR) {  // vanished directories and symlinks are normal; EACCES etc. are worth a line
+    if (err != ENOENT &&
+        err != ENOTDIR) {  // vanished directories and symlinks are normal; EACCES etc. are worth a line
         NEXUS_LOG_DEBUG("Cannot watch " + dir + ": " + std::strerror(err));
     }
     return AddResult::Failed;
@@ -173,4 +174,4 @@ void FsWatcher::run() {
     }
 }
 
-} // namespace nexus::utils
+}  // namespace nexus::utils

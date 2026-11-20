@@ -29,14 +29,13 @@ struct SearchResult {
     // Ranking signals: launches from a similar query and the newest one (Unix s); 0 = none.
     int usage_count{0};
     std::int64_t last_used{0};
-    std::vector<size_t> matched_indices; // Character indices in title that matched
+    std::vector<size_t> matched_indices;  // Character indices in title that matched
 
     ActionKind action_kind{ActionKind::None};
-    std::string execution_payload; // Exec line, shell command, path, URL or text; meaning set by action_kind
-    bool terminal{false};          // Launch only
-    bool confirm{false};           // UI asks yes/no before executing; only plugins set it (destructive actions)
-    std::string query;             // raw query that produced this result (usage history)
+    std::string execution_payload;  // Exec line, shell command, path, URL or text; meaning set by action_kind
+    bool terminal{false};           // Launch only
+    bool confirm{false};            // UI asks yes/no before executing; only plugins set it (destructive actions)
+    std::string query;              // raw query that produced this result (usage history)
 };
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

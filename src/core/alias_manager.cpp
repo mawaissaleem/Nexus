@@ -22,7 +22,7 @@ std::string expand_home(std::string_view path) {
     return std::string(path);
 }
 
-} // namespace
+}  // namespace
 
 AliasType AliasManager::detect_type(std::string_view target) {
     if (!target.empty() && target.front() == '>') return AliasType::Shell;
@@ -162,9 +162,7 @@ bool AliasManager::add_alias(const std::string& name, const std::string& target)
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = std::find_if(aliases_.begin(), aliases_.end(), [&](const AliasEntry& a) {
-            return a.name == name;
-        });
+        auto it = std::find_if(aliases_.begin(), aliases_.end(), [&](const AliasEntry& a) { return a.name == name; });
 
         if (it != aliases_.end()) {
             it->target = target;
@@ -184,9 +182,7 @@ bool AliasManager::add_alias(const std::string& name, const std::string& target)
 bool AliasManager::remove_alias(const std::string& name) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = std::remove_if(aliases_.begin(), aliases_.end(), [&](const AliasEntry& a) {
-            return a.name == name;
-        });
+        auto it = std::remove_if(aliases_.begin(), aliases_.end(), [&](const AliasEntry& a) { return a.name == name; });
         if (it != aliases_.end()) {
             aliases_.erase(it, aliases_.end());
         } else {
@@ -196,4 +192,4 @@ bool AliasManager::remove_alias(const std::string& name) {
     return save();
 }
 
-} // namespace nexus::core
+}  // namespace nexus::core

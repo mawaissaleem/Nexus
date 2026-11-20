@@ -46,5 +46,4 @@ private:
     RankingWeights weights_;
 };
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

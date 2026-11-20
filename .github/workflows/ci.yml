@@ -7,6 +7,19 @@ on:
     branches: [ main ]
 
 jobs:
+  format-check:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check formatting
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install clang-format==18.1.8
+          git ls-files -z '*.cpp' '*.hpp' | xargs -0 -r .venv/bin/clang-format --dry-run --Werror
+
   build-and-test:
     strategy:
       fail-fast: false

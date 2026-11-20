@@ -11,21 +11,16 @@ namespace nexus::providers {
 class ApplicationProvider : public core::ISearchProvider {
 public:
     ApplicationProvider(
-        std::shared_ptr<index::AppIndexer> indexer,
-        std::shared_ptr<index::Database> db = nullptr,
+        std::shared_ptr<index::AppIndexer> indexer, std::shared_ptr<index::Database> db = nullptr,
         // Asked each time a result is executed, so a Settings change applies without a restart.
-        std::function<bool()> history_enabled = [] { return true; }
-    );
+        std::function<bool()> history_enabled = [] { return true; });
 
     [[nodiscard]] std::string id() const override { return "applications"; }
     [[nodiscard]] std::string name() const override { return "Applications"; }
     [[nodiscard]] std::string description() const override { return "Searches installed desktop applications"; }
     [[nodiscard]] int priority() const override { return 100; }
 
-    std::vector<core::SearchResult> search(
-        const core::Query& query,
-        const std::atomic<bool>& cancel_token
-    ) override;
+    std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
 
     // Records usage and query history (when history is on) for the launched application.
     bool on_executed(const core::SearchResult& result) override;
@@ -36,5 +31,4 @@ private:
     std::function<bool()> history_enabled_;
 };
 
-} // namespace nexus::providers
-
+}  // namespace nexus::providers

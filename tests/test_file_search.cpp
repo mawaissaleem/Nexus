@@ -14,7 +14,8 @@ int main() {
     using namespace nexus::core;
     using namespace nexus::providers;
 
-    std::filesystem::path test_base = std::filesystem::temp_directory_path() / ("nexus_test_file_search_" + std::to_string(getpid()));
+    std::filesystem::path test_base =
+        std::filesystem::temp_directory_path() / ("nexus_test_file_search_" + std::to_string(getpid()));
 
     // Clean any leftover state from a previous crashed/aborted run before
     // setting up fresh fixtures. Without this, an earlier assertion failure
@@ -37,8 +38,7 @@ int main() {
     assert(db->open());
     std::atomic<bool> cancel{false};
     nexus::index::FileIndexer indexer(db);
-    assert(indexer.rebuild({{test_base.string()},
-                            ConfigManager::default_file_exclusions(), 3}, cancel) > 0);
+    assert(indexer.rebuild({{test_base.string()}, ConfigManager::default_file_exclusions(), 3}, cancel) > 0);
 
     FileProvider provider(db);
 

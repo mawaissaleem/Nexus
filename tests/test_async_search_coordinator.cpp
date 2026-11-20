@@ -19,26 +19,18 @@ public:
     std::string name() const override { return name_; }
     int priority() const override { return priority_; }
 
-    void set_query_filter(std::string query) {
-        query_filter_ = std::move(query);
-    }
+    void set_query_filter(std::string query) { query_filter_ = std::move(query); }
 
     void set_results(std::vector<SearchResult> results) {
         std::lock_guard<std::mutex> lock(mutex_);
         results_ = std::move(results);
     }
 
-    void set_delay(std::chrono::milliseconds delay) {
-        delay_ = delay;
-    }
+    void set_delay(std::chrono::milliseconds delay) { delay_ = delay; }
 
-    bool was_cancelled() const {
-        return was_cancelled_.load();
-    }
+    bool was_cancelled() const { return was_cancelled_.load(); }
 
-    bool has_started() const {
-        return has_started_.load();
-    }
+    bool has_started() const { return has_started_.load(); }
 
     std::vector<SearchResult> search(const Query& query, const std::atomic<bool>& cancel_token) override {
         if (!query_filter_.empty() && query.raw() != query_filter_) {
@@ -46,7 +38,8 @@ public:
         }
         has_started_.store(true);
         const auto start = std::chrono::steady_clock::now();
-        while (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start) < delay_) {
+        while (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start) <
+               delay_) {
             if (cancel_token.load()) {
                 was_cancelled_.store(true);
                 return {};
@@ -90,9 +83,10 @@ int main() {
         std::promise<std::pair<std::vector<SearchResult>, uint64_t>> promise;
         auto fut = promise.get_future();
 
-        uint64_t returned_gen = coordinator.search(Query("hello"), 10, [&](std::vector<SearchResult> res, uint64_t gen) {
-            promise.set_value({std::move(res), gen});
-        });
+        uint64_t returned_gen =
+            coordinator.search(Query("hello"), 10, [&](std::vector<SearchResult> res, uint64_t gen) {
+                promise.set_value({std::move(res), gen});
+            });
 
         assert(fut.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
         auto [res, gen] = fut.get();
@@ -216,9 +210,7 @@ int main() {
         AsyncSearchCoordinator coordinator(engine);
 
         std::atomic<bool> callback_called{false};
-        coordinator.search(Query("q"), 10, [&](auto, auto) {
-            callback_called.store(true);
-        });
+        coordinator.search(Query("q"), 10, [&](auto, auto) { callback_called.store(true); });
 
         for (int i = 0; i < 100 && !slow_p->has_started(); ++i) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -298,7 +290,8 @@ int main() {
             std::this_thread::sleep_for(std::chrono::milliseconds(8));
             std::promise<std::vector<SearchResult>> done;
             auto fut = done.get_future();
-            coordinator.search(Query("fir"), 10, [&](std::vector<SearchResult> res, uint64_t) { done.set_value(std::move(res)); });
+            coordinator.search(Query("fir"), 10,
+                               [&](std::vector<SearchResult> res, uint64_t) { done.set_value(std::move(res)); });
             assert(fut.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
             const auto res = fut.get();
             assert(res.size() == 1 && res[0].id == "fir");

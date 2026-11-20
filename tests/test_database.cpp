@@ -42,7 +42,7 @@ int main() {
 
     // Bulk counts: one entry per used app, unused apps absent
     auto counts = db.get_usage_counts("app");
-    assert(counts.size() == 1 && counts.at("app1").count == 1);   // "app" matches "app"; "one" does not
+    assert(counts.size() == 1 && counts.at("app1").count == 1);  // "app" matches "app"; "one" does not
     assert(db.get_usage_counts("one").at("app1").count == 1);
     assert(db.get_usage_counts("zzz").empty());
 
@@ -99,7 +99,8 @@ int main() {
         e.name = "Keep";
         e.exec = "keep";
         assert(h.save_applications({e}));
-        assert(h.record_usage("keep", "k") && h.record_usage("keep", "ke") && h.record_query("k", "keep", "applications"));
+        assert(h.record_usage("keep", "k") && h.record_usage("keep", "ke") &&
+               h.record_query("k", "keep", "applications"));
         const auto cleared = h.clear_history();
         assert(cleared && cleared->usage_events == 2 && cleared->queries == 1);
         assert(h.get_usage_count("keep") == 0 && h.get_usage_counts("k").empty());
@@ -141,8 +142,10 @@ int main() {
         assert(sqlite3_open(dbfile.c_str(), &raw) == SQLITE_OK);
         assert(sqlite3_exec(raw, "PRAGMA secure_delete=OFF; BEGIN;", nullptr, nullptr, nullptr) == SQLITE_OK);
         for (int i = 0; i < 500; ++i) {
-            const std::string sql = "INSERT INTO usage_events(app_id, query) VALUES('wipe', '" + marker + "');"
-                                    "INSERT INTO query_history(query, selected_id) VALUES('" + marker + "', 'wipe');";
+            const std::string sql = "INSERT INTO usage_events(app_id, query) VALUES('wipe', '" + marker +
+                                    "');"
+                                    "INSERT INTO query_history(query, selected_id) VALUES('" +
+                                    marker + "', 'wipe');";
             assert(sqlite3_exec(raw, sql.c_str(), nullptr, nullptr, nullptr) == SQLITE_OK);
         }
         assert(sqlite3_exec(raw, "COMMIT; DELETE FROM usage_events; DELETE FROM query_history;", nullptr, nullptr,
@@ -160,4 +163,3 @@ int main() {
     std::cout << "All Database tests passed successfully!\n";
     return 0;
 }
-

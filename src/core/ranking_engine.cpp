@@ -6,8 +6,7 @@
 
 namespace nexus::core {
 
-RankingEngine::RankingEngine(RankingWeights weights)
-    : weights_(weights) {}
+RankingEngine::RankingEngine(RankingWeights weights) : weights_(weights) {}
 
 void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results, std::int64_t now) const {
     const std::string& query_norm = query.normalized();
@@ -46,7 +45,8 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results,
         // An exact title beats any non-exact one by at least exact_match - provider_relevance_weight
         // (lexical gap minus the largest provider-score difference); personalisation may use only half
         // of it, so no usage/recency value can close the gap. Unused when the gap is <= 0.
-        usage_score = std::min(usage_score, 0.5 * std::max(0.0, weights_.exact_match - weights_.provider_relevance_weight));
+        usage_score =
+            std::min(usage_score, 0.5 * std::max(0.0, weights_.exact_match - weights_.provider_relevance_weight));
 
         // Combine scores: normalize raw provider score into [0.0, 1.0], scale by provider_relevance_weight,
         // and add lexical and usage boosts
@@ -58,17 +58,14 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results,
             NEXUS_LOG_WARN("RankingEngine: provider score " + std::to_string(res.score) + " for '" + res.id +
                            "' exceeds max_provider_score; clamped");
         }
-        double normalized_relevance = (weights_.max_provider_score > 0.0)
-            ? std::clamp(res.score / weights_.max_provider_score, 0.0, 1.0)
-            : 0.0;
+        double normalized_relevance =
+            (weights_.max_provider_score > 0.0) ? std::clamp(res.score / weights_.max_provider_score, 0.0, 1.0) : 0.0;
         res.score = (normalized_relevance * weights_.provider_relevance_weight) + lexical_score + usage_score;
     }
 
     // Sort descending by score
-    std::stable_sort(results.begin(), results.end(), [](const SearchResult& a, const SearchResult& b) {
-        return a.score > b.score;
-    });
+    std::stable_sort(results.begin(), results.end(),
+                     [](const SearchResult& a, const SearchResult& b) { return a.score > b.score; });
 }
 
-} // namespace nexus::core
-
+}  // namespace nexus::core

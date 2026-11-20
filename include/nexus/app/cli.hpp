@@ -21,13 +21,10 @@ namespace nexus::app {
 // Anything else unknown prints an error plus usage and returns 1.
 // Starts with run_info_cli. `dir` and `alias` touch only config/aliases; `history clear` opens only the database;
 // `query`, `--list-apps` and `--rebuild-index` also build the indexers.
-[[nodiscard]] std::optional<int> run_cli(const std::vector<std::string>& args,
-                                         core::ConfigManager& config,
-                                         core::AliasManager& aliases,
-                                         std::ostream& out,
-                                         std::ostream& err,
+[[nodiscard]] std::optional<int> run_cli(const std::vector<std::string>& args, core::ConfigManager& config,
+                                         core::AliasManager& aliases, std::ostream& out, std::ostream& err,
                                          // `history clear` calls it to tell a running launcher to empty its clipboard
                                          // history; true = one received it. Empty = no launcher to tell.
                                          std::function<bool()> clear_running_clipboard = {});
 
-} // namespace nexus::app
+}  // namespace nexus::app

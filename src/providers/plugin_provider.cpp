@@ -42,18 +42,29 @@ void PluginProvider::fail(const char* why) {
 // Spawn, hello handshake; publishes the process only once the plugin has said hello.
 bool PluginProvider::start(std::chrono::steady_clock::time_point deadline, const std::atomic<bool>& cancel) {
     if (stopped_) return false;
-    auto child = std::make_shared<core::ChildProcess>(core::Executor::spawn_with_pipes({manifest_.exec.string()}, manifest_.dir));
-    if (!child->valid()) { fail("cannot start"); return false; }
-    if (!child->write_line(plugin::encode_hello())) { fail("cannot write hello"); return false; }
+    auto child = std::make_shared<core::ChildProcess>(
+        core::Executor::spawn_with_pipes({manifest_.exec.string()}, manifest_.dir));
+    if (!child->valid()) {
+        fail("cannot start");
+        return false;
+    }
+    if (!child->write_line(plugin::encode_hello())) {
+        fail("cannot write hello");
+        return false;
+    }
     for (;;) {
         std::string line;
         if (cancel.load() || opts_.clock() >= deadline ||  // a flood of other lines must not outlast the budget
-            child->read_line(line, real_deadline(deadline), cancel, plugin::kMaxLineBytes) != core::ChildProcess::ReadStatus::Line) {
+            child->read_line(line, real_deadline(deadline), cancel, plugin::kMaxLineBytes) !=
+                core::ChildProcess::ReadStatus::Line) {
             fail("no hello in time");  // a cancel here is the engine's budget running out too
             return false;
         }
         const auto d = plugin::decode_line(line, manifest_, 0);
-        if (d.kind == plugin::Decoded::Kind::Invalid) { fail("invalid reply to hello"); return false; }
+        if (d.kind == plugin::Decoded::Kind::Invalid) {
+            fail("invalid reply to hello");
+            return false;
+        }
         if (d.kind != plugin::Decoded::Kind::Hello) continue;
         if (d.api_version != plugin::kApiVersion) {
             fail("unsupported api_version");
@@ -72,7 +83,9 @@ bool PluginProvider::start(std::chrono::steady_clock::time_point deadline, const
 PluginProvider::Handled PluginProvider::handle_line(const std::string& line, std::int64_t current,
                                                     std::vector<core::SearchResult>* out) {
     // Nothing outstanding: no reply can match (not even one claiming id 0); only check the line is valid.
-    if (pending_.empty()) return plugin::decode_line(line, manifest_, 0).kind == plugin::Decoded::Kind::Invalid ? Handled::Bad : Handled::Skip;
+    if (pending_.empty())
+        return plugin::decode_line(line, manifest_, 0).kind == plugin::Decoded::Kind::Invalid ? Handled::Bad
+                                                                                              : Handled::Skip;
     std::vector<std::int64_t> ids;
     for (auto it = pending_.rbegin(); it != pending_.rend(); ++it) ids.push_back(it->id);
     for (const std::int64_t id : ids) {
@@ -90,16 +103,23 @@ PluginProvider::Handled PluginProvider::handle_line(const std::string& line, std
 }
 
 // Reads whatever the plugin has already sent, without waiting; a plugin that keeps talking stops it at the deadline.
-void PluginProvider::drain(core::ChildProcess& proc, std::chrono::steady_clock::time_point deadline, const std::atomic<bool>& cancel) {
+void PluginProvider::drain(core::ChildProcess& proc, std::chrono::steady_clock::time_point deadline,
+                           const std::atomic<bool>& cancel) {
     for (;;) {
         if (cancel.load() || opts_.clock() >= deadline) return;
         std::string line;
         switch (proc.read_line(line, std::chrono::steady_clock::now(), kNeverCancel, plugin::kMaxLineBytes)) {
-        case core::ChildProcess::ReadStatus::Line:
-            if (handle_line(line, 0, nullptr) == Handled::Bad) { fail("invalid JSON"); return; }
-            break;
-        case core::ChildProcess::ReadStatus::Timeout: return;
-        default: fail("exited or sent an over-long line"); return;
+            case core::ChildProcess::ReadStatus::Line:
+                if (handle_line(line, 0, nullptr) == Handled::Bad) {
+                    fail("invalid JSON");
+                    return;
+                }
+                break;
+            case core::ChildProcess::ReadStatus::Timeout:
+                return;
+            default:
+                fail("exited or sent an over-long line");
+                return;
         }
     }
 }
@@ -109,7 +129,10 @@ void PluginProvider::expire_pending() {
     const auto now = opts_.clock();
     while (!pending_.empty() && now - pending_.front().written_at >= opts_.budget) {
         pending_.pop_front();
-        if (++misses_ >= kMaxMisses) { fail("did not answer 3 searches in time"); return; }
+        if (++misses_ >= kMaxMisses) {
+            fail("did not answer 3 searches in time");
+            return;
+        }
     }
 }
 
@@ -143,38 +166,47 @@ std::vector<core::SearchResult> PluginProvider::search(const core::Query& query,
         std::lock_guard<std::mutex> lock(mutex_);
         wrote = proc->write_line(plugin::encode_search(id, query.text(), query.prefix(), query.normalized()));
     }
-    if (!wrote) { fail("write failed"); return {}; }
+    if (!wrote) {
+        fail("write failed");
+        return {};
+    }
 
     std::vector<core::SearchResult> out;
     for (;;) {
         std::string line;
         // Checked here too: read_line returns buffered lines without looking at the clock or the token.
-        const auto status = cancel.load()                ? core::ChildProcess::ReadStatus::Cancelled
-                            : opts_.clock() >= deadline ? core::ChildProcess::ReadStatus::Timeout
-                                                         : proc->read_line(line, real_deadline(deadline), cancel, plugin::kMaxLineBytes);
+        const auto status = cancel.load() ? core::ChildProcess::ReadStatus::Cancelled
+                            : opts_.clock() >= deadline
+                                ? core::ChildProcess::ReadStatus::Timeout
+                                : proc->read_line(line, real_deadline(deadline), cancel, plugin::kMaxLineBytes);
         switch (status) {
-        case core::ChildProcess::ReadStatus::Line:
-            switch (handle_line(line, id, &out)) {
-            case Handled::Reply: return out;
-            case Handled::Bad: fail("invalid JSON"); return {};
-            case Handled::Skip: break;
+            case core::ChildProcess::ReadStatus::Line:
+                switch (handle_line(line, id, &out)) {
+                    case Handled::Reply:
+                        return out;
+                    case Handled::Bad:
+                        fail("invalid JSON");
+                        return {};
+                    case Handled::Skip:
+                        break;
+                }
+                break;
+            case core::ChildProcess::ReadStatus::Cancelled: {
+                bool sent;
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    sent = proc->write_line(plugin::encode_cancel(id));
+                }
+                if (!sent) fail("write failed");
+                else expire_pending();
+                return {};
             }
-            break;
-        case core::ChildProcess::ReadStatus::Cancelled: {
-            bool sent;
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                sent = proc->write_line(plugin::encode_cancel(id));
-            }
-            if (!sent) fail("write failed"); else expire_pending();
-            return {};
-        }
-        case core::ChildProcess::ReadStatus::Timeout:
-            expire_pending();
-            return {};
-        default:
-            fail("exited or sent an over-long line");
-            return {};
+            case core::ChildProcess::ReadStatus::Timeout:
+                expire_pending();
+                return {};
+            default:
+                fail("exited or sent an over-long line");
+                return {};
         }
     }
 }
@@ -201,8 +233,9 @@ void PluginProvider::finish_shutdown(std::chrono::milliseconds grace) {
         std::lock_guard<std::mutex> lock(mutex_);
         p = std::move(stopping_);
     }
-    if (p) p->terminate(std::max(std::chrono::milliseconds(0),
-                                 std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now())));
+    if (p)
+        p->terminate(std::max(std::chrono::milliseconds(0), std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                                until - std::chrono::steady_clock::now())));
 }
 
 bool PluginProvider::on_executed(const core::SearchResult& result) {
@@ -213,4 +246,4 @@ bool PluginProvider::on_executed(const core::SearchResult& result) {
     return false;
 }
 
-} // namespace nexus::providers
+}  // namespace nexus::providers

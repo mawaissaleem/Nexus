@@ -11,4 +11,4 @@ namespace nexus::core {
 // Returns true on success.
 bool dispatch_action(const SearchResult& result, const std::vector<SearchProviderPtr>& providers);
 
-} // namespace nexus::core
+}  // namespace nexus::core

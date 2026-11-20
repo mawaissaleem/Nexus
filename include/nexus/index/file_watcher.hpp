@@ -49,9 +49,9 @@ private:
     size_t max_watches_;
     FileIndexOptions options_;
     std::unordered_map<std::string, size_t> levels_;  // watched dir -> depth below its root (root = 0); watcher thread
-                                                       // only, except inside arm() while events are held
-    std::atomic<bool> stopping_{false};  // cancel token for handle(), set by stop()
+                                                      // only, except inside arm() while events are held
+    std::atomic<bool> stopping_{false};               // cancel token for handle(), set by stop()
     std::unique_ptr<utils::FsWatcher> watcher_;
 };
 
-} // namespace nexus::index
+}  // namespace nexus::index

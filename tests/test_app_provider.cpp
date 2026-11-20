@@ -13,11 +13,13 @@ using namespace nexus;
 static void write_desktop(const fs::path& dir, const std::string& id, const std::string& name,
                           const std::string& extra = "") {
     std::ofstream(dir / (id + ".desktop"))
-        << "[Desktop Entry]\nType=Application\nName=" << name << "\nExec=" << id << "\n" << extra;
+        << "[Desktop Entry]\nType=Application\nName=" << name << "\nExec=" << id << "\n"
+        << extra;
 }
 
 static const core::SearchResult* find(const std::vector<core::SearchResult>& rs, const std::string& id) {
-    for (const auto& r : rs) if (r.id == id) return &r;
+    for (const auto& r : rs)
+        if (r.id == id) return &r;
     return nullptr;
 }
 
@@ -52,7 +54,8 @@ int main() {
     std::atomic<bool> cancel{false};
 
     auto results = provider.search(core::Query("frobnicate"), cancel);
-    assert(find(results, "byname") && find(results, "bygeneric") && find(results, "bykeyword") && find(results, "bycomment"));
+    assert(find(results, "byname") && find(results, "bygeneric") && find(results, "bykeyword") &&
+           find(results, "bycomment"));
     assert(!find(results, "nomatch"));
     const double name = find(results, "byname")->score;
     const double generic = find(results, "bygeneric")->score;
@@ -93,7 +96,8 @@ int main() {
 
     // History switch: executing a result records only while the switch is on, and flips take effect at once.
     // Exec points at a missing binary so no real application starts.
-    std::ofstream(dir / "histapp.desktop") << "[Desktop Entry]\nType=Application\nName=histapp\nExec=/nonexistent/nexus_test_no_such_binary\n";
+    std::ofstream(dir / "histapp.desktop")
+        << "[Desktop Entry]\nType=Application\nName=histapp\nExec=/nonexistent/nexus_test_no_such_binary\n";
     assert(indexer->rebuild_index() >= 6);
     std::atomic<bool> hist_on{false};
     auto hist_ptr = std::make_shared<providers::ApplicationProvider>(indexer, db, [&] { return hist_on.load(); });

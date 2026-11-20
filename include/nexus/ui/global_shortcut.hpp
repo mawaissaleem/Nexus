@@ -36,5 +36,4 @@ private:
     std::string shortcut_{"Alt+Space"};
 };
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

@@ -9,19 +9,7 @@ namespace nexus::providers {
 
 namespace {
 
-enum class TokenType {
-    Number,
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-    Modulo,
-    Power,
-    LParen,
-    RParen,
-    Identifier,
-    End
-};
+enum class TokenType { Number, Plus, Minus, Multiply, Divide, Modulo, Power, LParen, RParen, Identifier, End };
 
 struct Token {
     TokenType type{TokenType::End};
@@ -31,9 +19,7 @@ struct Token {
 
 class MathParser {
 public:
-    explicit MathParser(std::string_view input) : input_(input) {
-        next_token();
-    }
+    explicit MathParser(std::string_view input) : input_(input) { next_token(); }
 
     std::optional<double> parse() {
         if (current_token_.type == TokenType::End) {
@@ -62,7 +48,8 @@ private:
             size_t start = pos_;
             bool has_dot = (c == '.');
             ++pos_;
-            while (pos_ < input_.size() && (std::isdigit(static_cast<unsigned char>(input_[pos_])) || (!has_dot && input_[pos_] == '.'))) {
+            while (pos_ < input_.size() &&
+                   (std::isdigit(static_cast<unsigned char>(input_[pos_])) || (!has_dot && input_[pos_] == '.'))) {
                 if (input_[pos_] == '.') has_dot = true;
                 ++pos_;
             }
@@ -93,15 +80,33 @@ private:
 
         ++pos_;
         switch (c) {
-            case '+': current_token_ = {TokenType::Plus, 0.0, "+"}; return;
-            case '-': current_token_ = {TokenType::Minus, 0.0, "-"}; return;
-            case '*': current_token_ = {TokenType::Multiply, 0.0, "*"}; return;
-            case '/': current_token_ = {TokenType::Divide, 0.0, "/"}; return;
-            case '%': current_token_ = {TokenType::Modulo, 0.0, "%"}; return;
-            case '^': current_token_ = {TokenType::Power, 0.0, "^"}; return;
-            case '(': current_token_ = {TokenType::LParen, 0.0, "("}; return;
-            case ')': current_token_ = {TokenType::RParen, 0.0, ")"}; return;
-            default:  current_token_ = {TokenType::End, 0.0, ""}; return;
+            case '+':
+                current_token_ = {TokenType::Plus, 0.0, "+"};
+                return;
+            case '-':
+                current_token_ = {TokenType::Minus, 0.0, "-"};
+                return;
+            case '*':
+                current_token_ = {TokenType::Multiply, 0.0, "*"};
+                return;
+            case '/':
+                current_token_ = {TokenType::Divide, 0.0, "/"};
+                return;
+            case '%':
+                current_token_ = {TokenType::Modulo, 0.0, "%"};
+                return;
+            case '^':
+                current_token_ = {TokenType::Power, 0.0, "^"};
+                return;
+            case '(':
+                current_token_ = {TokenType::LParen, 0.0, "("};
+                return;
+            case ')':
+                current_token_ = {TokenType::RParen, 0.0, ")"};
+                return;
+            default:
+                current_token_ = {TokenType::End, 0.0, ""};
+                return;
         }
     }
 
@@ -128,8 +133,7 @@ private:
         auto left = parse_power();
         if (!left) return std::nullopt;
 
-        while (current_token_.type == TokenType::Multiply ||
-               current_token_.type == TokenType::Divide ||
+        while (current_token_.type == TokenType::Multiply || current_token_.type == TokenType::Divide ||
                current_token_.type == TokenType::Modulo) {
             TokenType op = current_token_.type;
             next_token();
@@ -139,7 +143,7 @@ private:
             if (op == TokenType::Multiply) {
                 *left *= *right;
             } else if (op == TokenType::Divide) {
-                if (*right == 0.0) return std::nullopt; // divide by zero
+                if (*right == 0.0) return std::nullopt;  // divide by zero
                 *left /= *right;
             } else if (op == TokenType::Modulo) {
                 if (*right == 0.0) return std::nullopt;
@@ -155,7 +159,7 @@ private:
 
         if (current_token_.type == TokenType::Power) {
             next_token();
-            auto right = parse_power(); // right associative
+            auto right = parse_power();  // right associative
             if (!right) return std::nullopt;
             *left = std::pow(*left, *right);
         }
@@ -223,17 +227,15 @@ private:
     Token current_token_;
 };
 
-} // namespace
+}  // namespace
 
 std::optional<double> CalculatorProvider::evaluate(std::string_view expression) {
     MathParser parser(expression);
     return parser.parse();
 }
 
-std::vector<core::SearchResult> CalculatorProvider::search(
-    const core::Query& query,
-    const std::atomic<bool>& cancel_token
-) {
+std::vector<core::SearchResult> CalculatorProvider::search(const core::Query& query,
+                                                           const std::atomic<bool>& cancel_token) {
     if (cancel_token.load()) {
         return {};
     }
@@ -289,5 +291,4 @@ std::vector<core::SearchResult> CalculatorProvider::search(
     return {res};
 }
 
-} // namespace nexus::providers
-
+}  // namespace nexus::providers

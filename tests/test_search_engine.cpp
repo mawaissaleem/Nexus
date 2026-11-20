@@ -16,7 +16,8 @@ using namespace nexus::core;
 class FakeProvider : public ISearchProvider {
 public:
     FakeProvider(std::string id, std::string name, int priority = 0, bool should_throw = false, size_t num_results = 1)
-        : id_(std::move(id)), name_(std::move(name)), priority_(priority), should_throw_(should_throw), num_results_(num_results) {}
+        : id_(std::move(id)), name_(std::move(name)), priority_(priority), should_throw_(should_throw),
+          num_results_(num_results) {}
 
     std::string id() const override { return id_; }
     std::string name() const override { return name_; }
@@ -47,7 +48,8 @@ private:
 // Records every query it receives; owns whatever prefixes it is given.
 class PrefixProvider : public ISearchProvider {
 public:
-    PrefixProvider(std::string id, std::vector<std::string> prefixes) : id_(std::move(id)), prefixes_(std::move(prefixes)) {}
+    PrefixProvider(std::string id, std::vector<std::string> prefixes)
+        : id_(std::move(id)), prefixes_(std::move(prefixes)) {}
     std::string id() const override { return id_; }
     std::string name() const override { return id_; }
     std::vector<std::string> prefixes() const override { return prefixes_; }
@@ -81,11 +83,15 @@ public:
     std::vector<SearchResult> search(const Query&, const std::atomic<bool>& cancel) override {
         const int now_active = ++active;
         int seen = max_active.load();
-        while (now_active > seen && !max_active.compare_exchange_weak(seen, now_active)) {}
+        while (now_active > seen && !max_active.compare_exchange_weak(seen, now_active)) {
+        }
         ++calls;
         std::this_thread::sleep_for(delay_);
         while (block_ && !released) {
-            if (honour_cancel_ && cancel.load()) { saw_cancel = true; break; }
+            if (honour_cancel_ && cancel.load()) {
+                saw_cancel = true;
+                break;
+            }
             std::this_thread::sleep_for(ms(2));
         }
         --active;
@@ -176,7 +182,8 @@ int main() {
         auto res = engine.search(q);
         // exception from bad provider should not prevent good provider result
         bool saw_good = false;
-        for (auto& r : res) if (r.provider_id == "good") saw_good = true;
+        for (auto& r : res)
+            if (r.provider_id == "good") saw_good = true;
         assert(saw_good);
     }
 
@@ -316,7 +323,8 @@ int main() {
         auto c = engine.search(Query("calc 2*3"));
         assert(c.size() == 1 && c[0].title == "6" && c[0].score <= 1000.0);
         bool plain_calc = false;
-        for (const auto& res : engine.search(Query("2*3"))) plain_calc |= (res.provider_id == "calculator" && res.title == "6");
+        for (const auto& res : engine.search(Query("2*3")))
+            plain_calc |= (res.provider_id == "calculator" && res.title == "6");
         assert(plain_calc);
         assert(engine.search(Query("> 2*3")).size() == 1);  // only the shell command, never a calc result
         // Bare prefixes (empty text): nothing is produced, nothing runs, nothing leaks to other providers

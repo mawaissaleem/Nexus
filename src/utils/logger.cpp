@@ -35,17 +35,24 @@ void Logger::log(LogLevel level, std::string_view message, const char* file, int
 
     const char* level_str = "INFO";
     switch (level) {
-        case LogLevel::Debug:   level_str = "DEBUG"; break;
-        case LogLevel::Info:    level_str = "INFO "; break;
-        case LogLevel::Warning: level_str = "WARN "; break;
-        case LogLevel::Error:   level_str = "ERROR"; break;
+        case LogLevel::Debug:
+            level_str = "DEBUG";
+            break;
+        case LogLevel::Info:
+            level_str = "INFO ";
+            break;
+        case LogLevel::Warning:
+            level_str = "WARN ";
+            break;
+        case LogLevel::Error:
+            level_str = "ERROR";
+            break;
     }
 
     std::ostream& out = (level == LogLevel::Error || level == LogLevel::Warning) ? std::cerr : std::cout;
-    out << "[" << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S")
-        << '.' << std::setfill('0') << std::setw(3) << ms.count() << "] "
-        << "[" << level_str << "] "
-        << message;
+    out << "[" << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0') << std::setw(3) << ms.count()
+        << "] "
+        << "[" << level_str << "] " << message;
 
     if (level == LogLevel::Debug && file) {
         out << " (" << file << ":" << line << ")";
@@ -53,5 +60,4 @@ void Logger::log(LogLevel level, std::string_view message, const char* file, int
     out << '\n';
 }
 
-} // namespace nexus::utils
-
+}  // namespace nexus::utils

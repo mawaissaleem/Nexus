@@ -21,7 +21,8 @@ static std::vector<core::SearchResult> search(const fs::path& dir, const std::st
 }
 
 static const core::SearchResult* find(const std::vector<core::SearchResult>& r, const std::string& id) {
-    for (const auto& x : r) if (x.id == id) return &x;
+    for (const auto& x : r)
+        if (x.id == id) return &x;
     return nullptr;
 }
 

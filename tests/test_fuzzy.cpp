@@ -62,4 +62,3 @@ int main() {
     std::cout << "All fuzzy matching tests passed successfully!\n";
     return 0;
 }
-

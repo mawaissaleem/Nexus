@@ -28,11 +28,12 @@ bool wait_until(const std::function<bool()>& pred) {
 
 std::string name_of(const AppIndexer& ix, const std::string& id) {
     const auto snap = ix.get_applications();  // keep the owner alive: in C++20 a temporary in the range-init dies first
-    for (const auto& a : *snap) if (a.id == id) return a.name;
+    for (const auto& a : *snap)
+        if (a.id == id) return a.name;
     return "";
 }
 
-} // namespace
+}  // namespace
 
 int main() {
     const fs::path root = fs::temp_directory_path() / ("nexus_test_app_watcher_" + std::to_string(getpid()));
@@ -75,7 +76,8 @@ int main() {
     fs::remove(sys / "added.desktop");
     assert(wait_until([&] { return name_of(ix, "added").empty(); }));
     assert(wait_until([&] {
-        for (const auto& a : db->load_applications()) if (a.id == "added") return false;
+        for (const auto& a : db->load_applications())
+            if (a.id == "added") return false;
         return true;
     }));
 

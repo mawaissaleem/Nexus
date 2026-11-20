@@ -35,13 +35,9 @@ bool FuzzyMatcher::icontains(std::string_view target, std::string_view sub) {
     if (sub.empty()) return true;
     if (sub.size() > target.size()) return false;
 
-    auto it = std::search(
-        target.begin(), target.end(),
-        sub.begin(), sub.end(),
-        [](char c1, char c2) {
-            return std::tolower(static_cast<unsigned char>(c1)) == std::tolower(static_cast<unsigned char>(c2));
-        }
-    );
+    auto it = std::search(target.begin(), target.end(), sub.begin(), sub.end(), [](char c1, char c2) {
+        return std::tolower(static_cast<unsigned char>(c1)) == std::tolower(static_cast<unsigned char>(c2));
+    });
     return it != target.end();
 }
 
@@ -60,8 +56,8 @@ bool FuzzyMatcher::is_acronym_match(std::string_view pattern, std::string_view t
         if (is_word_char) {
             if (!in_word) {
                 is_boundary = true;
-            } else if (std::isupper(static_cast<unsigned char>(c)) &&
-                       i > 0 && std::islower(static_cast<unsigned char>(target[i - 1]))) {
+            } else if (std::isupper(static_cast<unsigned char>(c)) && i > 0 &&
+                       std::islower(static_cast<unsigned char>(target[i - 1]))) {
                 is_boundary = true;
             }
         }
@@ -154,8 +150,7 @@ FuzzyMatchResult FuzzyMatcher::match(std::string_view pattern, std::string_view 
             score += 10.0;
 
             // Check word boundary
-            bool is_boundary = (target_idx == 0) ||
-                               !std::isalnum(static_cast<unsigned char>(target[target_idx - 1])) ||
+            bool is_boundary = (target_idx == 0) || !std::isalnum(static_cast<unsigned char>(target[target_idx - 1])) ||
                                (std::isupper(static_cast<unsigned char>(target[target_idx])) &&
                                 std::islower(static_cast<unsigned char>(target[target_idx - 1])));
             if (is_boundary) {
@@ -203,5 +198,4 @@ FuzzyMatchResult FuzzyMatcher::match(std::string_view pattern, std::string_view 
     return res;
 }
 
-} // namespace nexus::utils
-
+}  // namespace nexus::utils

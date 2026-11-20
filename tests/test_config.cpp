@@ -81,7 +81,8 @@ int main() {
     assert(config.get_file_exclusions().empty());
 
     // Test 8: malformed JSON logs an error and falls back to defaults (nothing from the file leaks in)
-    std::ofstream(temp_config_file) << "{\n  \"enable_ctrl_np_navigation\": false,\n  \"global_shortcut\": \"Ctrl+K\"\n";  // unterminated
+    std::ofstream(temp_config_file)
+        << "{\n  \"enable_ctrl_np_navigation\": false,\n  \"global_shortcut\": \"Ctrl+K\"\n";  // unterminated
     config.load(temp_config_file.string());
     assert(config.is_ctrl_np_navigation_enabled() == true);
     assert(config.get_shortcut() == "Alt+Space");
@@ -114,9 +115,10 @@ int main() {
     fs::remove_all(odd);
 
     // Test 12: a file in the old writer's format (unescaped, one item per line) still loads
-    std::ofstream(temp_config_file) << "{\n  \"enable_ctrl_np_navigation\": false,\n  \"global_shortcut\": \"Ctrl+Shift+K\",\n"
-                                       "  \"search_directories\": [\n    \"/tmp\",\n    \"/usr\"\n  ],\n"
-                                       "  \"file_exclusions\": [\n    \"node_modules\"\n  ]\n}\n";
+    std::ofstream(temp_config_file)
+        << "{\n  \"enable_ctrl_np_navigation\": false,\n  \"global_shortcut\": \"Ctrl+Shift+K\",\n"
+           "  \"search_directories\": [\n    \"/tmp\",\n    \"/usr\"\n  ],\n"
+           "  \"file_exclusions\": [\n    \"node_modules\"\n  ]\n}\n";
     assert(config.load(temp_config_file.string()));
     assert(!config.is_ctrl_np_navigation_enabled());
     assert(config.get_shortcut() == "Ctrl+Shift+K");
@@ -124,9 +126,10 @@ int main() {
     assert((config.get_file_exclusions() == std::vector<std::string>{"node_modules"}));
 
     // Test 13: a 0.3.0 file with an unescaped backslash path still loads (lenient unknown escape)
-    std::ofstream(temp_config_file) << "{\n  \"enable_ctrl_np_navigation\": false,\n  \"global_shortcut\": \"Ctrl+Shift+K\",\n"
-                                       "  \"search_directories\": [\n    \"/srv/my\\dir\",\n    \"/srv/data\"\n  ],\n"
-                                       "  \"file_exclusions\": [\n    \"foo\"\n  ]\n}\n";
+    std::ofstream(temp_config_file)
+        << "{\n  \"enable_ctrl_np_navigation\": false,\n  \"global_shortcut\": \"Ctrl+Shift+K\",\n"
+           "  \"search_directories\": [\n    \"/srv/my\\dir\",\n    \"/srv/data\"\n  ],\n"
+           "  \"file_exclusions\": [\n    \"foo\"\n  ]\n}\n";
     assert(config.load(temp_config_file.string()));
     assert(!config.is_ctrl_np_navigation_enabled());
     assert((config.get_search_directories() == std::vector<std::string>{"/srv/my\\dir", "/srv/data"}));
@@ -210,7 +213,8 @@ int main() {
     std::ofstream(temp_config_file) << "{\"disabled_providers\": \"files\"}";  // wrong type -> none disabled
     assert(config.load(temp_config_file.string()) && config.is_provider_enabled("files"));
     std::ofstream(temp_config_file) << "{\"disabled_providers\": [3, \"\", \"files\"]}";  // junk items skipped
-    assert(config.load(temp_config_file.string()) && !config.is_provider_enabled("files") && config.is_provider_enabled("shell"));
+    assert(config.load(temp_config_file.string()) && !config.is_provider_enabled("files") &&
+           config.is_provider_enabled("shell"));
     std::ofstream(temp_config_file) << "{}";  // absent after a load -> back to all enabled
     assert(config.load(temp_config_file.string()) && config.is_provider_enabled("files"));
 
@@ -243,4 +247,3 @@ int main() {
     std::cout << "All Config tests passed successfully!\n";
     return 0;
 }
-

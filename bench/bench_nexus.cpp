@@ -43,18 +43,20 @@ static double percentile(std::vector<double> v, double p) {
     return v[std::max<size_t>(rank, 1) - 1];
 }
 
-static const char* kWords[] = {"fire", "code", "term", "image", "music", "video", "note", "mail", "calc",
-                               "paint", "chat", "game", "draw", "view", "edit", "sheet", "slide", "pdf",
-                               "map", "clock", "photo", "cloud", "sync", "mon", "disk", "net", "key", "font"};
+static const char* kWords[] = {"fire",  "code",  "term", "image", "music", "video", "note",  "mail", "calc", "paint",
+                               "chat",  "game",  "draw", "view",  "edit",  "sheet", "slide", "pdf",  "map",  "clock",
+                               "photo", "cloud", "sync", "mon",   "disk",  "net",   "key",   "font"};
 static constexpr size_t kNumWords = sizeof(kWords) / sizeof(kWords[0]);
 
 static void make_apps(const fs::path& dir, int n) {
     fs::create_directories(dir);
     for (int i = 0; i < n; ++i) {
-        std::string name = std::string(kWords[i % kNumWords]) + (i / kNumWords ? "-" + std::to_string(i / kNumWords) : "");
+        std::string name =
+            std::string(kWords[i % kNumWords]) + (i / kNumWords ? "-" + std::to_string(i / kNumWords) : "");
         std::ofstream(dir / ("app" + std::to_string(i) + ".desktop"))
-            << "[Desktop Entry]\nType=Application\nName=" << name << " Studio\nGenericName=" << kWords[(i * 7) % kNumWords]
-            << "\nComment=Synthetic app " << i << "\nExec=app" << i << "\nIcon=app" << i << "\nCategories=Utility;\n";
+            << "[Desktop Entry]\nType=Application\nName=" << name
+            << " Studio\nGenericName=" << kWords[(i * 7) % kNumWords] << "\nComment=Synthetic app " << i << "\nExec=app"
+            << i << "\nIcon=app" << i << "\nCategories=Utility;\n";
     }
 }
 
@@ -69,7 +71,9 @@ static void make_tree(const fs::path& root, int files) {
             fs::create_directories(d);
             for (int f = 0; f < per_dir && made < files; ++f, ++made)
                 std::ofstream(d / (std::string(kWords[(t + m + f) % kNumWords]) + "_" + std::to_string(made) +
-                                   (f % 3 == 0 ? ".txt" : f % 3 == 1 ? ".cpp" : ".pdf")));
+                                   (f % 3 == 0   ? ".txt"
+                                    : f % 3 == 1 ? ".cpp"
+                                                 : ".pdf")));
         }
 }
 
@@ -82,7 +86,8 @@ static void set_usage_rows(const std::string& db_path, int rows, int n_apps) {
     std::ostringstream sql;
     // Queries spread over prefixes of the benchmark's app queries, so rows actually match.
     // query_norm is filled directly: the strings are already lower-case and trimmed.
-    sql << "BEGIN; DELETE FROM usage_events; WITH RECURSIVE c(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM c WHERE i<" << rows - 1
+    sql << "BEGIN; DELETE FROM usage_events; WITH RECURSIVE c(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM c WHERE i<"
+        << rows - 1
         << "), q(k, s) AS (VALUES (0,'c'),(1,'co'),(2,'cod'),(3,'code'),(4,'codium'),(5,'fire'),(6,'firefox'),"
            "(7,'term'),(8,'terminal'),(9,'pho'),(10,'photos'))"
         << " INSERT INTO usage_events(app_id, query, query_norm) SELECT 'app' || ((i*i) % " << n_apps
@@ -95,9 +100,12 @@ static void set_usage_rows(const std::string& db_path, int rows, int n_apps) {
     sqlite3_close(h);
 }
 
-struct Stats { double p50, p95; };
+struct Stats {
+    double p50, p95;
+};
 
-static Stats time_queries(core::SearchEngine& eng, const std::vector<std::string>& queries, int iters, size_t& results_seen) {
+static Stats time_queries(core::SearchEngine& eng, const std::vector<std::string>& queries, int iters,
+                          size_t& results_seen) {
     std::vector<double> samples;
     for (int i = 0; i < 20; ++i)  // warm-up
         for (const auto& q : queries) eng.search(core::Query(q));
@@ -113,7 +121,8 @@ static Stats time_queries(core::SearchEngine& eng, const std::vector<std::string
 }
 
 static void row(const std::string& label, Stats s, size_t n) {
-    std::cout << "| " << label << " | " << std::fixed << std::setprecision(3) << s.p50 << " | " << s.p95 << " | " << n << " |\n";
+    std::cout << "| " << label << " | " << std::fixed << std::setprecision(3) << s.p50 << " | " << s.p95 << " | " << n
+              << " |\n";
 }
 
 int main(int argc, char** argv) {
@@ -136,9 +145,15 @@ int main(int argc, char** argv) {
             usage_rows.clear();
             std::stringstream ss(argv[i + 1]);
             for (std::string t; std::getline(ss, t, ',');) usage_rows.push_back(std::atoi(t.c_str()));
-        } else { std::cerr << "unknown arg " << a << "\n"; return 2; }
+        } else {
+            std::cerr << "unknown arg " << a << "\n";
+            return 2;
+        }
     }
-    if (n_apps < 1 || n_files < 1 || iters < 1 || usage_rows.empty()) { std::cerr << "bad arguments\n"; return 2; }
+    if (n_apps < 1 || n_files < 1 || iters < 1 || usage_rows.empty()) {
+        std::cerr << "bad arguments\n";
+        return 2;
+    }
 
     const fs::path root = fs::temp_directory_path() / ("nexus_bench_" + std::to_string(getpid()));
     fs::remove_all(root);
@@ -181,18 +196,24 @@ int main(int argc, char** argv) {
     auto eng = build_engine(db, idx);  // empty DB: scans .desktop files
     const double startup_cold = ms_since(t0);
     const size_t indexed = idx->get_applications()->size();
-    eng.reset(); idx.reset(); db.reset();
+    eng.reset();
+    idx.reset();
+    db.reset();
     t0 = Clock::now();
-    eng = build_engine(db, idx);       // populated DB: loads rows
+    eng = build_engine(db, idx);  // populated DB: loads rows
     const double startup_warm = ms_since(t0);
 
     // Index build: rebuild_index (scan + parse + save to DB), median of 10.
     std::vector<double> builds;
-    for (int i = 0; i < 10; ++i) { t0 = Clock::now(); idx->rebuild_index(); builds.push_back(ms_since(t0)); }
+    for (int i = 0; i < 10; ++i) {
+        t0 = Clock::now();
+        idx->rebuild_index();
+        builds.push_back(ms_since(t0));
+    }
 
     std::cout << "indexed apps: " << indexed << "\n\n| Metric | ms |\n|---|---|\n"
-              << std::fixed << std::setprecision(2)
-              << "| startup, first run (scan " << indexed << " apps) | " << startup_cold << " |\n"
+              << std::fixed << std::setprecision(2) << "| startup, first run (scan " << indexed << " apps) | "
+              << startup_cold << " |\n"
               << "| startup, warm (load from DB) | " << startup_warm << " |\n"
               << "| index build p50 (10 runs) | " << percentile(builds, 50) << " |\n"
               << "| index build max | " << *std::max_element(builds.begin(), builds.end()) << " |\n\n";
@@ -203,7 +224,11 @@ int main(int argc, char** argv) {
     const std::atomic<bool> no_cancel{false};
     std::vector<double> file_builds;
     size_t file_rows = 0;
-    for (int i = 0; i < 5; ++i) { t0 = Clock::now(); file_rows = file_indexer.rebuild(file_opts, no_cancel); file_builds.push_back(ms_since(t0)); }
+    for (int i = 0; i < 5; ++i) {
+        t0 = Clock::now();
+        file_rows = file_indexer.rebuild(file_opts, no_cancel);
+        file_builds.push_back(ms_since(t0));
+    }
     assert(file_rows >= static_cast<size_t>(n_files));
     std::cout << "| Metric | ms |\n|---|---|\n| file index build p50 (5 runs, " << file_rows << " entries) | "
               << percentile(file_builds, 50) << " |\n| file index build max | "
@@ -222,7 +247,8 @@ int main(int argc, char** argv) {
     set_usage_rows(db_path, 0, n_apps);
     const int file_iters = std::max(10, iters / 10);
     for (const auto& q : file_q)
-        row("`" + q + "`, " + std::to_string(n_files) + " files", time_queries(*eng, {q}, file_iters, seen), static_cast<size_t>(file_iters));
+        row("`" + q + "`, " + std::to_string(n_files) + " files", time_queries(*eng, {q}, file_iters, seen),
+            static_cast<size_t>(file_iters));
     std::cout << "\n(total results returned: " << seen << ", guards against empty-result measurements)\n";
     assert(seen > 0);  // note: "xyzzy"/"zzqx" legitimately return nothing
 

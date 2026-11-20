@@ -44,7 +44,7 @@ bool parse_bool(std::string_view s) {
     return lower == "true" || lower == "1" || lower == "yes";
 }
 
-} // namespace
+}  // namespace
 
 std::optional<DesktopEntry> DesktopEntry::parse(const std::filesystem::path& path) {
     std::ifstream file(path);
@@ -126,5 +126,4 @@ std::optional<DesktopEntry> DesktopEntry::parse(const std::filesystem::path& pat
     return entry;
 }
 
-} // namespace nexus::index
-
+}  // namespace nexus::index

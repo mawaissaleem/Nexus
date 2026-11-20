@@ -28,9 +28,7 @@ namespace nexus::ui {
 // AliasEditDialog
 // ============================================================================
 
-AliasEditDialog::AliasEditDialog(const Palette& palette,
-                                 QWidget* parent,
-                                 const QString& initial_name,
+AliasEditDialog::AliasEditDialog(const Palette& palette, QWidget* parent, const QString& initial_name,
                                  const QString& initial_target)
     : QDialog(parent), palette_(palette) {
     if (parent) {
@@ -143,98 +141,104 @@ void AliasEditDialog::update_preview() {
 
     auto type = core::AliasManager::detect_type(t.toStdString());
     switch (type) {
-        case core::AliasType::Url: badge("🌐 Web Link", palette_.badge_url, " font-weight: bold;"); break;
-        case core::AliasType::Directory: badge("📁 Directory", palette_.badge_dir, " font-weight: bold;"); break;
-        case core::AliasType::File: badge("📄 File", palette_.badge_file, " font-weight: bold;"); break;
-        case core::AliasType::Command: badge("⚡ Command / App", palette_.badge_cmd, " font-weight: bold;"); break;
-        case core::AliasType::Shell: badge("⚡ Shell command", palette_.badge_cmd, " font-weight: bold;"); break;
+        case core::AliasType::Url:
+            badge("🌐 Web Link", palette_.badge_url, " font-weight: bold;");
+            break;
+        case core::AliasType::Directory:
+            badge("📁 Directory", palette_.badge_dir, " font-weight: bold;");
+            break;
+        case core::AliasType::File:
+            badge("📄 File", palette_.badge_file, " font-weight: bold;");
+            break;
+        case core::AliasType::Command:
+            badge("⚡ Command / App", palette_.badge_cmd, " font-weight: bold;");
+            break;
+        case core::AliasType::Shell:
+            badge("⚡ Shell command", palette_.badge_cmd, " font-weight: bold;");
+            break;
     }
 }
 
-QString AliasEditDialog::name() const {
-    return name_edit_->text().trimmed();
-}
+QString AliasEditDialog::name() const { return name_edit_->text().trimmed(); }
 
-QString AliasEditDialog::target() const {
-    return target_edit_->text().trimmed();
-}
+QString AliasEditDialog::target() const { return target_edit_->text().trimmed(); }
 
 // ============================================================================
 // SettingsDialog
 // ============================================================================
 
 namespace {
-    class ModernCheckBox : public QCheckBox {
-    public:
-        ModernCheckBox(const QString& text, const Palette& palette, QWidget* parent = nullptr)
-            : QCheckBox(text, parent), palette_(palette) {
-            setCursor(Qt::PointingHandCursor);
-            setAttribute(Qt::WA_Hover, true);
+class ModernCheckBox : public QCheckBox {
+public:
+    ModernCheckBox(const QString& text, const Palette& palette, QWidget* parent = nullptr)
+        : QCheckBox(text, parent), palette_(palette) {
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_Hover, true);
+    }
+
+    QSize sizeHint() const override {
+        QFontMetrics fm(font());
+        int w = 32 + fm.horizontalAdvance(text()) + 8;
+        int h = std::max(24, fm.height() + 6);
+        return QSize(w, h);
+    }
+
+protected:
+    void paintEvent(QPaintEvent* /*event*/) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        int h = height();
+        int box_size = 20;
+        int box_y = (h - box_size) / 2;
+        QRect box_rect(0, box_y, box_size, box_size);
+
+        if (isChecked()) {
+            painter.setBrush(QColor(palette_.accent));
+            painter.setPen(Qt::NoPen);
+            painter.drawRoundedRect(box_rect, 5, 5);
+
+            // Draw crisp white checkmark
+            QPen pen(QColor(palette_.on_accent), 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+            QPainterPath path;
+            path.moveTo(box_rect.x() + 5, box_rect.y() + 10);
+            path.lineTo(box_rect.x() + 8.5, box_rect.y() + 14);
+            path.lineTo(box_rect.x() + 15, box_rect.y() + 6.5);
+            painter.drawPath(path);
+        } else {
+            painter.setBrush(palette_.check_bg);
+            QColor border_color = underMouse() ? QColor(palette_.accent) : palette_.check_border;
+            painter.setPen(QPen(border_color, 1.5));
+            painter.drawRoundedRect(box_rect, 5, 5);
         }
 
-        QSize sizeHint() const override {
-            QFontMetrics fm(font());
-            int w = 32 + fm.horizontalAdvance(text()) + 8;
-            int h = std::max(24, fm.height() + 6);
-            return QSize(w, h);
-        }
-
-    protected:
-        void paintEvent(QPaintEvent* /*event*/) override {
-            QPainter painter(this);
-            painter.setRenderHint(QPainter::Antialiasing);
-
-            int h = height();
-            int box_size = 20;
-            int box_y = (h - box_size) / 2;
-            QRect box_rect(0, box_y, box_size, box_size);
-
-            if (isChecked()) {
-                painter.setBrush(QColor(palette_.accent));
-                painter.setPen(Qt::NoPen);
-                painter.drawRoundedRect(box_rect, 5, 5);
-
-                // Draw crisp white checkmark
-                QPen pen(QColor(palette_.on_accent), 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-                painter.setPen(pen);
-                QPainterPath path;
-                path.moveTo(box_rect.x() + 5, box_rect.y() + 10);
-                path.lineTo(box_rect.x() + 8.5, box_rect.y() + 14);
-                path.lineTo(box_rect.x() + 15, box_rect.y() + 6.5);
-                painter.drawPath(path);
-            } else {
-                painter.setBrush(palette_.check_bg);
-                QColor border_color = underMouse() ? QColor(palette_.accent) : palette_.check_border;
-                painter.setPen(QPen(border_color, 1.5));
-                painter.drawRoundedRect(box_rect, 5, 5);
-            }
-
-            // Draw label text
-            painter.setPen(underMouse() ? palette_.check_text_hover : QColor(palette_.text));
-            QFont f = font();
-            f.setPointSize(10);
-            f.setWeight(QFont::DemiBold);
-            painter.setFont(f);
-            QRect text_rect(30, 0, width() - 30, h);
-            painter.drawText(text_rect, Qt::AlignLeft | Qt::AlignVCenter, text());
-        }
+        // Draw label text
+        painter.setPen(underMouse() ? palette_.check_text_hover : QColor(palette_.text));
+        QFont f = font();
+        f.setPointSize(10);
+        f.setWeight(QFont::DemiBold);
+        painter.setFont(f);
+        QRect text_rect(30, 0, width() - 30, h);
+        painter.drawText(text_rect, Qt::AlignLeft | Qt::AlignVCenter, text());
+    }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-void enterEvent(QEnterEvent* event) override {
+    void enterEvent(QEnterEvent* event) override {
 #else
-void enterEvent(QEvent* event) override {
+    void enterEvent(QEvent* event) override {
 #endif
-    QCheckBox::enterEvent(event);
-    update();
-}
+        QCheckBox::enterEvent(event);
+        update();
+    }
 
-        void leaveEvent(QEvent* event) override {
-            QCheckBox::leaveEvent(event);
-            update();
-        }
+    void leaveEvent(QEvent* event) override {
+        QCheckBox::leaveEvent(event);
+        update();
+    }
 
-    private:
-        const Palette& palette_;  // the owning dialog's, updated in place on theme change
-    };
+private:
+    const Palette& palette_;  // the owning dialog's, updated in place on theme change
+};
 }
 
 void SettingsDialog::refresh_from_config() {
@@ -286,119 +290,195 @@ void SettingsDialog::apply_theme() {
     pal.setColor(QPalette::HighlightedText, QColor(p.on_accent));
     setPalette(pal);
 
-    setStyleSheet(
-        "QDialog, QMessageBox {"
-        "  background-color: " + p.window + ";"
-        "  color: " + p.text + ";"
-        "  font-family: system-ui, -apple-system, sans-serif;"
-        "}"
-        "QLabel {"
-        "  color: " + p.text + ";"
-        "}"
-        "QMessageBox QLabel {"
-        "  color: " + p.text + ";"
-        "  font-size: 13px;"
-        "}"
-        "QTabWidget::pane {"
-        "  border: 1px solid " + p.overlay("0.1") + ";"
-        "  background-color: " + p.panel + ";"
-        "  border-radius: 8px;"
-        "  padding: 10px;"
-        "}"
-        "QTabBar::tab {"
-        "  background: " + p.window + ";"
-        "  color: " + p.text_dim + ";"
-        "  padding: 8px 20px;"
-        "  font-size: 13px;"
-        "  font-weight: 600;"
-        "  border-top-left-radius: 6px;"
-        "  border-top-right-radius: 6px;"
-        "  margin-right: 2px;"
-        "}"
-        "QTabBar::tab:selected {"
-        "  background: " + p.panel + ";"
-        "  color: " + p.text_strong + ";"
-        "  border-bottom: 2px solid " + p.accent + ";"
-        "}"
-        "QTableWidget, QListWidget {"
-        "  background-color: " + p.field + ";"
-        "  color: " + p.text + ";"
-        "  border: 1px solid " + p.overlay("0.08") + ";"
-        "  border-radius: 6px;"
-        "  gridline-color: " + p.overlay("0.05") + ";"
-        "  selection-background-color: " + p.selection_bg + ";"
-        "  selection-color: " + p.selection_text + ";"
-        "}"
-        "QHeaderView::section {"
-        "  background-color: " + p.header + ";"
-        "  color: " + p.text_soft + ";"
-        "  padding: 6px 10px;"
-        "  border: none;"
-        "  font-weight: 600;"
-        "  font-size: 12px;"
-        "}"
-        "QPushButton {"
-        "  background-color: " + p.button + ";"
-        "  color: " + p.text_strong + ";"
-        "  border: 1px solid " + p.overlay("0.12") + ";"
-        "  border-radius: 6px;"
-        "  padding: 6px 14px;"
-        "  font-weight: 600;"
-        "  font-size: 12px;"
-        "}"
-        "QPushButton:hover {"
-        "  background-color: " + p.button_hover + ";"
-        "  border-color: " + p.accent + ";"
-        "}"
-        "QPushButton:pressed {"
-        "  background-color: " + p.accent + ";"
-        "}"
-        "QPushButton#primaryBtn {"
-        "  background-color: " + p.accent + ";"
-        "  color: " + p.on_accent + ";"
-        "  border: none;"
-        "  padding: 6px 16px;"
-        "}"
-        "QPushButton#dangerBtn:hover {"
-        "  background-color: " + p.danger + ";"
-        "  border-color: " + p.danger_border + ";"
-        "}"
-        "QLabel#softLabel {"
-        "  color: " + p.text_soft + ";"
-        "  font-size: 12px;"
-        "}"
-        "QLabel#hintLabel {"
-        "  color: " + p.alias_hint + ";"
-        "  font-size: 11px;"
-        "}"
-        "QLabel#infoLabel {"
-        "  color: " + p.config_info + ";"
-        "  font-size: 11px;"
-        "}"
-        "QLabel#optionDesc {"
-        "  color: " + p.text_dim + ";"
-        "  font-size: 12px;"
-        "  line-height: 1.4;"
-        "  border: none;"
-        "  background: transparent;"
-        "  padding-left: 30px;"
-        "}"
-        "#navCard {"
-        "  background-color: " + p.field + ";"
-        "  border: 1px solid " + p.overlay("0.08") + ";"
-        "  border-radius: 8px;"
-        "}"
-        "QLineEdit, QSpinBox {"
-        "  background-color: " + p.field + ";"
-        "  color: " + p.text_strong + ";"
-        "  border: 1px solid " + p.overlay("0.15") + ";"
-        "  border-radius: 6px;"
-        "  padding: 6px 10px;"
-        "}"
-        "QLineEdit:focus {"
-        "  border: 1px solid " + p.accent + ";"
-        "}"
-    );
+    setStyleSheet("QDialog, QMessageBox {"
+                  "  background-color: " +
+                  p.window +
+                  ";"
+                  "  color: " +
+                  p.text +
+                  ";"
+                  "  font-family: system-ui, -apple-system, sans-serif;"
+                  "}"
+                  "QLabel {"
+                  "  color: " +
+                  p.text +
+                  ";"
+                  "}"
+                  "QMessageBox QLabel {"
+                  "  color: " +
+                  p.text +
+                  ";"
+                  "  font-size: 13px;"
+                  "}"
+                  "QTabWidget::pane {"
+                  "  border: 1px solid " +
+                  p.overlay("0.1") +
+                  ";"
+                  "  background-color: " +
+                  p.panel +
+                  ";"
+                  "  border-radius: 8px;"
+                  "  padding: 10px;"
+                  "}"
+                  "QTabBar::tab {"
+                  "  background: " +
+                  p.window +
+                  ";"
+                  "  color: " +
+                  p.text_dim +
+                  ";"
+                  "  padding: 8px 20px;"
+                  "  font-size: 13px;"
+                  "  font-weight: 600;"
+                  "  border-top-left-radius: 6px;"
+                  "  border-top-right-radius: 6px;"
+                  "  margin-right: 2px;"
+                  "}"
+                  "QTabBar::tab:selected {"
+                  "  background: " +
+                  p.panel +
+                  ";"
+                  "  color: " +
+                  p.text_strong +
+                  ";"
+                  "  border-bottom: 2px solid " +
+                  p.accent +
+                  ";"
+                  "}"
+                  "QTableWidget, QListWidget {"
+                  "  background-color: " +
+                  p.field +
+                  ";"
+                  "  color: " +
+                  p.text +
+                  ";"
+                  "  border: 1px solid " +
+                  p.overlay("0.08") +
+                  ";"
+                  "  border-radius: 6px;"
+                  "  gridline-color: " +
+                  p.overlay("0.05") +
+                  ";"
+                  "  selection-background-color: " +
+                  p.selection_bg +
+                  ";"
+                  "  selection-color: " +
+                  p.selection_text +
+                  ";"
+                  "}"
+                  "QHeaderView::section {"
+                  "  background-color: " +
+                  p.header +
+                  ";"
+                  "  color: " +
+                  p.text_soft +
+                  ";"
+                  "  padding: 6px 10px;"
+                  "  border: none;"
+                  "  font-weight: 600;"
+                  "  font-size: 12px;"
+                  "}"
+                  "QPushButton {"
+                  "  background-color: " +
+                  p.button +
+                  ";"
+                  "  color: " +
+                  p.text_strong +
+                  ";"
+                  "  border: 1px solid " +
+                  p.overlay("0.12") +
+                  ";"
+                  "  border-radius: 6px;"
+                  "  padding: 6px 14px;"
+                  "  font-weight: 600;"
+                  "  font-size: 12px;"
+                  "}"
+                  "QPushButton:hover {"
+                  "  background-color: " +
+                  p.button_hover +
+                  ";"
+                  "  border-color: " +
+                  p.accent +
+                  ";"
+                  "}"
+                  "QPushButton:pressed {"
+                  "  background-color: " +
+                  p.accent +
+                  ";"
+                  "}"
+                  "QPushButton#primaryBtn {"
+                  "  background-color: " +
+                  p.accent +
+                  ";"
+                  "  color: " +
+                  p.on_accent +
+                  ";"
+                  "  border: none;"
+                  "  padding: 6px 16px;"
+                  "}"
+                  "QPushButton#dangerBtn:hover {"
+                  "  background-color: " +
+                  p.danger +
+                  ";"
+                  "  border-color: " +
+                  p.danger_border +
+                  ";"
+                  "}"
+                  "QLabel#softLabel {"
+                  "  color: " +
+                  p.text_soft +
+                  ";"
+                  "  font-size: 12px;"
+                  "}"
+                  "QLabel#hintLabel {"
+                  "  color: " +
+                  p.alias_hint +
+                  ";"
+                  "  font-size: 11px;"
+                  "}"
+                  "QLabel#infoLabel {"
+                  "  color: " +
+                  p.config_info +
+                  ";"
+                  "  font-size: 11px;"
+                  "}"
+                  "QLabel#optionDesc {"
+                  "  color: " +
+                  p.text_dim +
+                  ";"
+                  "  font-size: 12px;"
+                  "  line-height: 1.4;"
+                  "  border: none;"
+                  "  background: transparent;"
+                  "  padding-left: 30px;"
+                  "}"
+                  "#navCard {"
+                  "  background-color: " +
+                  p.field +
+                  ";"
+                  "  border: 1px solid " +
+                  p.overlay("0.08") +
+                  ";"
+                  "  border-radius: 8px;"
+                  "}"
+                  "QLineEdit, QSpinBox {"
+                  "  background-color: " +
+                  p.field +
+                  ";"
+                  "  color: " +
+                  p.text_strong +
+                  ";"
+                  "  border: 1px solid " +
+                  p.overlay("0.15") +
+                  ";"
+                  "  border-radius: 6px;"
+                  "  padding: 6px 10px;"
+                  "}"
+                  "QLineEdit:focus {"
+                  "  border: 1px solid " +
+                  p.accent +
+                  ";"
+                  "}");
 }
 
 void SettingsDialog::setup_ui() {
@@ -473,7 +553,8 @@ void SettingsDialog::setup_ui() {
     dir_layout->setSpacing(10);
     dir_layout->setContentsMargins(8, 8, 8, 8);
 
-    auto* dir_desc = new QLabel("Nexus searches these directories for files and folders when you type in the search bar:", dir_tab);
+    auto* dir_desc =
+        new QLabel("Nexus searches these directories for files and folders when you type in the search bar:", dir_tab);
     dir_desc->setObjectName("softLabel");
     dir_layout->addWidget(dir_desc);
 
@@ -501,7 +582,8 @@ void SettingsDialog::setup_ui() {
     dir_actions->addStretch();
     dir_layout->addLayout(dir_actions);
 
-    auto* excl_desc = new QLabel("Folders and files with these names are skipped when indexing (names only, no paths):", dir_tab);
+    auto* excl_desc =
+        new QLabel("Folders and files with these names are skipped when indexing (names only, no paths):", dir_tab);
     excl_desc->setObjectName("softLabel");
     dir_layout->addWidget(excl_desc);
 
@@ -544,12 +626,11 @@ void SettingsDialog::setup_ui() {
     connect(ctrl_np_checkbox_, &QCheckBox::toggled, this, &SettingsDialog::on_ctrl_np_toggled);
     card_layout->addWidget(ctrl_np_checkbox_);
 
-    auto* desc_label = new QLabel(
-        "When enabled, you can navigate up and down through search suggestions using Ctrl+N (next) "
-        "and Ctrl+P (previous) in addition to the arrow keys. This is especially convenient for Vim users "
-        "and terminal workflows without moving your hands away from the home row.",
-        card
-    );
+    auto* desc_label =
+        new QLabel("When enabled, you can navigate up and down through search suggestions using Ctrl+N (next) "
+                   "and Ctrl+P (previous) in addition to the arrow keys. This is especially convenient for Vim users "
+                   "and terminal workflows without moving your hands away from the home row.",
+                   card);
     desc_label->setWordWrap(true);
     desc_label->setCursor(Qt::PointingHandCursor);
     desc_label->setObjectName("optionDesc");
@@ -673,11 +754,21 @@ void SettingsDialog::reload_aliases() {
 
         QString type_str;
         switch (a.type) {
-            case core::AliasType::Url: type_str = "🌐 Web Link"; break;
-            case core::AliasType::Directory: type_str = "📁 Directory"; break;
-            case core::AliasType::File: type_str = "📄 File"; break;
-            case core::AliasType::Command: type_str = "⚡ Command"; break;
-            case core::AliasType::Shell: type_str = "⚡ Shell command"; break;
+            case core::AliasType::Url:
+                type_str = "🌐 Web Link";
+                break;
+            case core::AliasType::Directory:
+                type_str = "📁 Directory";
+                break;
+            case core::AliasType::File:
+                type_str = "📄 File";
+                break;
+            case core::AliasType::Command:
+                type_str = "⚡ Command";
+                break;
+            case core::AliasType::Shell:
+                type_str = "⚡ Shell command";
+                break;
         }
         auto* type_item = new QTableWidgetItem(type_str);
 
@@ -780,8 +871,7 @@ void SettingsDialog::on_remove_directory() {
     if (!item) return;
 
     QString path = item->text();
-    auto res = QMessageBox::question(this, "Confirm Removal",
-                                     QString("Remove '%1' from search paths?").arg(path),
+    auto res = QMessageBox::question(this, "Confirm Removal", QString("Remove '%1' from search paths?").arg(path),
                                      QMessageBox::Yes | QMessageBox::No);
     if (res == QMessageBox::Yes) {
         config_.remove_search_directory(path.toStdString());
@@ -807,7 +897,8 @@ void SettingsDialog::on_add_exclusion() {
     cfg.set_file_exclusions(names);
     const auto after = cfg.get_file_exclusions();
     if (std::find(after.begin(), after.end(), name) == after.end()) {
-        QMessageBox::warning(this, "Invalid name", "Use a bare file or folder name without slashes, quotes or backslashes.");
+        QMessageBox::warning(this, "Invalid name",
+                             "Use a bare file or folder name without slashes, quotes or backslashes.");
         return;
     }
     exclusion_edit_->clear();
@@ -870,5 +961,4 @@ bool SettingsDialog::eventFilter(QObject* watched, QEvent* event) {
     return QDialog::eventFilter(watched, event);
 }
 
-} // namespace nexus::ui
-
+}  // namespace nexus::ui

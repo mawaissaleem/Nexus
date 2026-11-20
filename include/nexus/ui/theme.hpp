@@ -10,7 +10,9 @@ namespace nexus::ui {
 // The only place colours live. CSS-facing values are strings so the dark palette reproduces the
 // original stylesheets byte for byte; painter-facing values are QColor.
 struct Palette {
-    struct Badge { QString bg, fg; };
+    struct Badge {
+        QString bg, fg;
+    };
 
     QString overlay_rgb;  // "r, g, b" of the translucent tint used for borders/hover (white on dark, black on light)
     [[nodiscard]] QString overlay(const char* alpha) const { return "rgba(" + overlay_rgb + ", " + alpha + ")"; }
@@ -55,4 +57,4 @@ private:
     Palette palette_;
 };
 
-} // namespace nexus::ui
+}  // namespace nexus::ui
