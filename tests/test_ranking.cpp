@@ -14,7 +14,7 @@
 #include <fstream>
 #include <unistd.h>
 
-// P5.1: provider output for `q` (the two test apps only), ranked.
+// Provider output for `q` (the two test apps only), ranked.
 static std::vector<nexus::core::SearchResult> ranked_pair(nexus::providers::ApplicationProvider& provider,
                                                           const nexus::core::RankingEngine& ranker, const std::string& q) {
     std::atomic<bool> cancel{false};
@@ -109,7 +109,7 @@ int main() {
         assert(rs3[0].score == rs3[1].score);
     }
 
-    // Test 3: Provider score no longer silently dominates lexical relevance (D-29)
+    // Test 3: Provider score no longer silently dominates lexical relevance
     {
         Query q_calc("calculator");
 
@@ -165,7 +165,7 @@ int main() {
         assert(std::abs(neg_results[0].score - 0.0) < 1e-6);
     }
 
-    // Test 5 (P5.1): launches from "co" boost X for "co"/"cod" but leave "fi" untouched.
+    // Test 5: launches from "co" boost X for "co"/"cod" but leave "fi" untouched.
     {
         namespace fs = std::filesystem;
         const fs::path root = fs::temp_directory_path() / ("nexus_ranking_" + std::to_string(getpid()));
@@ -199,7 +199,7 @@ int main() {
         fs::remove_all(root);
     }
 
-    // Test 6 (P5.3): personalisation is capped below the exact-match gap (SRS 11).
+    // Test 6: personalisation is capped below the exact-match gap.
     {
         const RankingWeights w;
         const double cap = 0.5 * (w.exact_match - w.provider_relevance_weight);
@@ -235,7 +235,7 @@ int main() {
         assert(v[0].score == 0.0);
     }
 
-    // PA.4 / D-80: over-limit scores are logged; NaN/inf are treated as 0 and the sort stays valid.
+    // Over-limit scores are logged; NaN/inf are treated as 0 and the sort stays valid.
     {
         std::ostringstream captured;
         auto* old = std::cerr.rdbuf(captured.rdbuf());

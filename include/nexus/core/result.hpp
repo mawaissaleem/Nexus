@@ -13,7 +13,7 @@ enum class ActionKind {
     None,      // nothing to execute
     Launch,    // desktop Exec line in `execution_payload` (no shell); `terminal` runs it in a terminal
     Open,      // file or URL via the default handler
-    Shell,     // run through the shell: only ShellProvider and `>` aliases may produce this (D-71)
+    Shell,     // run through the shell: only ShellProvider and `>` aliases may produce this
     Copy,      // text for the clipboard; the clipboard lives in the UI layer, so core does nothing
     Internal,  // handled by the provider with `provider_id` (ISearchProvider::on_executed)
 };

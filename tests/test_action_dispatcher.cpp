@@ -91,7 +91,7 @@ int main() {
     assert(dispatch_action(make(ActionKind::Internal, "", "hook"), provs));
     assert(!dispatch_action(make(ActionKind::Internal, "", "missing"), provs));
 
-    // Shell kind is only produced by the shell provider and '>' aliases (CLAUDE.md, D-71).
+    // Shell kind is only produced by the shell provider and '>' aliases; nothing else may run a shell.
     {
         const fs::path src = fs::path(NEXUS_SOURCE_DIR) / "src";
         int seen = 0;

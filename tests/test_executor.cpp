@@ -132,7 +132,7 @@ int main() {
         assert(!child);
     }
 
-    // spawn_with_pipes / ChildProcess (P4.3)
+    // spawn_with_pipes / ChildProcess
     {
         using ms = std::chrono::milliseconds;
         using RS = ChildProcess::ReadStatus;

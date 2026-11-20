@@ -28,7 +28,7 @@ int main() {
         auto f = clip(p, "alph");
         assert(f.size() == 2 && f[0].execution_payload == "xalpha three");
         assert(clip(p, "zzzz").empty());
-        // Bare "clip " (empty text, D-105) lists the whole history newest first
+        // Bare "clip " (empty text) lists the whole history newest first
         auto bare = clip(p, "");
         assert(bare.size() == 3 && bare[0].execution_payload == "xalpha three" && bare[2].execution_payload == "xalpha one");
         assert(clip(p, "x", true).empty());  // cancelled

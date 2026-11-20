@@ -15,7 +15,7 @@
 namespace nexus::providers {
 
 // Runs one plugin (see plugin_protocol.hpp) as a child process behind ISearchProvider. Owns everything it
-// needs (D-99): safe to outlive whoever created it. The process is spawned lazily on a search and is
+// needs: safe to outlive whoever created it. The process is spawned lazily on a search and is
 // killed when the provider is destroyed.
 class PluginProvider : public core::ISearchProvider {
 public:

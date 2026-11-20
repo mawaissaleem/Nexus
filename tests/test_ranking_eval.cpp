@@ -28,7 +28,7 @@ using namespace nexus;
 
 struct App {
     std::string id, name;
-    int usage{0}; // launches, recorded with the case's query so per-query history (P5.1) sees them too
+    int usage{0}; // launches, recorded with the case's query so per-query history sees them too
 };
 
 struct Case {
@@ -37,7 +37,7 @@ struct Case {
     std::vector<index::FileEntry> files{};                       // build with file(): name comes from path
     std::vector<std::pair<std::string, std::string>> aliases{};  // added to the defaults (gh, google, nexus, docs, downloads)
     std::string expected_top;
-    bool known_failure{false}; // ranking gets this wrong today; logged in nexus-decisions.md
+    bool known_failure{false}; // ranking gets this wrong today
 };
 
 static index::FileEntry file(std::string path, bool is_dir = false, bool is_root = false) {
@@ -86,43 +86,43 @@ int main() {
         {.name = "prefix beats substring", .query = "term",
          .apps = {{"xfce4-terminal", "Xfce Terminal"}, {"terminal", "Terminal"}},
          .expected_top = "terminal"},
-        {.name = "acronym vsc finds Visual Studio Code (SRS FR-06)", .query = "vsc",
+        {.name = "acronym vsc finds Visual Studio Code", .query = "vsc",
          .apps = {{"code", "Visual Studio Code"}, {"vinagre", "Vinagre Remote Desktop Client"}},
          .expected_top = "code"},
-        // SRS 11: the user keeps picking VS Code for "vsc"; a never-used prefix hit still wins by
-        // the +250 prefix boost against ~15 points of usage. P5.1 (query-conditioned usage) should fix it.
-        {.name = "repeatedly chosen acronym beats never-used prefix hit (SRS 11)", .query = "vsc",
+        // The user keeps picking VS Code for "vsc"; a never-used prefix hit still wins by
+        // the +250 prefix boost against ~15 points of usage. Query-conditioned usage was meant to fix it.
+        {.name = "repeatedly chosen acronym beats never-used prefix hit", .query = "vsc",
          .apps = {{"code", "Visual Studio Code", 20}, {"vscan", "Vscan Tool"}},
          .expected_top = "code", .known_failure = true},
         {.name = "more-used of two same-named apps wins", .query = "terminal",
          .apps = {{"gnome-terminal", "Terminal"}, {"xfce4-terminal", "Terminal", 40}},
          .expected_top = "xfce4-terminal"},
-        {.name = "exact match not buried by heavy usage (SRS 11)", .query = "code",
+        {.name = "exact match not buried by heavy usage", .query = "code",
          .apps = {{"exact", "Code"}, {"busy", "Code Review Helper", 500}},
          .expected_top = "exact"},
-        {.name = "lightly used exact beats heavily used fuzzy hit (SRS 11)", .query = "gimp",
+        {.name = "lightly used exact beats heavily used fuzzy hit", .query = "gimp",
          .apps = {{"gimp", "GIMP", 1}, {"glimpse", "Glimpse", 1000}},
          .expected_top = "gimp"},
-        // SRS 13: the calculator answers directly. Its title is the result ("4"), so it never gets a lexical
+        // The calculator answers directly. Its title is the result ("4"), so it never gets a lexical
         // boost and its 750 raw score is worth only 120 points: any app whose title contains the expression wins.
-        {.name = "inline arithmetic result beats app containing the expression (SRS 13)", .query = "2+2",
+        {.name = "inline arithmetic result beats app containing the expression", .query = "2+2",
          .apps = {{"quiz", "Math 2+2 Quiz"}},
          .expected_top = "calc:4", .known_failure = true},
         {.name = "exact default alias beats app", .query = "gh",
          .apps = {{"github-desktop", "GitHub Desktop"}},
          .expected_top = "alias:gh"},
-        {.name = "exact file name beats longer prefix file (SRS 15)", .query = "file thesis.pdf",
+        {.name = "exact file name beats longer prefix file", .query = "file thesis.pdf",
          .files = {file("/home/u/Documents/old/thesis.pdf.bak"), file("/home/u/Documents/thesis.pdf")},
          .expected_top = "file:/home/u/Documents/thesis.pdf"},
-        // SRS 14/15: an explicit mode prefix says what the user wants, so AliasProvider stays silent in it.
-        {.name = "file mode: indexed file beats same-named alias (SRS 15)", .query = "file notes",
+        // An explicit mode prefix says what the user wants, so AliasProvider stays silent in it.
+        {.name = "file mode: indexed file beats same-named alias", .query = "file notes",
          .files = {file("/home/u/notes", true)},
          .aliases = {{"notes", "https://notes.example.com"}},
          .expected_top = "dir:/home/u/notes"},
-        {.name = "shell mode: command beats same-named default alias (SRS 14)", .query = ">gh",
+        {.name = "shell mode: command beats same-named default alias", .query = ">gh",
          .expected_top = "shell:gh"},
         // Typing "> dd if=..." passes through ">dd"; it used to fuzzy-match the default "downloads" alias.
-        {.name = "shell mode: command wins unprefixed-alias lookalike (SRS 14)", .query = ">dd",
+        {.name = "shell mode: command wins unprefixed-alias lookalike", .query = ">dd",
          .expected_top = "shell:dd"},
     };
 

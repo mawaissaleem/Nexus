@@ -45,7 +45,7 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results,
 
         // An exact title beats any non-exact one by at least exact_match - provider_relevance_weight
         // (lexical gap minus the largest provider-score difference); personalisation may use only half
-        // of it, so no usage/recency value can close the gap (SRS 11). Unused when the gap is <= 0.
+        // of it, so no usage/recency value can close the gap. Unused when the gap is <= 0.
         usage_score = std::min(usage_score, 0.5 * std::max(0.0, weights_.exact_match - weights_.provider_relevance_weight));
 
         // Combine scores: normalize raw provider score into [0.0, 1.0], scale by provider_relevance_weight,

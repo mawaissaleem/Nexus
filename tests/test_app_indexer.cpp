@@ -132,7 +132,7 @@ int main() {
         assert(find(*err.get_applications(), "goodapp") && find(*err.get_applications(), "badtop"));
     }
 
-    // Regression (D-76): an error inside operator++ (EMFILE opening a deep subdir; the iterator holds
+    // Regression: an error inside operator++ (EMFILE opening a deep subdir; the iterator holds
     // one fd per level) used to throw out of the range-for. Now that dir stops and the next is scanned.
     {
         fs::path deep = root / "fs_deep";
@@ -157,7 +157,7 @@ int main() {
         assert(find(*err.get_applications(), "afterapp"));
     }
 
-    // D-54: a higher-priority hidden/no-display override masks the system copy; valid override replaces it;
+    // A higher-priority hidden/no-display override masks the system copy; valid override replaces it;
     // a broken override does not mask.
     {
         const fs::path usr = root / "mask_user", sys = root / "mask_sys";

@@ -92,7 +92,7 @@ static void test_manifest() {
         assert(rejected(p, "64 KiB"));
         fs::remove(p / "plugin.json");
         assert(mkfifo((p / "plugin.json").c_str(), 0600) == 0);
-        assert(rejected(p, "regular file"));                             // FIFO: refused after open+fstat (D-102), not blocked on
+        assert(rejected(p, "regular file"));                             // FIFO: refused after open+fstat, not blocked on
     }
     assert(rejected(make_plugin("badjson", "{nope")));
     assert(rejected(root / "missing"));

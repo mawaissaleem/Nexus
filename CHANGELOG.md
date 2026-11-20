@@ -124,8 +124,7 @@ sources in parallel.
 
 ## [0.4.0] — 2026-11-07
 
-Closes out Phase 5 (personalisation) and the settings work planned for
-0.4.0. Ranking now learns from what you type, not just what you launch.
+Personalisation and settings release. Ranking now learns from what you type, not just what you launch.
 You can turn history off and clear it. There are light, dark and system
 themes, and most options are now in the Settings dialog.
 
@@ -202,7 +201,7 @@ themes, and most options are now in the Settings dialog.
 
 ## [0.3.0] — 2026-11-04
 
-Closes out Phase 3 (persistent index). File search now uses a real index
+Persistent index release. File search now uses a real index
 that stays current while Nexus runs. Newly installed applications show up
 without a manual rebuild. The database has a migration system, and there
 is a benchmark harness with published numbers.
@@ -296,7 +295,7 @@ is a benchmark harness with published numbers.
 
 ## [0.2.0] — 2026-09-27
 
-Closes out Phase 2 (search architecture) from `nexus-SRS.md`. No new
+Search architecture release. No new
 user-facing features — this release is entirely about fixing how search
 runs internally: it no longer blocks the UI, cancellation actually works,
 and ranking is no longer distorted by inconsistent provider score scales.
@@ -341,8 +340,7 @@ and ranking is no longer distorted by inconsistent provider score scales.
 
 ### Known issues
 
-Carried forward from 0.1.0 except where noted resolved below. See
-`nexus-SRS.md` for full detail.
+Carried forward from 0.1.0 except where noted resolved below.
 
 - `SearchEngine::search_async()` and `cancel()` still exist, unused —
   superseded by `AsyncSearchCoordinator`/`QueryManager` rather than
@@ -350,7 +348,7 @@ Carried forward from 0.1.0 except where noted resolved below. See
 - **File search is still slow to run** (though it no longer freezes the
   UI while doing so). Each `file `-prefixed search still performs a live
   filesystem walk rather than querying an index — the index itself is
-  Phase 3 work, not yet started.
+  not started yet.
 - No plugin system, no web/clipboard providers, no system actions, no URL
   detection, no Wayland support, no configurable shortcut, no schema
   migrations, no incremental indexing, no history controls, no unit
@@ -361,7 +359,7 @@ Carried forward from 0.1.0 except where noted resolved below. See
 
 First tagged release. Nexus is a working, daily-usable launcher on X11. It is
 not feature-complete against its own specification — see **Known issues**
-below and `nexus-SRS.md` for the full roadmap.
+below.
 
 ### Added
 
@@ -416,7 +414,6 @@ below and `nexus-SRS.md` for the full roadmap.
 ### Known issues
 
 Documented here deliberately rather than discovered by the next person.
-See `nexus-SRS.md` for full detail and `docs/` (once written) for tracking.
 
 - **No plugin system.** All providers are compiled into the core binary.
   There is no public API or extension mechanism yet.

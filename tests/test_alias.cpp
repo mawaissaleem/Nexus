@@ -63,7 +63,7 @@ int main() {
         assert(provider.search(Query(raw, prefix), cancel).empty());
     }
 
-    // Bare prefixes (empty text, D-105) never create or run anything
+    // Bare prefixes (empty text) never create or run anything
     assert(provider.search(Query("alias ", "alias "), cancel).empty() || provider.search(Query("alias ", "alias "), cancel)[0].id.rfind("alias:create:", 0) != 0);
 
     // Inline creation, with and without leading/trailing spaces; missing target offers no create result.

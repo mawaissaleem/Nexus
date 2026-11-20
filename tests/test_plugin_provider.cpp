@@ -272,7 +272,7 @@ static void test_failed_executed_write_restarts() {
     assert(p->search("c").size() == 1 && p->spawns() == 2);
 }
 
-// Shutdown while a search waits on another thread (D-99/P4.4): the search ends cleanly, nothing is respawned,
+// Shutdown while a search waits on another thread: the search ends cleanly, nothing is respawned,
 // and the process is reaped by the time finish_shutdown returns.
 static void test_shutdown_during_search() {
     auto p = make_plugin("shutwait", 300);

@@ -70,7 +70,7 @@ int main() {
 
     db.close();
 
-    // Unwritable primary path must not create ./.nexus.db or /tmp/nexus.db (D-43).
+    // Unwritable primary path must not create ./.nexus.db or /tmp/nexus.db.
     namespace fs = std::filesystem;
     fs::path dir = fs::temp_directory_path() / ("nexus_db_test_" + std::to_string(::getpid()));
     fs::create_directories(dir);
@@ -110,7 +110,7 @@ int main() {
         assert(!closed.clear_history());  // never opened
     }
 
-    // clear_history wipes the query text from the raw file bytes (P8.18)
+    // clear_history wipes the query text from the raw file bytes
     {
         const std::string marker = "zq_secret_marker_123_wipe_check";
         const fs::path d = fs::temp_directory_path() / ("nexus_wipe_" + std::to_string(getpid()));

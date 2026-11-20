@@ -351,7 +351,7 @@ bool Database::open() {
         return finish_open();
     }
 
-    // Never fall back to cwd or /tmp: a planted DB there could inject exec lines (D-43).
+    // Never fall back to cwd or /tmp: a planted DB there could inject exec lines.
     NEXUS_LOG_WARN("Cannot open database at " + db_path_ + "; using in-memory database");
     if (try_open_path(":memory:")) {
         NEXUS_LOG_INFO("Falling back to in-memory database");

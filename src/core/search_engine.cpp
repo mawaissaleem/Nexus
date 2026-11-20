@@ -85,7 +85,7 @@ SearchEngine::~SearchEngine() = default;
 void SearchEngine::register_provider(SearchProviderPtr provider) {
     if (!provider) return;
     std::lock_guard<std::mutex> lock(search_mutex_);
-    // Routing, busy flags and unregister all key on the id, so a second provider with it would be ambiguous (D-96).
+    // Routing, busy flags and unregister all key on the id, so a second provider with it would be ambiguous.
     for (const auto& p : providers_) {
         if (p->id() == provider->id()) {
             NEXUS_LOG_WARN("Provider id '" + provider->id() + "' already registered, duplicate rejected");

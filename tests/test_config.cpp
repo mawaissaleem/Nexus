@@ -89,13 +89,13 @@ int main() {
     std::ofstream(temp_config_file) << "[1, 2]";  // valid JSON, wrong shape
     assert(config.load(temp_config_file.string()) == false);
 
-    // Test 9 (D-64): one-line arrays parse
+    // Test 9: one-line arrays parse
     std::ofstream(temp_config_file) << "{\"file_exclusions\": [\"a\", \"b\"], \"search_directories\": [\"/tmp\"]}";
     assert(config.load(temp_config_file.string()));
     assert((config.get_file_exclusions() == std::vector<std::string>{"a", "b"}));
     assert((config.get_search_directories() == std::vector<std::string>{"/tmp"}));
 
-    // Test 10 (D-60): keys absent from the file reset to defaults instead of keeping the last load
+    // Test 10: keys absent from the file reset to defaults instead of keeping the last load
     std::ofstream(temp_config_file) << "{\"enable_ctrl_np_navigation\": false}";
     config.load(temp_config_file.string());
     assert(config.is_ctrl_np_navigation_enabled() == false);
@@ -104,7 +104,7 @@ int main() {
     assert(config.is_ctrl_np_navigation_enabled() == true);
     assert(config.get_file_exclusions() == ConfigManager::default_file_exclusions());
 
-    // Test 11 (D-51): directories with quote/backslash round-trip through save/load
+    // Test 11: directories with quote/backslash round-trip through save/load
     const fs::path odd = fs::temp_directory_path() / ("nexus_cfg_odd\\\"dir_" + pid);
     fs::create_directories(odd);
     assert(config.add_search_directory(odd.string()));
@@ -175,7 +175,7 @@ int main() {
     std::ofstream(temp_config_file) << "{}";  // absent after a light load -> back to default, not stale
     assert(config.load(temp_config_file.string()) && config.get_theme() == ThemeMode::Dark);
 
-    // Test 17 (P8.6): result_count default, round trip, clamping, invalid values
+    // Test 17: result_count default, round trip, clamping, invalid values
     std::ofstream(temp_config_file) << "{}";
     assert(config.load(temp_config_file.string()) && config.get_result_count() == 7);
     config.set_result_count(12);  // saves
@@ -195,7 +195,7 @@ int main() {
     std::ofstream(temp_config_file) << "{\"result_count\": 7.5}";  // not an integer -> default
     assert(config.load(temp_config_file.string()) && config.get_result_count() == 7);
 
-    // Test 18 (P8.6): disabled_providers default, toggle, round trip, wrong types, unknown ids kept
+    // Test 18: disabled_providers default, toggle, round trip, wrong types, unknown ids kept
     std::ofstream(temp_config_file) << "{}";
     assert(config.load(temp_config_file.string()) && config.is_provider_enabled("shell"));
     config.set_provider_enabled("shell", false);  // saves
@@ -214,7 +214,7 @@ int main() {
     std::ofstream(temp_config_file) << "{}";  // absent after a load -> back to all enabled
     assert(config.load(temp_config_file.string()) && config.is_provider_enabled("files"));
 
-    // Test 19 (P8.6): set_file_exclusions saves, drops invalid names and duplicates
+    // Test 19: set_file_exclusions saves, drops invalid names and duplicates
     config.set_file_exclusions({"vendor", "a/b", "vendor", "bad\"q", "tmp"});
     assert((config.get_file_exclusions() == std::vector<std::string>{"vendor", "tmp"}));
     assert(config.load(temp_config_file.string()));

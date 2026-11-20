@@ -114,7 +114,7 @@ template <class F> static bool wait_for(F cond, ms limit = ms(3000)) {
 }
 
 int main() {
-    // duplicate provider id is rejected: the first registration stays, the second is not added (D-96)
+    // duplicate provider id is rejected: the first registration stays, the second is not added
     {
         SearchEngine engine;
         engine.register_provider(std::make_shared<FakeProvider>("dup", "First", 0, false, 1));
@@ -247,7 +247,7 @@ int main() {
         assert(engine.search(Query("web")).size() == 2);
         assert(web->seen.size() == 1);
 
-        // Bare prefix (D-105): reaches only its owner with empty text, even with leading spaces; "web" stays plain
+        // Bare prefix: reaches only its owner with empty text, even with leading spaces; "web" stays plain
         r = engine.search(Query("web "));
         assert(r.size() == 1 && r[0].provider_id == "web" && web->seen.back() == "web |");
         r = engine.search(Query("   web "));
@@ -319,7 +319,7 @@ int main() {
         for (const auto& res : engine.search(Query("2*3"))) plain_calc |= (res.provider_id == "calculator" && res.title == "6");
         assert(plain_calc);
         assert(engine.search(Query("> 2*3")).size() == 1);  // only the shell command, never a calc result
-        // Bare prefixes (empty text, D-105): nothing is produced, nothing runs, nothing leaks to other providers
+        // Bare prefixes (empty text): nothing is produced, nothing runs, nothing leaks to other providers
         for (const char* bare : {">", "  > ", "calc "}) assert(engine.search(Query(bare)).empty());
         assert(other->seen.empty() || other->seen.back().find("|>") == std::string::npos);
     }

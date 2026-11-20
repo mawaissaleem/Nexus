@@ -1,4 +1,4 @@
-# Layering check (PA.6): run as `cmake -DSRC=<source dir> -P check_layering.cmake`.
+# Layering check: run as `cmake -DSRC=<source dir> -P check_layering.cmake`.
 # Fails if a layer includes a header from a layer it may not depend on, or if Qt is included
 # outside ui/ and main.cpp. Complements the per-layer libraries, which only catch calls that link.
 cmake_minimum_required(VERSION 3.22)  # script mode needs it for IN_LIST (CMP0057)

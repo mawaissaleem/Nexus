@@ -34,7 +34,7 @@ if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
 endif()
 
-# Layered static libraries. Direction (checked against the real include graph, PA.6):
+# Layered static libraries. Direction (checked against the real include graph by tests/check_layering.cmake):
 #   nexus_utils <- nexus_core      (query, ranking, search engine, executor, config, aliases)
 #   nexus_utils <- nexus_index     (database, indexers, watchers; does not use core)
 #   nexus_core + nexus_index <- nexus_providers <- nexus_app <- nexus (ui, Qt)

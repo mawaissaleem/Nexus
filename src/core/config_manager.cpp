@@ -102,7 +102,7 @@ bool ConfigManager::load(const std::string& custom_path) {
         config_file_path_ = custom_path;
     }
 
-    set_defaults();  // keys missing from the file must not keep values from a previous load (D-60)
+    set_defaults();  // keys missing from the file must not keep values from a previous load
 
     std::ifstream file(config_file_path_);
     if (!file.is_open()) {

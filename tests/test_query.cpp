@@ -32,7 +32,7 @@ int main() {
         assert(w.prefix().empty() && w.text() == "web robotics");
     }
 
-    // A bare space-terminated prefix matches; leading space ignored, trailing kept for the prefix check only (D-105)
+    // A bare space-terminated prefix matches; leading space ignored, trailing kept for the prefix check only
     {
         Query w("web ", "web ");
         assert(w.prefix() == "web " && w.text().empty());

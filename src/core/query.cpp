@@ -27,7 +27,7 @@ Query::Query(std::string raw_query, std::string prefix)
 }
 
 void Query::parse() {
-    // Trailing whitespace is kept for the prefix check only, so the bare prefix "web " matches (D-105).
+    // Trailing whitespace is kept for the prefix check only, so the bare prefix "web " matches.
     const size_t lead = raw_.find_first_not_of(" \t\n\r\f\v");
     const std::string_view head = lead == std::string::npos ? std::string_view{} : std::string_view(raw_).substr(lead);
     if (!prefix_.empty() && head.rfind(prefix_, 0) == 0) {

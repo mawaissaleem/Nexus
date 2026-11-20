@@ -258,7 +258,7 @@ void LauncherWindow::on_text_changed(const QString& /*text*/) {
 }
 
 void LauncherWindow::perform_search() {
-    // Only leading space is dropped: a trailing one lets a bare "web " reach its prefix owner (D-105).
+    // Only leading space is dropped: a trailing one lets a bare "web " reach its prefix owner.
     QString q_str = search_input_->text();
     if (q_str.trimmed().isEmpty()) {
         if (query_manager_) {

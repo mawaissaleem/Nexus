@@ -344,8 +344,6 @@ The file index, schema migrations and benchmarks were first planned for
 so they moved to 0.3.0 and shipped there.
 
 
-The full specification lives in [`nexus-SRS.md`](nexus-SRS.md).
-
 
 ## Security notes
 
