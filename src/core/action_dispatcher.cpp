@@ -3,7 +3,8 @@
 
 namespace nexus::core {
 
-bool dispatch_action(const SearchResult& result, const std::vector<SearchProviderPtr>& providers) {
+bool dispatch_action(const SearchResult& result, const std::vector<SearchProviderPtr>& providers,
+                     ShellFailureFn on_shell_failure) {
     bool hook_ok = result.action_kind != ActionKind::Internal;
     for (const auto& p : providers) {
         if (p && p->id() == result.provider_id) {
@@ -19,7 +20,8 @@ bool dispatch_action(const SearchResult& result, const std::vector<SearchProvide
         case ActionKind::Open:
             return Executor::open_path_or_url(result.execution_payload);
         case ActionKind::Shell:
-            return !result.execution_payload.empty() && Executor::launch_shell_command(result.execution_payload);
+            return !result.execution_payload.empty() &&
+                   Executor::launch_shell_command(result.execution_payload, std::move(on_shell_failure));
         case ActionKind::Copy:
             return true;
         case ActionKind::Internal:

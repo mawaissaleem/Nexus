@@ -1,4 +1,5 @@
 #include "nexus/providers/shell_provider.hpp"
+#include "nexus/providers/dangerous_command.hpp"
 
 namespace nexus::providers {
 
@@ -15,7 +16,8 @@ std::vector<core::SearchResult> ShellProvider::search(const core::Query& query, 
     core::SearchResult res;
     res.id = "shell:" + cmd;
     res.title = "> " + cmd;
-    res.subtitle = "Execute command";
+    res.confirm = is_dangerous_command(cmd);
+    res.subtitle = res.confirm ? "Looks destructive: confirm before running" : "Execute command";
     res.icon = "utilities-terminal";
     res.provider_id = id();
     res.score = 1000.0;

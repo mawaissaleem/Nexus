@@ -23,6 +23,7 @@ public:
     explicit LauncherWindow(
         std::shared_ptr<core::SearchEngine> search_engine, ThemeController& theme, core::ConfigManager& config,
         ConfirmFn confirm = {},  // asked before results with `confirm` set; default is a yes/no QMessageBox
+        core::ShellFailureFn on_shell_failure = {},  // told when a command started with `>` exits with an error
         QWidget* parent = nullptr);
 
     void toggle_launcher();
@@ -59,6 +60,7 @@ private:
     ThemeController& theme_;
     core::ConfigManager& config_;
     ConfirmFn confirm_;
+    core::ShellFailureFn on_shell_failure_;
     QLineEdit* search_input_{nullptr};
     QListWidget* result_list_{nullptr};
     QWidget* container_{nullptr};

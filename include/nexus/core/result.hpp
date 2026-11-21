@@ -34,8 +34,8 @@ struct SearchResult {
     ActionKind action_kind{ActionKind::None};
     std::string execution_payload;  // Exec line, shell command, path, URL or text; meaning set by action_kind
     bool terminal{false};           // Launch only
-    bool confirm{false};            // UI asks yes/no before executing; only plugins set it (destructive actions)
-    std::string query;              // raw query that produced this result (usage history)
+    bool confirm{false};  // UI asks yes/no before executing (destructive plugin actions, dangerous shell commands)
+    std::string query;    // raw query that produced this result (usage history)
 };
 
 }  // namespace nexus::core

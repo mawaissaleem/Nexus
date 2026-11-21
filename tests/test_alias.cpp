@@ -119,8 +119,17 @@ int main() {
         assert(!r.empty() && r[0].subtitle.find("shell") != std::string::npos);
         auto r2 = provider.search(Query("dps"), cancel);
         assert(!r2.empty() && r2[0].subtitle.find("shell") == std::string::npos);
+        assert(!r[0].confirm && !r2[0].confirm);
     }
-    assert(mgr.remove_alias("upd") && mgr.remove_alias("dps"));
+    // A destructive '>' target asks first, like the same command typed after '>'.
+    assert(mgr.add_alias("nuke", ">rm -rf ~/build"));
+    {
+        auto r = provider.search(Query("nuke"), cancel);
+        assert(!r.empty() && r[0].title == "nuke");
+        assert(r[0].confirm && r[0].execution_payload == "rm -rf ~/build");
+        assert(r[0].subtitle.find("rm -rf ~/build") != std::string::npos);  // the confirm prompt shows the subtitle
+    }
+    assert(mgr.remove_alias("upd") && mgr.remove_alias("dps") && mgr.remove_alias("nuke"));
 
     // Which executor path an alias action takes: a fake program on PATH records the argv it received.
     {

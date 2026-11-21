@@ -8,6 +8,19 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Unit conversion: type `120 km in miles`, `5 GB to MB` or `-5 c to f` (`in` or `to`, space after the number optional) and the answer appears at the top; Enter copies the number. Covers length, weight, temperature, data size (`KB` = 1000 bytes, `KiB` = 1024; `MB` is megabytes, `Mb` megabits), time, volume (litres and US gallons) and speed. Unknown units or mixing kinds (`km to kg`) show nothing.
+- Typing a web address (`github.com/x`, `https://...`, `localhost:8080` or `192.168.1.1`) offers "Open URL", which opens it in your browser. Bare `localhost` and IP addresses open as `http://`, other bare addresses as `https://`; bare file names such as `notes.txt` don't count.
+- Shell commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, `reboot` and similar, also after `sudo`, `;`, `&&` or `|`, or inside `sh -c "..."`) now ask yes/no before running, and so do aliases whose target starts with `>`; the default is No. The check is a safety net for typos, not a security boundary.
+- When a command run with `>` exits with an error or is killed by a signal, Nexus shows a tray message with the command and its exit status. Successful commands stay silent.
+
+### Fixed
+
+- The calculator read `1.5+1` as `1+1` when your system uses a decimal comma (German, French, Danish English and similar locales). Numbers now always use `.` as the decimal point.
+
 ## [0.5.1] — 2026-11-17
 
 Fixes the three known issues from 0.5.0 and makes unknown command-line

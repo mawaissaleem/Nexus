@@ -1,5 +1,6 @@
 #include "nexus/providers/calc_provider.hpp"
 #include "nexus/utils/fuzzy.hpp"
+#include <charconv>
 #include <cmath>
 #include <string_view>
 #include <sstream>
@@ -54,10 +55,14 @@ private:
                 if (input_[pos_] == '.') has_dot = true;
                 ++pos_;
             }
-            std::string s(input_.substr(start, pos_ - start));
-            try {
-                current_token_ = {TokenType::Number, std::stod(s), s};
-            } catch (...) {
+            const std::string_view digits = input_.substr(start, pos_ - start);
+            double number = 0.0;
+            // from_chars always reads '.' as the decimal point; stod follows the user's locale
+            const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), number);
+            const bool whole_token = parsed.ec == std::errc{} && parsed.ptr == digits.data() + digits.size();
+            if (whole_token) {
+                current_token_ = {TokenType::Number, number, std::string(digits)};
+            } else {
                 current_token_ = {TokenType::End, 0.0, ""};
             }
             return;

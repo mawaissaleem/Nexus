@@ -79,7 +79,11 @@ target_link_libraries(nexus_index PUBLIC nexus_utils SQLite::SQLite3)
 add_library(nexus_providers STATIC
     src/providers/app_provider.cpp
     src/providers/calc_provider.cpp
+    src/providers/url_provider.cpp
+    src/providers/unit_converter.cpp
+    src/providers/unit_provider.cpp
     src/providers/shell_provider.cpp
+    src/providers/dangerous_command.cpp
     src/providers/clipboard_provider.cpp
     src/providers/file_provider.cpp
     src/providers/alias_provider.cpp

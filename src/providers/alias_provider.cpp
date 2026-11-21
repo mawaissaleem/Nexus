@@ -1,5 +1,6 @@
 #include "nexus/providers/alias_provider.hpp"
 #include "nexus/core/alias_manager.hpp"
+#include "nexus/providers/dangerous_command.hpp"
 #include "nexus/utils/fuzzy.hpp"
 #include <sstream>
 
@@ -104,6 +105,7 @@ std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, 
                     const auto cmd = alias.target.find_first_not_of(" \t", 1);
                     res.action_kind = core::ActionKind::Shell;
                     res.execution_payload = cmd == std::string::npos ? "" : alias.target.substr(cmd);
+                    res.confirm = is_dangerous_command(res.execution_payload);
                     break;
                 }
                 case core::AliasType::Command:

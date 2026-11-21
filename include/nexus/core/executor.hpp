@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -47,13 +48,18 @@ private:
     std::string buf_;  // bytes read from stdout but not yet returned as a line
 };
 
+// Called from a background thread when a shell command exits non-zero or is killed by a signal.
+// `reason` is plain text such as "exited with status 3". Must not touch the UI directly.
+using ShellFailureFn = std::function<void(const std::string& command, const std::string& reason)>;
+
 class Executor {
 public:
     // Execute a desktop application Exec string (tokenised, run without a shell)
     static bool launch_desktop_exec(std::string_view exec_line, bool terminal = false);
 
-    // Execute arbitrary shell command via /bin/sh or bash in detached mode
-    static bool launch_shell_command(std::string_view command);
+    // Runs `command` via /bin/sh in its own session, output discarded. Returns false only if it could not be
+    // started. A reaper thread waits for it (never the caller) and reports a failure exit through `on_failure`.
+    static bool launch_shell_command(std::string_view command, ShellFailureFn on_failure = {});
 
     // Open a file or URL with default system handler (xdg-open)
     static bool open_path_or_url(std::string_view target);

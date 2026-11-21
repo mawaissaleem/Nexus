@@ -6,6 +6,7 @@
 #include <csignal>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <thread>
 #include <string>
 #include <vector>
@@ -226,6 +227,50 @@ int main() {
         assert(!Executor::spawn_with_pipes({"/nonexistent/nexus-plugin"}, {}).valid());
         assert(!has_child());
         std::filesystem::remove_all(dir);
+    }
+
+    // A shell command that fails is reported with its status; success is silent; the caller never waits for it.
+    {
+        struct Seen {
+            std::mutex m;
+            std::vector<std::string> reasons;
+        };
+        auto run = [](const char* command, Seen& seen, bool expect_report) {
+            const bool started =
+                Executor::launch_shell_command(command, [&seen](const std::string&, const std::string& reason) {
+                    std::lock_guard<std::mutex> lock(seen.m);
+                    seen.reasons.push_back(reason);
+                });
+            assert(started);
+            for (int i = 0; i < 250; ++i) {
+                {
+                    std::lock_guard<std::mutex> lock(seen.m);
+                    if (!seen.reasons.empty()) return;
+                }
+                if (!expect_report && i >= 10) return;  // a success has nothing to wait for
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+        };
+        Seen failed;
+        run("false", failed, true);
+        assert(failed.reasons == std::vector<std::string>{"exited with status 1"});
+        Seen three;
+        run("exit 3", three, true);
+        assert(three.reasons == std::vector<std::string>{"exited with status 3"});
+        Seen killed;
+        run("kill -9 $$", killed, true);
+        assert(killed.reasons == std::vector<std::string>{"killed by signal 9"});
+        Seen ok;
+        run("true", ok, false);
+        assert(ok.reasons.empty());
+
+        // Long-running command: launch returns at once, the report arrives after it ends.
+        Seen slow;
+        const auto t0 = std::chrono::steady_clock::now();
+        run("sleep 0.3; exit 2", slow, true);
+        assert(slow.reasons == std::vector<std::string>{"exited with status 2"});
+        assert(std::chrono::steady_clock::now() - t0 >= std::chrono::milliseconds(250));
+        assert(Executor::launch_shell_command("exit 1"));  // no callback is fine
     }
 
     // Do not spawn a real GUI opener in CI; the regression above uses a fake.

@@ -50,6 +50,12 @@ int main(int argc, char** argv) {
     assert(ui::run_action(res, providers, confirm));
     assert(asked == 2 && rec->executed == 2);
 
+    // The question quotes the title; the subtitle (a shell alias's command) is shown below it.
+    res.title = "Shut down";
+    assert(ui::confirm_question(res) == "Run \"Shut down\"?");
+    res.subtitle = "Alias (runs in shell) → >rm -rf ~/build";
+    assert(ui::confirm_question(res) == "Run \"Shut down\"?\n\nAlias (runs in shell) → >rm -rf ~/build");
+
     // Default confirm dialog: a bare Enter (double/held Enter on "Shut down") must answer No.
     QTimer::singleShot(0, [] {
         QWidget* box = QApplication::activeModalWidget();

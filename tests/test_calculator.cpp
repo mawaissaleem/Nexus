@@ -1,7 +1,25 @@
 #include "nexus/providers/calc_provider.hpp"
 #include <iostream>
 #include <cassert>
+#include <clocale>
 #include <cmath>
+#include <cstring>
+#include <string>
+
+namespace {
+
+// The GUI runs with the user's LC_NUMERIC, so try a few comma-decimal locales; CI may have none installed
+bool use_comma_locale() {
+    for (const char* name : {"de_DE.UTF-8", "fr_FR.UTF-8", "en_DK.utf8"}) {
+        const bool switched = std::setlocale(LC_NUMERIC, name) != nullptr;
+        if (switched && std::strcmp(std::localeconv()->decimal_point, ",") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
 
 int main() {
     using nexus::providers::CalculatorProvider;
@@ -52,6 +70,25 @@ int main() {
     {
         auto val = CalculatorProvider::evaluate("2 +* 3");
         assert(!val.has_value());
+    }
+
+    // Test 8: A comma locale changes neither parsing nor the shown result
+    {
+        const std::string previous = std::setlocale(LC_NUMERIC, nullptr);
+        if (use_comma_locale()) {
+            auto val = CalculatorProvider::evaluate("1.5+1");
+            assert(val.has_value());
+            assert(*val == 2.5);
+
+            CalculatorProvider provider;
+            const std::atomic<bool> no_cancel{false};
+            const auto hits = provider.search(nexus::core::Query("1.5+1"), no_cancel);
+            assert(hits.size() == 1);
+            assert(hits[0].title == "2.5");
+        } else {
+            std::cout << "No comma-decimal locale installed, skipping the locale check\n";
+        }
+        std::setlocale(LC_NUMERIC, previous.c_str());
     }
 
     std::cout << "All CalculatorProvider tests passed successfully!\n";

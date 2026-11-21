@@ -6,6 +6,9 @@ set(TEST_TARGETS
     test_ranking
     test_ranking_eval
     test_calculator
+    test_url_provider
+    test_unit_provider
+    test_dangerous_command
     test_database
     test_alias
     test_file_search

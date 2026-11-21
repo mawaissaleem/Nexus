@@ -5,6 +5,8 @@
 #include "nexus/providers/clipboard_provider.hpp"
 #include "nexus/providers/file_provider.hpp"
 #include "nexus/providers/shell_provider.hpp"
+#include "nexus/providers/url_provider.hpp"
+#include "nexus/providers/unit_provider.hpp"
 #include "nexus/providers/plugin_loader.hpp"
 #include "nexus/utils/logger.hpp"
 #include <algorithm>
@@ -29,6 +31,8 @@ Services make_services(core::ConfigManager& config, core::AliasManager& aliases,
         s.app_indexer, s.db, [&config] { return config.is_history_enabled(); }));
     s.engine->register_provider(std::make_shared<providers::FileProvider>(s.db));
     s.engine->register_provider(std::make_shared<providers::CalculatorProvider>());
+    s.engine->register_provider(std::make_shared<providers::UrlProvider>());
+    s.engine->register_provider(std::make_shared<providers::UnitProvider>());
     s.engine->register_provider(std::make_shared<providers::ShellProvider>());
     s.clipboard = std::make_shared<providers::ClipboardProvider>(
         static_cast<std::size_t>(config.get_clipboard_retention()), [&config] { return config.is_history_enabled(); });

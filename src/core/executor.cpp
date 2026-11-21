@@ -125,7 +125,39 @@ bool Executor::launch_desktop_exec(std::string_view exec_line, bool terminal) {
     return spawn_detached(*args);
 }
 
-bool Executor::launch_shell_command(std::string_view command) {
+namespace {
+
+// Empty when the command succeeded.
+std::string failure_reason(int status) {
+    if (WIFSIGNALED(status)) return "killed by signal " + std::to_string(WTERMSIG(status));
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        return "exited with status " + std::to_string(WEXITSTATUS(status));
+    }
+    return {};
+}
+
+// Waits for `pid` on a detached thread so it never lingers as a zombie and its exit status isn't lost.
+void reap_shell_child(pid_t pid, std::string command, ShellFailureFn on_failure) {
+    auto wait_and_report = [pid, command = std::move(command), on_failure = std::move(on_failure)]() {
+        int status = 0;
+        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+        }
+        const std::string reason = failure_reason(status);
+        if (on_failure && !reason.empty()) on_failure(command, reason);
+    };
+    try {
+        std::thread(wait_and_report).detach();
+    } catch (const std::system_error&) {
+        // No thread available: reap only if already done; never block the UI thread.
+        int status = 0;
+        waitpid(pid, &status, WNOHANG);
+        NEXUS_LOG_WARN("launch_shell_command: could not start reaper thread; child may linger as a zombie");
+    }
+}
+
+}  // namespace
+
+bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_failure) {
     if (command.empty()) return false;
 
     std::string cmd_str(command);
@@ -138,19 +170,8 @@ bool Executor::launch_shell_command(std::string_view command) {
     }
 
     if (pid == 0) {
-        // Child process
-        setsid();  // Detach from session
-
-        pid_t second_pid = fork();
-        if (second_pid < 0) {
-            _exit(EXIT_FAILURE);
-        }
-        if (second_pid > 0) {
-            // First child exits immediately so grandchild is adopted by init/systemd
-            _exit(EXIT_SUCCESS);
-        }
-
-        // Grandchild process
+        // Own session: the command survives Nexus quitting and gets no terminal signals.
+        setsid();
         signal(SIGPIPE, SIG_DFL);  // Nexus ignores SIGPIPE (spawn_with_pipes); commands expect the default
         // Keep command output off Nexus's terminal; checked only to silence warn_unused_result
         if (freopen("/dev/null", "r", stdin) == nullptr || freopen("/dev/null", "w", stdout) == nullptr ||
@@ -159,13 +180,11 @@ bool Executor::launch_shell_command(std::string_view command) {
         }
 
         execl("/bin/sh", "sh", "-c", cmd_str.c_str(), static_cast<char*>(nullptr));
-        _exit(EXIT_FAILURE);
+        _exit(127);  // the shell's own "cannot execute" status
     }
 
-    // Parent waits for the first child to terminate
-    int status = 0;
-    waitpid(pid, &status, 0);
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    reap_shell_child(pid, std::move(cmd_str), std::move(on_failure));
+    return true;
 }
 
 bool Executor::spawn_detached(const std::vector<std::string>& args) {

@@ -18,9 +18,10 @@
 namespace nexus::ui {
 
 LauncherWindow::LauncherWindow(std::shared_ptr<core::SearchEngine> search_engine, ThemeController& theme,
-                               core::ConfigManager& config, ConfirmFn confirm, QWidget* parent)
+                               core::ConfigManager& config, ConfirmFn confirm, core::ShellFailureFn on_shell_failure,
+                               QWidget* parent)
     : QWidget(parent), search_engine_(std::move(search_engine)), theme_(theme), config_(config),
-      confirm_(confirm ? std::move(confirm) : ConfirmFn(ask_yes_no)) {
+      confirm_(confirm ? std::move(confirm) : ConfirmFn(ask_yes_no)), on_shell_failure_(std::move(on_shell_failure)) {
     query_manager_ = std::make_unique<QueryManager>(search_engine_, this);
     connect(query_manager_.get(), &QueryManager::results_ready, this, &LauncherWindow::on_search_results);
 
@@ -342,7 +343,9 @@ void LauncherWindow::run_result(core::SearchResult res) {
         return;
     }
     // The window is already hidden here; on "no" it simply stays hidden, like Esc.
-    if (!run_action(res, search_engine_->providers(), confirm_)) NEXUS_LOG_INFO("Declined: " + res.title);
+    if (!run_action(res, search_engine_->providers(), confirm_, on_shell_failure_)) {
+        NEXUS_LOG_INFO("Declined: " + res.title);
+    }
 }
 
 void LauncherWindow::execute_selected() {

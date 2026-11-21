@@ -48,8 +48,10 @@ Nexus collapses those into a single keystroke. It is built around four ideas:
 | Fuzzy matching | `vsc` → Visual Studio Code |
 | Usage-aware ranking | Apps you launch rise for that search and similar ones; recent launches count a little more; an exact name match always stays on top |
 | Calculator | `calc 125 * 37`, `calc sqrt(144)`, `calc 2^10`, or type a bare expression |
+| Unit conversion | `120 km in miles`, `72 f to c`, `5 GB to MB`, `-5c to f` (also `to`); length, weight, temperature, data size, time, volume (litres, US gallons) and speed. `MB` is megabytes, `Mb` megabits; enter copies the number |
 | File & folder search | `file thesis.pdf` searches an index of your configured directories, kept current as files change |
-| Shell commands | `> docker ps` — the `>` prefix is required, never implicit |
+| Open URL | Type `github.com/x`, `https://example.com` or `localhost:8080`; Enter opens it in your browser (only http and https; a bare file name like `notes.txt` is not treated as an address) |
+| Shell commands | `> docker ps` — the `>` prefix is required, never implicit. Commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, ...) ask yes/no first (default No), also when run through a `>` alias. If a command exits with an error, a tray message shows its exit status |
 | Aliases | `alias gh https://github.com`, then type `gh` |
 | Web search | `web rust lifetimes` opens a search in your browser (DuckDuckGo by default; a plugin, needs Python 3) |
 | Clipboard history | `clip` followed by text searches what you copied since Nexus started; Enter copies an entry again. `clip ` alone lists the whole history, newest first. `clip clear` empties the history |
@@ -77,9 +79,7 @@ Esc             Close
 
 Listed honestly so you know what you are getting. These are planned — see the [roadmap](#roadmap).
 
-- **URL handling.** Pasting a bare URL does nothing unless you have made an alias for it.
 - **Wayland hotkey.** The global hotkey uses an X11 key grab, which does not work under a Wayland session. See [Wayland](#wayland).
-- **Unit conversion.** The calculator does arithmetic and functions only — no `120 km in miles`.
 
 
 ## Known issues
@@ -247,7 +247,7 @@ The database and config file honour `XDG_DATA_HOME` and `XDG_CONFIG_HOME`. Plugi
 
 - **History.** Untick history in Settings or set `"history_enabled": false` to stop recording. Existing history stays until you run `nexus history clear`, which deletes usage events and query history and keeps the application and file indexes.
 - **Result count.** `"result_count"`, 1 to 15, default 7 (Settings > Search).
-- **Search sources.** Switch them off in Settings > Search, or list their ids (`alias`, `applications`, `files`, `calculator`, `shell`, `clipboard`, and plugin ids such as `web` and `system`) in `"disabled_providers"`.
+- **Search sources.** Switch them off in Settings > Search, or list their ids (`alias`, `applications`, `files`, `calculator`, `units`, `url`, `shell`, `clipboard`, and plugin ids such as `web` and `system`) in `"disabled_providers"`.
 - **Clipboard history.** Kept in memory only, never written to disk, and gone when Nexus quits. `"clipboard_retention"` sets how many entries it keeps (default 50, edited in `config.json` only). It stops recording when history is off, and it skips copies that a password manager marks as secret.
 - **Theme.** `"theme"`: `"dark"` (default), `"light"` or `"system"` (Settings > Navigation). `system` follows the desktop on Qt 6.5+, or when a Qt platform theme such as qgnomeplatform or qt5ct reports the desktop palette; on a stock GNOME session with Qt 5 it stays light. An unknown value falls back to dark.
 - **Broken config files.** If `config.json` or `aliases.json` can't be read, Nexus copies it to `<file>.malformed` and starts with defaults, so nothing is silently lost.
@@ -298,7 +298,7 @@ cmake --build build-debug -j$(nproc)
 ctest --test-dir build-debug --output-on-failure
 ```
 
-Thirty-four suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history and confirm prompts. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
+The test suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, unit conversion, URL detection, the destructive-command check, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history and confirm prompts. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
 
 
 ## Performance
@@ -354,7 +354,7 @@ Nexus can launch processes, so a few things are deliberate:
 - No telemetry, no analytics endpoint. Nexus itself makes no network requests; the `web` plugin only hands a URL to your browser.
 - **Plugins are not sandboxed.** A plugin is a program that runs with your user's rights, so it can read your files and use the network. The permissions in its manifest limit only the kinds of result it may return, not what the process does. Install only plugins you trust and have read. Details are in [docs/plugins.md](docs/plugins.md).
 
-Known gap: there is no confirmation prompt before running a destructive shell command typed after `>`. Results from plugins can ask for one (the shipped system actions do).
+Shell commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, ...) ask for confirmation, and so do plugin results that request it (the shipped system actions do). The check only catches typos; it is not a security boundary, since `>` can run anything.
 
 Found a security problem? Open an issue, or mail the address on the author's GitHub profile if you would rather not disclose it publicly.
 
