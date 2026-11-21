@@ -22,7 +22,8 @@ const char* theme_mode_name(ThemeMode mode) {
 }
 
 bool resolve_dark(ThemeMode mode, bool system_is_dark) {
-    return mode == ThemeMode::System ? system_is_dark : mode == ThemeMode::Dark;
+    if (mode == ThemeMode::System) return system_is_dark;
+    return mode == ThemeMode::Dark;
 }
 
 }  // namespace nexus::utils

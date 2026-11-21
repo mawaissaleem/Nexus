@@ -30,8 +30,8 @@ std::vector<core::SearchResult> ApplicationProvider::search(const core::Query& q
 
     auto apps = indexer_->get_applications();
     // One usage query per search, not one per matched app. Counts only launches from similar queries.
-    const auto usage_counts = (db_ && db_->is_open()) ? db_->get_usage_counts(search_term)
-                                                      : std::unordered_map<std::string, index::Database::UsageStat>{};
+    std::unordered_map<std::string, index::Database::UsageStat> usage_counts;
+    if (db_ && db_->is_open()) usage_counts = db_->get_usage_counts(search_term);
 
     for (const auto& app : *apps) {
         if (cancel_token.load()) {

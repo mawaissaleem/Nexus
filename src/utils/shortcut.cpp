@@ -12,7 +12,8 @@ std::optional<Shortcut> parse_shortcut(std::string_view text) {
     size_t pos = 0;
     while (true) {
         size_t plus = text.find('+', pos);
-        std::string_view tok = text.substr(pos, plus == std::string_view::npos ? plus : plus - pos);
+        const size_t len = plus == std::string_view::npos ? plus : plus - pos;
+        std::string_view tok = text.substr(pos, len);
         while (!tok.empty() && std::isspace(static_cast<unsigned char>(tok.front()))) tok.remove_prefix(1);
         while (!tok.empty() && std::isspace(static_cast<unsigned char>(tok.back()))) tok.remove_suffix(1);
         if (tok.empty()) return std::nullopt;

@@ -26,8 +26,8 @@ std::string expand_home(std::string_view path) {
 
 AliasType AliasManager::detect_type(std::string_view target) {
     if (!target.empty() && target.front() == '>') return AliasType::Shell;
-    if (target.rfind("http://", 0) == 0 || target.rfind("https://", 0) == 0 || target.rfind("www.", 0) == 0) {
-        return AliasType::Url;
+    for (const std::string_view prefix : {"http://", "https://", "www."}) {
+        if (target.rfind(prefix, 0) == 0) return AliasType::Url;
     }
 
     std::string expanded = expand_home(target);
@@ -102,9 +102,10 @@ bool AliasManager::load(const std::string& custom_path) {
     std::string error;
     if (!utils::parse_json(buf.str(), root, &error) || !root.is_array()) {
         const std::string backup = utils::preserve_malformed_file(file_path_, buf.str());
-        NEXUS_LOG_ERROR("Malformed aliases file " + file_path_ + ": " +
-                        (error.empty() ? "top level is not an array" : error) + "; using defaults, original kept at " +
-                        (backup.empty() ? "nowhere (backup failed)" : backup));
+        const std::string reason = error.empty() ? "top level is not an array" : error;
+        const std::string kept_at = backup.empty() ? "nowhere (backup failed)" : backup;
+        NEXUS_LOG_ERROR("Malformed aliases file " + file_path_ + ": " + reason + "; using defaults, original kept at " +
+                        kept_at);
         return false;
     }
 

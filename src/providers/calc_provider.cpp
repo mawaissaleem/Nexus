@@ -1,6 +1,7 @@
 #include "nexus/providers/calc_provider.hpp"
 #include "nexus/utils/fuzzy.hpp"
 #include <cmath>
+#include <string_view>
 #include <sstream>
 #include <iomanip>
 #include <cctype>
@@ -133,8 +134,11 @@ private:
         auto left = parse_power();
         if (!left) return std::nullopt;
 
-        while (current_token_.type == TokenType::Multiply || current_token_.type == TokenType::Divide ||
-               current_token_.type == TokenType::Modulo) {
+        const auto is_term_operator = [&] {
+            const TokenType t = current_token_.type;
+            return t == TokenType::Multiply || t == TokenType::Divide || t == TokenType::Modulo;
+        };
+        while (is_term_operator()) {
             TokenType op = current_token_.type;
             next_token();
             auto right = parse_power();
@@ -249,7 +253,7 @@ std::vector<core::SearchResult> CalculatorProvider::search(const core::Query& qu
         std::string raw = query.raw();
         bool has_operator = false;
         for (char c : raw) {
-            if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^') {
+            if (std::string_view("+-*/%^").find(c) != std::string_view::npos) {
                 has_operator = true;
                 break;
             }

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <iomanip>
 #include <ostream>
+#include <set>
 
 namespace nexus::app {
 namespace {
@@ -23,7 +24,8 @@ void print_help(std::ostream& out) {
         << "  --toggle, -t           Toggle the launcher window (shows or hides running instance)\n"
         << "  --show                 Show the launcher window on the active monitor\n"
         << "  --hide                 Hide the launcher window\n"
-        << "  --rebuild-index        Rescan system directories and search directories; rebuild the application and file indexes\n"
+        << "  --rebuild-index        Rescan system directories and search directories; "
+           "rebuild the application and file indexes\n"
         << "  --list-apps            List all currently indexed desktop applications\n"
         << "  settings, config       Open Nexus Settings GUI (aliases, search directories, global shortcut)\n"
         << "  --settings             Open Nexus Settings GUI\n"
@@ -36,7 +38,8 @@ void print_help(std::ostream& out) {
         << "History:\n"
         << "  history clear          Delete recorded usage events and query history (indexes are kept)\n\n"
         << "Custom Aliases / Nicknames:\n"
-        << "  alias add <name> <target>   Add nickname for URL, folder, or app (start target with > to run in a shell)\n"
+        << "  alias add <name> <target>   Add nickname for URL, folder, or app "
+           "(start target with > to run in a shell)\n"
         << "  alias list                  List configured aliases\n"
         << "  alias remove <name>         Remove an alias\n\n"
         << "CLI Search:\n"
@@ -146,9 +149,8 @@ int run_history(const Args& args, std::ostream& out, std::ostream& err,
 }
 
 // What run_gui handles, plus Qt's own options, which QApplication consumes from argv.
-// shortcut: any single-dash arg (Qt style: -session, -platformtheme) or --opt=value goes to
-// the GUI without a list of Qt options, so -bogus and --bogus=1 also start it; a bare
-// --bogus is still rejected. Upgrade if Qt grows bare double-dash options.
+// shortcut: any single-dash arg (-session, -platformtheme) or --opt=value goes to the GUI without a Qt option list,
+// so -bogus and --bogus=1 start it too (bare --bogus is rejected); upgrade if Qt grows bare double-dash options.
 bool is_gui_arg(const std::string& a) {
     for (const char* ok : {"--toggle", "--show", "--hide", "--settings", "settings", "config"}) {
         if (a == ok) return true;
@@ -227,7 +229,8 @@ std::optional<int> run_cli(const Args& args, core::ConfigManager& config, core::
     if (cmd == "alias") return run_alias(args, aliases, out, err);
     if (cmd == "history") return run_history(args, out, err, clear_running_clipboard);
 
-    const bool needs_services = cmd == "--rebuild-index" || cmd == "--list-apps" || cmd == "query" || cmd == "-q";
+    static const std::set<std::string> service_commands = {"--rebuild-index", "--list-apps", "query", "-q"};
+    const bool needs_services = service_commands.contains(cmd);
     if (!needs_services) return std::nullopt;  // run_info_cli already rejected unknown arguments
 
     const bool is_query = cmd == "query" || cmd == "-q";

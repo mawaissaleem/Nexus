@@ -44,7 +44,8 @@ public:
         // First (and every startup) file index build runs off the UI thread. Until the very first build lands,
         // `file ` queries return nothing; afterwards they keep serving the previous index while a rebuild runs.
         startup_index_thread_ = std::thread([this, options = app::file_index_options(config_)]() {
-            // Apps installed while Nexus was off. After start_watching(), so an install mid-scan is caught by one or the other.
+            // Apps installed while Nexus was off. After start_watching(), so an install mid-scan is caught
+            // by one or the other.
             services_.app_indexer->rebuild_index();
             file_watcher_.arm(options, quitting_);
             services_.file_indexer->rebuild(options, quitting_);

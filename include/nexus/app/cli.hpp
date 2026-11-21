@@ -16,11 +16,9 @@ namespace nexus::app {
 [[nodiscard]] std::optional<int> run_info_cli(const std::vector<std::string>& args, std::ostream& out,
                                               std::ostream& err);
 
-// Runs a command-line subcommand (`args` is argv without the program name) and returns its exit code,
-// or nullopt when `args` is not one of them (no arguments, --toggle, settings, --hide, Qt options): start the GUI.
-// Anything else unknown prints an error plus usage and returns 1.
-// Starts with run_info_cli. `dir` and `alias` touch only config/aliases; `history clear` opens only the database;
-// `query`, `--list-apps` and `--rebuild-index` also build the indexers.
+// Runs a subcommand (`args` = argv minus the program name) and returns its exit code; nullopt means start the GUI
+// (no args, --toggle, settings, --hide, Qt options). Other unknown args print usage and return 1. Only `query`,
+// `--list-apps` and `--rebuild-index` build indexers; `dir`/`alias` touch only config, `history clear` only the DB.
 [[nodiscard]] std::optional<int> run_cli(const std::vector<std::string>& args, core::ConfigManager& config,
                                          core::AliasManager& aliases, std::ostream& out, std::ostream& err,
                                          // `history clear` calls it to tell a running launcher to empty its clipboard

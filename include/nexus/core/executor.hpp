@@ -31,10 +31,9 @@ public:
     // or only part of the line fit; the stream is then unusable and the caller should terminate().
     bool write_line(std::string_view line);
 
-    // Next '\n'-terminated line (without it) from stdout. Waits in poll() slices of at most 5 ms until
-    // `deadline` or until `cancel` is true. Partial data stays buffered for the next call. Closed = EOF or
-    // error; TooLong = a line over `max_bytes`. An already buffered line is returned even past the deadline,
-    // so a caller looping over lines must bound the loop itself; a past deadline still polls once (no wait).
+    // Next '\n'-terminated line (without it) from stdout, polling in at most 5 ms slices until `deadline` or `cancel`.
+    // Partial data stays buffered. Closed = EOF or error, TooLong = a line over `max_bytes`. A buffered line is
+    // returned even past the deadline, so callers bound their own loops; a past deadline still polls once, no wait.
     ReadStatus read_line(std::string& line, std::chrono::steady_clock::time_point deadline,
                          const std::atomic<bool>& cancel, std::size_t max_bytes = 64 * 1024);
 
@@ -63,11 +62,9 @@ public:
     // nullopt for an unterminated quote or an empty command.
     static std::optional<std::vector<std::string>> parse_desktop_exec(std::string_view exec_line);
 
-    // Runs argv[0] (an exact path, no PATH search, no shell) in `cwd` with stdin/stdout on pipes and stderr
-    // appended to "<cwd>/plugin.log" (truncated; /dev/null if that can't be opened). Ignores SIGPIPE
-    // process-wide once, so writing to a dead child fails with EPIPE instead of killing Nexus (every child
-    // Nexus starts gets SIGPIPE back at its default).
-    // Returns an invalid ChildProcess on failure.
+    // Runs argv[0] (exact path, no PATH search, no shell) in `cwd`, stdin/stdout on pipes, stderr to a truncated
+    // "<cwd>/plugin.log" (or /dev/null); invalid ChildProcess on failure. Ignores SIGPIPE process-wide once so a dead
+    // child gives EPIPE instead of killing Nexus; every child Nexus starts gets SIGPIPE back at its default.
     static ChildProcess spawn_with_pipes(const std::vector<std::string>& argv, const std::filesystem::path& cwd);
 
 private:

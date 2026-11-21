@@ -27,7 +27,8 @@ int main() {
     // Wayland detection; save and restore the real environment.
     const char* t = std::getenv("XDG_SESSION_TYPE");
     const char* d = std::getenv("WAYLAND_DISPLAY");
-    const std::string old_t = t ? t : "", old_d = d ? d : "";
+    const std::string old_t = t ? t : "";
+    const std::string old_d = d ? d : "";
     unsetenv("XDG_SESSION_TYPE");
     unsetenv("WAYLAND_DISPLAY");
     assert(!nexus::utils::is_wayland_session());

@@ -12,18 +12,9 @@
 
 namespace nexus::index {
 
-// Keeps the `files` table current between rebuilds: one inotify watch per in-scope directory, events turned into
-// incremental Database updates (batched, one transaction each). Qt-free; works on its own thread.
-//
-// Protocol around a full rebuild (callers serialise arm/resume/stop; never call them from `on_overflow`):
-//     arm(options, cancel);  indexer.rebuild(options, cancel);  resume();
-// arm() watches first and holds events, the rebuild then walks the disk, so every change is either already in the
-// walk or a held event. Events are applied by looking at the disk, not by trusting the event type, so replaying one
-// the rebuild already saw is harmless.
-//
-// Limits: the root directories themselves being deleted or moved is not noticed (their rows stay until the next
-// rebuild); with nested roots a directory takes the smallest depth; directories past the watch limit are only
-// refreshed by a rebuild.
+// Keeps `files` current between rebuilds, one inotify watch per in-scope dir (nested roots: smallest depth wins).
+// Call arm(), rebuild, resume(), serialised, never from `on_overflow`. Held events are applied by checking the disk,
+// so replaying one is harmless. Until the next rebuild, moved/deleted roots and dirs past the watch limit are missed.
 class FileWatcher {
 public:
     // `on_overflow` is called (on the watcher thread) when the kernel dropped events; the owner should schedule a

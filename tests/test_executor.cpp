@@ -178,7 +178,8 @@ int main() {
                 Executor::spawn_with_pipes({"/bin/sh", "-c", "head -c 100000 /dev/zero | tr '\\0' x; sleep 5"}, {});
             assert(p.read_line(line, soon(3000), no_cancel, 1000) == RS::TooLong);
         }
-        // Writing to a dead child fails (EPIPE) and must not kill us (SIGPIPE ignored); a full pipe fails instead of blocking.
+        // Writing to a dead child fails (EPIPE) and must not kill us (SIGPIPE ignored);
+        // a full pipe fails instead of blocking.
         {
             auto p = Executor::spawn_with_pipes({"/bin/sh", "-c", "exit 0"}, {});
             assert(p.read_line(line, soon(2000), no_cancel) == RS::Closed);

@@ -494,11 +494,10 @@ void test_files_migration_from_v1() {
     {  // v1 schema has no query_norm column, so insert the usage row directly
         sqlite3* raw = nullptr;
         assert(sqlite3_open(temp_file.string().c_str(), &raw) == SQLITE_OK);
-        assert(
-            sqlite3_exec(
-                raw,
-                "INSERT INTO usage_events (app_id, query, timestamp) VALUES ('v1.app', ' V1 ', '2020-01-01 00:00:00'), ('v1.app', 'v1', '2021-01-01 00:00:10');",
-                nullptr, nullptr, nullptr) == SQLITE_OK);
+        assert(sqlite3_exec(raw,
+                            "INSERT INTO usage_events (app_id, query, timestamp) VALUES "
+                            "('v1.app', ' V1 ', '2020-01-01 00:00:00'), ('v1.app', 'v1', '2021-01-01 00:00:10');",
+                            nullptr, nullptr, nullptr) == SQLITE_OK);
         sqlite3_close(raw);
     }
     assert(!raw_table_exists(temp_file.string(), "files"));

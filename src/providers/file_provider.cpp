@@ -4,6 +4,8 @@
 #include "nexus/utils/logger.hpp"
 #include <filesystem>
 #include <algorithm>
+#include <string_view>
+#include <vector>
 
 namespace nexus::providers {
 
@@ -16,14 +18,23 @@ std::string get_icon_for_path(const std::filesystem::path& p, bool is_dir) {
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-    if (ext == ".pdf") return "application-pdf";
-    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".svg" || ext == ".webp") return "image-x-generic";
-    if (ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".webm") return "video-x-generic";
-    if (ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg") return "audio-x-generic";
-    if (ext == ".zip" || ext == ".tar" || ext == ".gz" || ext == ".xz" || ext == ".7z") return "package-x-generic";
-    if (ext == ".cpp" || ext == ".hpp" || ext == ".c" || ext == ".h" || ext == ".py" || ext == ".rs" || ext == ".js" ||
-        ext == ".ts" || ext == ".html")
-        return "text-x-script";
+    struct IconGroup {
+        const char* icon;
+        std::vector<std::string_view> extensions;
+    };
+    static const std::vector<IconGroup> groups = {
+        {"application-pdf", {".pdf"}},
+        {"image-x-generic", {".png", ".jpg", ".jpeg", ".svg", ".webp"}},
+        {"video-x-generic", {".mp4", ".mkv", ".avi", ".webm"}},
+        {"audio-x-generic", {".mp3", ".wav", ".flac", ".ogg"}},
+        {"package-x-generic", {".zip", ".tar", ".gz", ".xz", ".7z"}},
+        {"text-x-script", {".cpp", ".hpp", ".c", ".h", ".py", ".rs", ".js", ".ts", ".html"}},
+    };
+    for (const auto& group : groups) {
+        if (std::find(group.extensions.begin(), group.extensions.end(), ext) != group.extensions.end()) {
+            return group.icon;
+        }
+    }
 
     return "text-x-generic";
 }
@@ -57,14 +68,17 @@ std::vector<core::SearchResult> FileProvider::search(const core::Query& query, c
         if (!match.matched) continue;
 
         // Search roots outrank everything; directories get a small boost over plain files.
-        const double boost = entry.is_root ? 400.0 : 300.0 + (entry.is_dir ? 40.0 : 0.0);
+        double boost = 300.0;
+        if (entry.is_dir) boost += 40.0;
+        if (entry.is_root) boost = 400.0;
         scored.push_back({match.score + boost, std::move(match), std::move(entry)});
     }
 
     const size_t top = std::min<size_t>(scored.size(), 10);
     std::partial_sort(scored.begin(), scored.begin() + static_cast<std::ptrdiff_t>(top), scored.end(),
                       [](const Scored& a, const Scored& b) {
-                          return a.score != b.score ? a.score > b.score : a.entry.path < b.entry.path;
+                          if (a.score != b.score) return a.score > b.score;
+                          return a.entry.path < b.entry.path;
                       });
 
     for (size_t i = 0; i < top; ++i) {

@@ -27,9 +27,8 @@ struct JsonValue {
     [[nodiscard]] const JsonValue* find(std::string_view key) const;
 };
 
-// Parses a complete JSON document. On failure returns false and, if `error` is given,
-// describes the problem with a byte offset. Rejects trailing garbage and nesting > 64.
-// Lenient where files from Nexus 0.3.0 or hand edits need it: skips a UTF-8 BOM, accepts
+// Parses a complete JSON document; on failure returns false and, if `error` is given, a message with a byte offset.
+// Rejects trailing garbage and nesting > 64. Lenient for Nexus 0.3.0 files and hand edits: skips a UTF-8 BOM, accepts
 // trailing commas, and keeps an unknown escape (`\d`, `\u` without 4 hex digits) as literal text.
 bool parse_json(std::string_view text, JsonValue& out, std::string* error = nullptr);
 

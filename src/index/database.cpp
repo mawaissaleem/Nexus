@@ -286,8 +286,9 @@ bool run_migrations(sqlite3* db, const std::vector<Migration>& migrations) {
         }
 
         current_version = migration.version;
-        NEXUS_LOG_INFO("Applied database migration " + std::to_string(migration.version) +
-                       (!migration.description.empty() ? (" (" + migration.description + ")") : ""));
+        std::string description;
+        if (!migration.description.empty()) description = " (" + migration.description + ")";
+        NEXUS_LOG_INFO("Applied database migration " + std::to_string(migration.version) + description);
     }
 
     return true;
@@ -589,7 +590,8 @@ bool Database::record_usage(const std::string& app_id, const std::string& query_
     const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
     const auto first = std::find_if_not(query_text.begin(), query_text.end(), is_space);
     const auto last = std::find_if_not(query_text.rbegin(), query_text.rend(), is_space).base();
-    const std::string norm = utils::FuzzyMatcher::to_lower(first < last ? std::string(first, last) : std::string());
+    const std::string trimmed = first < last ? std::string(first, last) : std::string();
+    const std::string norm = utils::FuzzyMatcher::to_lower(trimmed);
 
     const char* sql = "INSERT INTO usage_events (app_id, query, query_norm) VALUES (?, ?, ?);";
     sqlite3_stmt* stmt = nullptr;
@@ -627,13 +629,12 @@ std::unordered_map<std::string, Database::UsageStat> Database::get_usage_counts(
     std::unordered_map<std::string, UsageStat> counts;
     if (!db_) return counts;
 
-    // A past query counts if it is a prefix of `query` or starts with it. Both halves use the
-    // (query_norm, app_id) index: a range scan for the second, an IN list of prefixes for the first.
-    // shortcut: `query` must already be lower-case/trimmed (Query::normalized); only the first 64 bytes
-    // are checked as prefixes.
+    // A past query counts if it is a prefix of `query` or starts with it; both halves use the (query_norm, app_id)
+    // index (a range scan, an IN list of prefixes). shortcut: `query` must already be lower-case/trimmed
+    // (Query::normalized); only its first 64 bytes are checked as prefixes.
     const size_t n = std::min<size_t>(query.size(), 64);
-    std::string sql =
-        "SELECT app_id, COUNT(*), CAST(strftime('%s', MAX(timestamp)) AS INTEGER) FROM usage_events WHERE (query_norm >= ?1 AND query_norm < ?1 || char(1114111))";
+    std::string sql = "SELECT app_id, COUNT(*), CAST(strftime('%s', MAX(timestamp)) AS INTEGER) FROM usage_events "
+                      "WHERE (query_norm >= ?1 AND query_norm < ?1 || char(1114111))";
     if (n > 0) {
         sql += " OR query_norm IN (?2";
         for (size_t i = 1; i < n; ++i) sql += ",?" + std::to_string(i + 2);

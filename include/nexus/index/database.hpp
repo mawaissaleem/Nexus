@@ -31,10 +31,9 @@ public:
     bool save_applications(const std::vector<DesktopEntry>& entries);
     std::vector<DesktopEntry> load_applications();
 
-    // File index. replace_files swaps the whole table in one transaction (readers never see a half index);
-    // it holds the DB mutex for that transaction only. find_files returns every row whose name contains `pattern`'s
-    // UTF-8 characters in order, case-folding ASCII only (as FuzzyMatcher does); the caller scores them. It accepts
-    // everything FuzzyMatcher accepts except byte-level matches that would split a multi-byte character.
+    // replace_files swaps the whole file table in one transaction, holding the DB mutex only for it. find_files
+    // returns rows whose name holds `pattern`'s UTF-8 characters in order, ASCII-only case folding like FuzzyMatcher
+    // (the caller scores them), minus byte-level matches that would split a multi-byte character.
     bool replace_files(const std::vector<FileEntry>& entries);
     std::vector<FileEntry> find_files(const std::string& pattern);
     // Incremental update in one transaction: first deletes every path in `removed_trees` together with everything

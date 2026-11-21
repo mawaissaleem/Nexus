@@ -17,10 +17,9 @@ namespace nexus::core {
 
 class SearchEngine {
 public:
-    // Providers run concurrently on a small fixed pool. One whose results are not in within `provider_budget`
-    // of the search start is dropped from that search (logged, cancel token set) and never waited on.
-    // A cancelled search returns once its providers have returned (or the budget ends), so only an over-budget
-    // provider can still be running at the next search; it is skipped, so search() is never re-entered per provider.
+    // Providers run concurrently on a small fixed pool; one not done within `provider_budget` of the search start
+    // is dropped from that search (logged, cancel token set) and never waited on. A cancelled search returns once
+    // its providers return or the budget ends; an over-budget provider still running then is skipped, not re-entered.
     static constexpr std::chrono::milliseconds kDefaultProviderBudget{200};
     explicit SearchEngine(RankingEngine ranking_engine = RankingEngine{},
                           std::chrono::milliseconds provider_budget = kDefaultProviderBudget);

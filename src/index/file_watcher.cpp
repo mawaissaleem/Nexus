@@ -76,8 +76,8 @@ void FileWatcher::handle(const std::vector<utils::FsEvent>& events) {
             watcher_->remove_watches_under(path);
             const std::string prefix = path + "/";
             for (auto it = levels_.begin(); it != levels_.end();) {
-                it = (it->first == path || it->first.compare(0, prefix.size(), prefix) == 0) ? levels_.erase(it)
-                                                                                             : std::next(it);
+                const bool under_path = it->first == path || it->first.compare(0, prefix.size(), prefix) == 0;
+                it = under_path ? levels_.erase(it) : std::next(it);
             }
         }
         if (ev.mask & (IN_CREATE | IN_MOVED_TO)) {

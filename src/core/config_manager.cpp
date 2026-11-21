@@ -111,9 +111,10 @@ bool ConfigManager::load(const std::string& custom_path) {
     std::string error;
     if (!utils::parse_json(buf.str(), root, &error) || !root.is_object()) {
         const std::string backup = utils::preserve_malformed_file(config_file_path_, buf.str());
-        NEXUS_LOG_ERROR("Malformed config " + config_file_path_ + ": " +
-                        (error.empty() ? "top level is not an object" : error) + "; using defaults, original kept at " +
-                        (backup.empty() ? "nowhere (backup failed)" : backup));
+        const std::string reason = error.empty() ? "top level is not an object" : error;
+        const std::string kept_at = backup.empty() ? "nowhere (backup failed)" : backup;
+        NEXUS_LOG_ERROR("Malformed config " + config_file_path_ + ": " + reason +
+                        "; using defaults, original kept at " + kept_at);
         return false;
     }
 

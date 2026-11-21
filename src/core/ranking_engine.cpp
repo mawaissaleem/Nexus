@@ -58,8 +58,10 @@ void RankingEngine::rank(const Query& query, std::vector<SearchResult>& results,
             NEXUS_LOG_WARN("RankingEngine: provider score " + std::to_string(res.score) + " for '" + res.id +
                            "' exceeds max_provider_score; clamped");
         }
-        double normalized_relevance =
-            (weights_.max_provider_score > 0.0) ? std::clamp(res.score / weights_.max_provider_score, 0.0, 1.0) : 0.0;
+        double normalized_relevance = 0.0;
+        if (weights_.max_provider_score > 0.0) {
+            normalized_relevance = std::clamp(res.score / weights_.max_provider_score, 0.0, 1.0);
+        }
         res.score = (normalized_relevance * weights_.provider_relevance_weight) + lexical_score + usage_score;
     }
 

@@ -8,10 +8,9 @@
 
 namespace nexus::core {
 
-// Fixed set of detached workers that share only `State`, so a worker stuck in a provider can outlive the
-// engine without touching it. The destructor waits a bounded time for workers to finish, then lets go.
-// Provider contract: an abandoned (over-budget) task can outlive the engine by up to that 1 s bound, so a
-// provider must not reference objects that may die before its search() returns (PluginProvider owns all it touches and returns {} after shutdown).
+// Fixed set of detached workers sharing only `State`, so one stuck in a provider can outlive the engine safely.
+// The destructor waits up to 1 s for workers, then lets go: an abandoned search() may outlive the engine by that
+// much, so a provider must not reference objects that may die before its search() returns.
 class SearchEngine::Pool {
 public:
     explicit Pool(size_t threads) : state_(std::make_shared<State>()) {

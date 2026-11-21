@@ -83,9 +83,11 @@ bool PluginProvider::start(std::chrono::steady_clock::time_point deadline, const
 PluginProvider::Handled PluginProvider::handle_line(const std::string& line, std::int64_t current,
                                                     std::vector<core::SearchResult>* out) {
     // Nothing outstanding: no reply can match (not even one claiming id 0); only check the line is valid.
-    if (pending_.empty())
-        return plugin::decode_line(line, manifest_, 0).kind == plugin::Decoded::Kind::Invalid ? Handled::Bad
-                                                                                              : Handled::Skip;
+    if (pending_.empty()) {
+        const auto decoded = plugin::decode_line(line, manifest_, 0);
+        const bool invalid = decoded.kind == plugin::Decoded::Kind::Invalid;
+        return invalid ? Handled::Bad : Handled::Skip;
+    }
     std::vector<std::int64_t> ids;
     for (auto it = pending_.rbegin(); it != pending_.rend(); ++it) ids.push_back(it->id);
     for (const std::int64_t id : ids) {
@@ -175,10 +177,14 @@ std::vector<core::SearchResult> PluginProvider::search(const core::Query& query,
     for (;;) {
         std::string line;
         // Checked here too: read_line returns buffered lines without looking at the clock or the token.
-        const auto status = cancel.load() ? core::ChildProcess::ReadStatus::Cancelled
-                            : opts_.clock() >= deadline
-                                ? core::ChildProcess::ReadStatus::Timeout
-                                : proc->read_line(line, real_deadline(deadline), cancel, plugin::kMaxLineBytes);
+        auto status = core::ChildProcess::ReadStatus::Cancelled;
+        if (!cancel.load()) {
+            if (opts_.clock() >= deadline) {
+                status = core::ChildProcess::ReadStatus::Timeout;
+            } else {
+                status = proc->read_line(line, real_deadline(deadline), cancel, plugin::kMaxLineBytes);
+            }
+        }
         switch (status) {
             case core::ChildProcess::ReadStatus::Line:
                 switch (handle_line(line, id, &out)) {

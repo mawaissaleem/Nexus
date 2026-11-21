@@ -24,10 +24,10 @@ static void write_plugin(const fs::path& base, const std::string& id, const std:
     fs::create_directories(dir);
     std::ofstream(dir / "plugin.json") << "{\"id\":\"" << id
                                        << "\",\"api_version\":1,\"exec\":\"run.sh\",\"prefixes\":[\"\"]}";
-    std::ofstream(dir / "run.sh")
-        << (body.empty()
-                ? "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\nwhile read -r l; do :; done\n"
-                : body);
+    std::ofstream(dir / "run.sh") << (body.empty()
+                                          ? "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\n"
+                                            "while read -r l; do :; done\n"
+                                          : body);
     fs::permissions(dir / "run.sh", fs::perms::owner_all);
 }
 
@@ -87,9 +87,9 @@ static void test_services_and_shutdown() {
     write_plugin(base, "off");
     write_plugin(base, "applications");  // reserved: must not replace the built-in
     // Ignores both `shutdown` and EOF, so only SIGKILL ends it.
-    write_plugin(
-        base, "deaf", "",
-        "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\ntrap '' TERM HUP\nwhile :; do sleep 1; done\n");
+    write_plugin(base, "deaf", "",
+                 "#!/bin/sh\necho $$ > pid\necho '{\"type\":\"hello\",\"api_version\":1}'\n"
+                 "trap '' TERM HUP\nwhile :; do sleep 1; done\n");
 
     core::ConfigManager config((root / "config.json").string());
     core::AliasManager aliases((root / "aliases.json").string());

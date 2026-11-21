@@ -37,10 +37,9 @@ public:
     std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
     bool on_executed(const core::SearchResult& result) override;
 
-    // Two-step shutdown so many plugins share one wait: request_shutdown() on all of them (sends `shutdown`,
-    // detaches the process, makes later searches return nothing), then finish_shutdown(grace) on each with the
-    // time left. finish_shutdown first waits for a search still running (bounded by its budget), then for a clean
-    // exit until `grace` (counted from the call) is used up, then SIGKILLs and reaps. Both are idempotent.
+    // Two-step shutdown so plugins share one wait: request_shutdown() on all (sends `shutdown`, detaches, later
+    // searches return nothing), then finish_shutdown(grace) on each with the time left: waits for a running search
+    // (budget-bound), then a clean exit until `grace` from the call is up, then SIGKILLs and reaps. Both idempotent.
     void request_shutdown();
     void finish_shutdown(std::chrono::milliseconds grace);
 

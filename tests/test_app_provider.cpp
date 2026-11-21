@@ -23,6 +23,15 @@ static const core::SearchResult* find(const std::vector<core::SearchResult>& rs,
     return nullptr;
 }
 
+// Puts an env var back to its saved value, or removes it if it was unset.
+static void restore_env(const char* name, const char* was_set, const std::string& value) {
+    if (was_set) {
+        setenv(name, value.c_str(), 1);
+    } else {
+        unsetenv(name);
+    }
+}
+
 int main() {
     const fs::path root = fs::temp_directory_path() / ("nexus_app_provider_" + std::to_string(getpid()));
     fs::remove_all(root);
@@ -32,7 +41,9 @@ int main() {
     const char* old_home = std::getenv("HOME");
     const char* old_xdh = std::getenv("XDG_DATA_HOME");
     const char* old_xdd = std::getenv("XDG_DATA_DIRS");
-    const std::string s_home = old_home ? old_home : "", s_xdh = old_xdh ? old_xdh : "", s_xdd = old_xdd ? old_xdd : "";
+    const std::string s_home = old_home ? old_home : "";
+    const std::string s_xdh = old_xdh ? old_xdh : "";
+    const std::string s_xdd = old_xdd ? old_xdd : "";
     setenv("HOME", (root / "fakehome").c_str(), 1);
     setenv("XDG_DATA_HOME", (root / "home").c_str(), 1);
     setenv("XDG_DATA_DIRS", (root / "sys").c_str(), 1);
@@ -121,9 +132,9 @@ int main() {
     const auto cleared = db->clear_history();
     assert(cleared && cleared->queries == 1);
 
-    old_home ? setenv("HOME", s_home.c_str(), 1) : unsetenv("HOME");
-    old_xdh ? setenv("XDG_DATA_HOME", s_xdh.c_str(), 1) : unsetenv("XDG_DATA_HOME");
-    old_xdd ? setenv("XDG_DATA_DIRS", s_xdd.c_str(), 1) : unsetenv("XDG_DATA_DIRS");
+    restore_env("HOME", old_home, s_home);
+    restore_env("XDG_DATA_HOME", old_xdh, s_xdh);
+    restore_env("XDG_DATA_DIRS", old_xdd, s_xdd);
     fs::remove_all(root);
     return 0;
 }

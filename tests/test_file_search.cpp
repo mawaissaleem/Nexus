@@ -17,12 +17,7 @@ int main() {
     std::filesystem::path test_base =
         std::filesystem::temp_directory_path() / ("nexus_test_file_search_" + std::to_string(getpid()));
 
-    // Clean any leftover state from a previous crashed/aborted run before
-    // setting up fresh fixtures. Without this, an earlier assertion failure
-    // (which skips the cleanup at the end of this file) leaves stale files
-    // in this fixed, reused path, causing this test to become flaky on any
-    // machine where it has previously failed — even though the code under
-    // test is unaffected.
+    // Clear leftovers from a run that aborted before its cleanup.
     std::filesystem::remove_all(test_base);
     std::filesystem::create_directories(test_base / "my_project");
     std::filesystem::create_directories(test_base / "docs_folder");

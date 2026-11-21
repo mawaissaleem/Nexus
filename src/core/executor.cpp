@@ -152,10 +152,10 @@ bool Executor::launch_shell_command(std::string_view command) {
 
         // Grandchild process
         signal(SIGPIPE, SIG_DFL);  // Nexus ignores SIGPIPE (spawn_with_pipes); commands expect the default
-        // Redirect standard descriptors to /dev/null
+        // Keep command output off Nexus's terminal; checked only to silence warn_unused_result
         if (freopen("/dev/null", "r", stdin) == nullptr || freopen("/dev/null", "w", stdout) == nullptr ||
             freopen("/dev/null", "w", stderr) == nullptr) {
-            // Ignore failure, proceed
+            // nothing to do: run the command anyway
         }
 
         execl("/bin/sh", "sh", "-c", cmd_str.c_str(), static_cast<char*>(nullptr));
@@ -333,9 +333,11 @@ ChildProcess Executor::spawn_with_pipes(const std::vector<std::string>& args, co
         close(to_child[1]);
         return {};
     }
-    int log_fd = cwd.empty()
-                     ? -1
-                     : open((cwd / "plugin.log").c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
+    int log_fd = -1;
+    if (!cwd.empty()) {
+        const int log_flags = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC;
+        log_fd = open((cwd / "plugin.log").c_str(), log_flags, 0600);
+    }
 
     std::vector<char*> argv;
     for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));

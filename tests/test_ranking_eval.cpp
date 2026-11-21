@@ -1,8 +1,6 @@
-// Ranking-quality regression gate: fixed query -> expected top result.
-// Each case builds a tiny hermetic world (apps as .desktop files in a temp dir, files and usage in an
-// in-memory DB, aliases on top of the built-in defaults) and runs the production SearchEngine with all
-// five real providers. So every competitor is one the real providers return in that mode, with the
-// score they give it; nothing reads ~/.config, ~/.local/share or launches anything.
+// Ranking-quality regression gate: fixed query -> expected top result. Each case builds a tiny hermetic world
+// (.desktop apps in a temp dir, files and usage in an in-memory DB, aliases over the defaults) and runs the real
+// SearchEngine with all five real providers; nothing reads ~/.config, ~/.local/share or launches anything.
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/core/search_engine.hpp"
 #include "nexus/index/app_indexer.hpp"
@@ -146,10 +144,13 @@ int main() {
         if (ok && !c.known_failure) continue;
         if (ok || !c.known_failure) ++failures;
         else ++known;
-        std::cout << (ok                ? "FIXED, remove known_failure: "
-                      : c.known_failure ? "KNOWN FAILURE: "
-                                        : "FAIL: ")
-                  << c.name << "\n  query=\"" << c.query << "\" expected=" << c.expected_top << "\n";
+        const char* label = "FAIL: ";
+        if (ok) {
+            label = "FIXED, remove known_failure: ";
+        } else if (c.known_failure) {
+            label = "KNOWN FAILURE: ";
+        }
+        std::cout << label << c.name << "\n  query=\"" << c.query << "\" expected=" << c.expected_top << "\n";
         for (size_t r = 0; r < std::min<size_t>(results.size(), 5); ++r)
             std::cout << "  #" << r + 1 << " " << results[r].id << " \"" << results[r].title
                       << "\" score=" << results[r].score << "\n";

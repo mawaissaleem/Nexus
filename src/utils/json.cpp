@@ -34,8 +34,7 @@ private:
     }
 
     void skip_ws() {
-        while (pos_ < t_.size() && (t_[pos_] == ' ' || t_[pos_] == '\t' || t_[pos_] == '\n' || t_[pos_] == '\r'))
-            ++pos_;
+        while (pos_ < t_.size() && std::string_view(" \t\n\r").find(t_[pos_]) != std::string_view::npos) ++pos_;
     }
 
     bool literal(std::string_view word) {
@@ -172,9 +171,10 @@ private:
                 case 'u': {
                     unsigned cp;
                     if (!hex4(cp)) {
+                        // Not an escape: keep it literally (older files contain these).
                         out += "\\u";
                         break;
-                    }  // not an escape: keep literally (0.3.0 files)
+                    }
                     if (cp >= 0xD800 && cp < 0xDC00) {  // high surrogate needs a low one
                         unsigned lo;
                         if (t_.substr(pos_, 2) != "\\u") return fail("unpaired surrogate");
@@ -212,10 +212,11 @@ private:
         }
         while (true) {
             skip_ws();
+            // "]" right after a comma: accept a trailing comma
             if (pos_ < t_.size() && t_[pos_] == ']' && !v.array.empty()) {
                 ++pos_;
                 return true;
-            }  // trailing comma
+            }
             v.array.emplace_back();
             if (!value(v.array.back(), depth + 1)) return false;
             skip_ws();
@@ -242,10 +243,11 @@ private:
         }
         while (true) {
             skip_ws();
+            // "}" right after a comma: accept a trailing comma
             if (pos_ < t_.size() && t_[pos_] == '}' && !v.object.empty()) {
                 ++pos_;
                 return true;
-            }  // trailing comma
+            }
             if (pos_ >= t_.size() || t_[pos_] != '"') return fail("expected string key");
             std::string key;
             if (!str(key)) return false;

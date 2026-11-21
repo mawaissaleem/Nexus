@@ -4,6 +4,7 @@
 #include "nexus/core/query.hpp"
 #include "nexus/core/config_manager.hpp"
 #include "nexus/utils/logger.hpp"
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -285,7 +286,8 @@ void LauncherWindow::on_search_results(const std::vector<core::SearchResult>& re
 
     auto final_results = results;
     QString lower = query_text.trimmed().toLower();
-    if (lower == "settings" || lower == "setting" || lower == "config" || lower == "preferences" || lower == "prefs") {
+    static const QStringList settings_words = {"settings", "setting", "config", "preferences", "prefs"};
+    if (settings_words.contains(lower)) {
         core::SearchResult settings_res;
         settings_res.title = "Nexus Settings";
         settings_res.subtitle = "Manage web links, aliases, and search directories";

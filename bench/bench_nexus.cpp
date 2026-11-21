@@ -1,7 +1,6 @@
-// Benchmark harness (not part of ctest). Usage:
-//   bench_nexus [--apps N] [--files M] [--iters I] [--usage-rows a,b,c]
-// Everything runs in a per-process temp dir; HOME, XDG_* are redirected before any
-// singleton reads them, so the real ~/.config/nexus and ~/.local/share/nexus are never touched.
+// Benchmark harness, not part of ctest: bench_nexus [--apps N] [--files M] [--iters I] [--usage-rows a,b,c]
+// Runs in a per-process temp dir with HOME and XDG_* redirected before any singleton reads them,
+// so the real ~/.config/nexus and ~/.local/share/nexus are never touched.
 #include "nexus/core/config_manager.hpp"
 #include "nexus/core/search_engine.hpp"
 #include "nexus/index/app_indexer.hpp"
@@ -51,8 +50,9 @@ static constexpr size_t kNumWords = sizeof(kWords) / sizeof(kWords[0]);
 static void make_apps(const fs::path& dir, int n) {
     fs::create_directories(dir);
     for (int i = 0; i < n; ++i) {
-        std::string name =
-            std::string(kWords[i % kNumWords]) + (i / kNumWords ? "-" + std::to_string(i / kNumWords) : "");
+        std::string name = kWords[i % kNumWords];
+        const size_t cycle = i / kNumWords;
+        if (cycle > 0) name += "-" + std::to_string(cycle);
         std::ofstream(dir / ("app" + std::to_string(i) + ".desktop"))
             << "[Desktop Entry]\nType=Application\nName=" << name
             << " Studio\nGenericName=" << kWords[(i * 7) % kNumWords] << "\nComment=Synthetic app " << i << "\nExec=app"
@@ -69,11 +69,11 @@ static void make_tree(const fs::path& root, int files) {
         for (int m = 0; m < mids && made < files; ++m) {
             fs::path d = root / ("proj" + std::to_string(t)) / ("mod" + std::to_string(m));
             fs::create_directories(d);
-            for (int f = 0; f < per_dir && made < files; ++f, ++made)
-                std::ofstream(d / (std::string(kWords[(t + m + f) % kNumWords]) + "_" + std::to_string(made) +
-                                   (f % 3 == 0   ? ".txt"
-                                    : f % 3 == 1 ? ".cpp"
-                                                 : ".pdf")));
+            static const char* const kExtensions[] = {".txt", ".cpp", ".pdf"};
+            for (int f = 0; f < per_dir && made < files; ++f, ++made) {
+                const std::string stem = std::string(kWords[(t + m + f) % kNumWords]) + "_" + std::to_string(made);
+                std::ofstream(d / (stem + kExtensions[f % 3]));
+            }
         }
 }
 
@@ -237,7 +237,8 @@ int main(int argc, char** argv) {
     std::cout << "| Query set | p50 ms | p95 ms | samples |\n|---|---|---|---|\n";
     size_t seen = 0;
     const std::vector<std::string> app_q = {"fire", "code", "term", "pho", "xyzzy"};
-    // Same four queries as the pre-index baseline (then: "fire_"/"pdf" stopped after 30 hits, the others walked the tree).
+    // Same four queries as the pre-index baseline
+    // (then: "fire_"/"pdf" stopped after 30 hits, the others walked the tree).
     const std::vector<std::string> file_q = {"file fire_", "file pdf", "file report", "file zzqx"};
     for (int rows : usage_rows) {
         set_usage_rows(db_path, rows, n_apps);

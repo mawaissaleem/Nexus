@@ -9,14 +9,8 @@
 namespace nexus::core {
 
 struct RankingWeights {
-    // The highest raw score any provider is expected to produce. Used to
-    // normalize res.score into a 0.0–1.0 "provider relevance" value before
-    // combining it with this engine's own lexical/usage signals below, so
-    // that changing a provider's raw score scale and changing these
-    // weights are two independent decisions, not one entangled one.
-    // Current known maximum across providers is AliasProvider's 2500.0
-    // (offering to create a new alias). rank() logs a warning for any
-    // score above this, so a provider that outgrows it is noticed.
+    // Highest raw score a provider may return (AliasProvider's 2500); scores are divided by it so provider scales
+    // and these weights stay independent. rank() warns about anything above it.
     double max_provider_score{2500.0};
 
     double exact_match{500.0};

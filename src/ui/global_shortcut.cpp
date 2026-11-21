@@ -118,8 +118,11 @@ void GlobalShortcutManager::run_x11_listener() {
         return;
     }
 
-    unsigned int base = (parsed->ctrl ? ControlMask : 0) | (parsed->alt ? Mod1Mask : 0) |
-                        (parsed->shift ? ShiftMask : 0) | (parsed->super ? Mod4Mask : 0);
+    unsigned int base = 0;
+    if (parsed->ctrl) base |= ControlMask;
+    if (parsed->alt) base |= Mod1Mask;
+    if (parsed->shift) base |= ShiftMask;
+    if (parsed->super) base |= Mod4Mask;
     const unsigned int relevant = ControlMask | Mod1Mask | ShiftMask | Mod4Mask;
 
     // NumLock (Mod2) and CapsLock (Lock) change the event state, so grab every combination.
