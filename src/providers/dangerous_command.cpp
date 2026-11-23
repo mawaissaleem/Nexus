@@ -126,8 +126,17 @@ size_t prefix_length(const Words& words, size_t i, std::string_view wrapper) {
 
     const bool is_option = i > 0 && word.starts_with('-');
     if (!is_option) return 0;
-    const std::pair<std::string_view, std::string_view> option{wrapper, word};
-    return contains(kValueOptions, option) ? 2 : 1;
+    if (!is_short_cluster(word)) return 1;
+    // Read the cluster like getopt: the first value option takes the rest of the word as its value, or the next
+    // word when it closes the cluster (`sudo -iu bob rm` skips "bob", `sudo -uroot rm` skips nothing more).
+    for (size_t k = 1; k < word.size(); ++k) {
+        const std::string letter = std::string("-") + word[k];
+        const std::pair<std::string_view, std::string_view> option{wrapper, letter};
+        if (!contains(kValueOptions, option)) continue;
+        const bool value_is_next_word = k + 1 == word.size();
+        return value_is_next_word ? 2 : 1;
+    }
+    return 1;
 }
 
 // `sh -c "<script>"` (also clusters like -lc) runs its script argument, so that script is checked too.
@@ -141,14 +150,15 @@ bool runs_dangerous_script(const Words& args) {
 
 // shortcut: `nice`/`watch` prefixes, globs like `chmod -R 777 /*` and long options with a separate value
 // (`sudo --user bob`) are missed, upgrade if they show up in practice.
-bool is_dangerous_simple_command(const Words& words) {
-    if (redirects_into_device(words)) return true;
-
+bool is_dangerous_argv_impl(const Words& words) {
     size_t i = 0;
     std::string_view wrapper;
     while (i < words.size()) {
         const size_t skip = prefix_length(words, i, wrapper);
         if (skip == 0) break;
+        // `command -v dd` only looks the name up.
+        const bool has_lookup_flag = is_short_cluster(words[i]) && words[i].find_first_of("vV") != std::string::npos;
+        if (wrapper == "command" && has_lookup_flag) return false;
         if (contains(kWrappers, words[i])) wrapper = words[i];
         i += skip;
     }
@@ -171,7 +181,13 @@ bool is_dangerous_simple_command(const Words& words) {
     return false;
 }
 
+bool is_dangerous_simple_command(const Words& words) {
+    return redirects_into_device(words) || is_dangerous_argv_impl(words);
+}
+
 }  // namespace
+
+bool is_dangerous_argv(const std::vector<std::string>& argv) { return is_dangerous_argv_impl(argv); }
 
 bool is_dangerous_command(std::string_view command_line) {
     // The fork bomb is punctuation only, so match it with the whitespace removed.

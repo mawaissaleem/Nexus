@@ -64,7 +64,8 @@ static void test_search_dirs() {
     unsetenv("XDG_DATA_DIRS");
     d = providers::plugin_search_dirs();
     assert(d.size() == 3 && d[1] == "/usr/local/share/nexus/plugins" && d[2] == "/usr/share/nexus/plugins");
-    const std::string home = std::getenv("HOME") ? std::getenv("HOME") : "";
+    const char* home_env = std::getenv("HOME");
+    const std::string home = home_env ? home_env : "";
     unsetenv("XDG_DATA_HOME");
     setenv("HOME", "/hh", 1);
     d = providers::plugin_search_dirs();

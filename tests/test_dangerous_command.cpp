@@ -6,6 +6,7 @@
 #include <iostream>
 
 using nexus::providers::is_dangerous_command;
+using nexus::providers::is_dangerous_argv;
 
 int main() {
     const char* dangerous[] = {
@@ -64,6 +65,14 @@ int main() {
         "if true; then reboot; fi",
         "{ rm -rf /; }",
         "! rm -rf x",
+        "sudo -iu bob rm -rf /",
+        "sudo -u bob rm -rf /",
+        "command dd if=/dev/zero of=/dev/sda",
+        "sudo -uroot rm -rf /",
+        "sudo -uhttp rm -rf /",
+        "sudo --user=root rm -rf /",
+        "sudo --chdir=/tmp rm -rf /",
+        "env -uFOOC rm -rf /",
     };
     for (const char* cmd : dangerous) {
         assert(is_dangerous_command(cmd));
@@ -97,11 +106,22 @@ int main() {
         "sh -c \"echo hi\"",
         "bash script.sh",
         "sudo -u bob ls",
+        "sudo -iu bob ls",
+        "command -v dd",
+        "command -V dd",
         "for f in *; do echo \"$f\"; done",
     };
     for (const char* cmd : harmless) {
         assert(!is_dangerous_command(cmd));
     }
+
+    // Argv launched without a shell: operator characters are plain word text, not separators.
+    using Argv = std::vector<std::string>;
+    assert(is_dangerous_argv(Argv{"sudo", "-iu", "bob", "rm", "-rf", "/"}));
+    assert(is_dangerous_argv(Argv{"dd", "if=/dev/zero"}));
+    assert(!is_dangerous_argv(Argv{"echo", "a;rm", "-rf", "/"}));
+    assert(!is_dangerous_argv(Argv{"ls", ">", "/dev/sda"}));
+    assert(!is_dangerous_argv(Argv{}));
 
     // The shell provider asks before a dangerous command and stays plain for a normal one.
     nexus::providers::ShellProvider provider;

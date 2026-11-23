@@ -1,5 +1,6 @@
 #include "nexus/providers/alias_provider.hpp"
 #include "nexus/core/alias_manager.hpp"
+#include "nexus/core/executor.hpp"
 #include "nexus/providers/dangerous_command.hpp"
 #include "nexus/utils/fuzzy.hpp"
 #include <sstream>
@@ -108,11 +109,13 @@ std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, 
                     res.confirm = is_dangerous_command(res.execution_payload);
                     break;
                 }
-                case core::AliasType::Command:
+                case core::AliasType::Command: {
                     res.action_kind = core::ActionKind::Launch;
-                    // Still launched directly; the check only asks first for destructive command words.
-                    res.confirm = is_dangerous_command(alias.target);
+                    // Check the argv the executor will really launch, not a shell reading of the text.
+                    const auto argv = core::Executor::parse_desktop_exec(alias.target);
+                    res.confirm = argv && is_dangerous_argv(*argv);
                     break;
+                }
                 default:
                     res.action_kind = core::ActionKind::Open;
                     break;

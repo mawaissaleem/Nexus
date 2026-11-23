@@ -137,6 +137,23 @@ int main() {
     assert(mgr.add_alias("wipe", "sudo dd if=/dev/zero of=/dev/sda"));
     assert(mgr.add_alias("dk", "docker ps"));
     assert(mgr.add_alias("ed", "code ."));
+    // Exec-line rules: `\s` is a space, and `;`/`&`/`>` inside a word do not start a new command.
+    assert(mgr.add_alias("esc", "rm\\s-rf x"));
+    assert(mgr.add_alias("semi", "echo a;rm -rf /"));
+    assert(mgr.add_alias("amp", "echo a&&reboot"));
+    assert(mgr.add_alias("sp", "dd\\sif=/dev/zero"));
+    {
+        for (const char* name : {"semi", "amp"}) {
+            auto r = provider.search(Query(name), cancel);
+            assert(!r.empty() && r[0].title == name && !r[0].confirm);
+        }
+        // `\s` is a space in an Exec line, so these really launch rm and dd.
+        for (const char* name : {"esc", "sp"}) {
+            auto r = provider.search(Query(name), cancel);
+            assert(!r.empty() && r[0].title == name && r[0].confirm);
+        }
+    }
+    assert(mgr.remove_alias("esc") && mgr.remove_alias("semi") && mgr.remove_alias("amp") && mgr.remove_alias("sp"));
     {
         for (const char* name : {"clean", "off", "wipe"}) {
             auto r = provider.search(Query(name), cancel);
