@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.6.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland hotkey support is new and lightly tested, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
+> **Version 0.7.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland hotkey support (desktop portal or a GNOME shortcut button) is new and lightly tested, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -214,9 +214,9 @@ In the launcher, `alias up >sudo apt update` works as typed. Shell aliases show 
 
 The global hotkey is an X11 key grab, which receives nothing under Wayland. Nexus picks what works in your session when it starts:
 
-- **Desktop portal** (KDE Plasma 5.27+, GNOME 48+): Nexus asks the `GlobalShortcuts` portal for your configured shortcut. The desktop owns the key once bound, so if you change the shortcut in Settings and it does not move, change it in your system keyboard settings.
+- **Desktop portal** (for example KDE Plasma 5.27+ and GNOME 48+): Nexus asks the `GlobalShortcuts` portal for your configured shortcut. The desktop owns the key once bound, so if you change the shortcut in Settings and it does not move, change it in your system keyboard settings.
 - **GNOME without the portal** (for example GNOME 42 on Ubuntu 22.04): open Settings, Navigation tab, and click **Set up GNOME shortcut**. This adds one "Nexus" entry to GNOME's custom shortcuts that runs `nexus --toggle` with your configured shortcut; clicking again updates that entry and leaves your other shortcuts alone. Nothing is written unless you click. `Alt+Space` is GNOME's own window-menu key, so choose another shortcut first.
-- **Other Wayland compositors**: Nexus shows a tray notice when it starts. Bind the toggle yourself in your compositor's shortcut settings:
+- **Other compositors without the portal**: Nexus shows a tray notice when it starts. Bind the toggle yourself in your compositor's shortcut settings:
 
 ```
 Command: nexus --toggle
@@ -279,7 +279,7 @@ include/nexus/ , src/
 ├── index/       Desktop-entry parsing, application and file indexers, watchers, SQLite layer
 ├── providers/   Application, file, calculator, unit conversion, URL, shell, alias, clipboard, plugin host,
 │                destructive-command check
-├── ui/          Launcher window, result widget, settings dialog, X11 hotkey
+├── ui/          Launcher window, result widget, settings dialog, global hotkey (X11 grab, Wayland portal)
 └── utils/       Fuzzy matcher, logger, inotify wrapper, shortcut parsing
 ```
 
@@ -334,7 +334,8 @@ The specification targets under 50 ms per query and under 20 ms for cached queri
 | ~~0.4.0~~ | **Shipped.** Themes, settings coverage, history controls, query-aware ranking with recency |
 | ~~0.5.0~~ | **Shipped.** Out-of-process plugins, web search, clipboard history and system actions, parallel search |
 | ~~0.6.0~~ | **Shipped.** URL opening, unit conversion, confirmation for destructive commands, exit-status messages, `--version`, install target with desktop entry and systemd user unit |
-| 0.7.0 | Wayland support, `.deb` / AppImage packaging, tested across GNOME / KDE / XFCE, integration, failure and performance test suites |
+| ~~0.7.0~~ | **Shipped.** Wayland hotkey through the `GlobalShortcuts` portal (for example KDE Plasma 5.27+ and GNOME 48+) or a one-click GNOME custom shortcut in Settings, sturdier destructive-command check |
+| 0.8.0 | `.deb` / AppImage packaging, tested across GNOME / KDE / XFCE, integration, failure and performance test suites |
 | 1.0.0 | Stable plugin API, accessibility, security review |
 
 The file index, schema migrations and benchmarks were first planned for

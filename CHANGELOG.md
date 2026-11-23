@@ -8,6 +8,43 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
+## [0.7.0] — YYYY-MM-DD
+
+Nexus's global hotkey now works on Wayland, and the destructive-command
+check gets fewer false alarms and misses.
+
+### Added
+
+- Global hotkey on Wayland. On desktops that offer the `GlobalShortcuts`
+  portal (for example KDE Plasma 5.27+ and GNOME 48+) Nexus registers your
+  configured shortcut through it. Once bound, the desktop owns the key, so
+  change it in your system keyboard settings if Settings does not move it.
+  Wayland compositors without the portal (other than GNOME) still need
+  `nexus --toggle` bound by hand in their shortcut settings; Nexus shows a
+  tray notice about it at start.
+- On GNOME without the portal (for example GNOME 42), Settings has a
+  **Set up GNOME shortcut** button. It adds one "Nexus" custom shortcut that
+  runs `nexus --toggle`; clicking again updates it and leaves your other
+  shortcuts alone. Nothing is written unless you click. `Alt+Space` is
+  refused there because GNOME uses it for the window menu.
+- Building now needs the Qt `DBus` module (see Requirements in the README).
+
+### Changed
+
+- Plain command aliases (no leading `>`) are checked for destructive
+  commands on what is actually launched, not on a shell reading of the text.
+  So `rm\s-rf x` (where `\s` is a space) now asks first, and
+  `echo a;rm -rf /`, which launches `echo` with `a;rm` as one argument, no
+  longer does.
+- Internal: the `Executor` gained a small runner for `gsettings`, used only
+  by the GNOME shortcut button.
+
+### Fixed
+
+- `sudo` option clusters that end in a value option (`sudo -iu bob rm -rf x`)
+  no longer hide the command from the destructive-command check.
+- `command -v dd` and similar lookups no longer ask for confirmation.
+
 ## [0.6.0] — 2026-11-23
 
 Nexus opens web addresses and converts units, asks before running
@@ -498,6 +535,7 @@ Documented here deliberately rather than discovered by the next person.
 | Dependencies | Qt (`Core`, `Gui`, `Widgets`, `Network`), SQLite3, libX11 |
 | Desktop environments tested | Whatever the maintainer runs daily (X11-based). Not yet verified across GNOME, KDE, and XFCE independently |
 
+[0.7.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.4.0
