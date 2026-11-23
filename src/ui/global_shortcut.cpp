@@ -16,7 +16,22 @@
 
 namespace nexus::ui {
 
-GlobalShortcutManager::GlobalShortcutManager(QObject* parent) : QObject(parent) {}
+namespace {
+
+utils::HotkeyBackend detect_backend() {
+    const bool wayland = utils::is_wayland_session();
+    // Only ask the bus on Wayland: X11 sessions never use the portal.
+    const bool portal = wayland && PortalShortcut::available();
+    const QByteArray desktop = qgetenv("XDG_CURRENT_DESKTOP");
+    return utils::select_hotkey_backend(wayland, portal, desktop.toStdString());
+}
+
+}  // namespace
+
+GlobalShortcutManager::GlobalShortcutManager(QObject* parent) : QObject(parent), backend_(detect_backend()) {
+    connect(&portal_, &PortalShortcut::activated, this, &GlobalShortcutManager::activated);
+    connect(&portal_, &PortalShortcut::failed, this, &GlobalShortcutManager::grab_failed);
+}
 
 GlobalShortcutManager::~GlobalShortcutManager() { stop(); }
 
@@ -68,9 +83,21 @@ void GlobalShortcutManager::stop() {
 
 bool GlobalShortcutManager::apply_shortcut(const std::string& shortcut) {
     if (!utils::parse_shortcut(shortcut)) return false;
+    if (backend_ == utils::HotkeyBackend::Portal) return apply_portal_shortcut(shortcut);
     stop();
     shortcut_ = shortcut;
     return start();
+}
+
+bool GlobalShortcutManager::apply_portal_shortcut(const std::string& shortcut) {
+    shortcut_ = shortcut;
+    portal_.bind(QString::fromStdString(*utils::to_portal_trigger(shortcut)));
+    if (portal_bound_) {
+        emit compositor_decides("Under Wayland the desktop owns the key. If it did not change, set it in your "
+                                "system keyboard settings.");
+    }
+    portal_bound_ = true;
+    return true;
 }
 
 #if defined(Q_OS_LINUX)

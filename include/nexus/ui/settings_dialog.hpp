@@ -49,6 +49,8 @@ private:
 struct SettingsHooks {
     // Called with the shortcut text when the user applies one; returns false if it is invalid.
     std::function<bool(const std::string&)> apply_shortcut;
+    // Set only on GNOME Wayland without a portal: writes the custom keybinding, returns a message for the user.
+    std::function<std::string()> setup_gnome_shortcut;
     // Called after the user adds or removes a search directory or exclusion; the caller re-indexes.
     std::function<void()> directories_changed;
     // (id, display name) of every registered provider, for the on/off list.
@@ -93,6 +95,7 @@ private slots:
     void on_history_toggled(bool checked);
     void on_theme_changed(int index);
     void on_apply_shortcut();
+    void on_setup_gnome_shortcut();
 
 private:
     void setup_ui();
@@ -125,6 +128,7 @@ private:
     QCheckBox* history_checkbox_{nullptr};
     QComboBox* theme_combo_{nullptr};
     QLineEdit* shortcut_edit_{nullptr};
+    QLabel* gnome_status_{nullptr};
     ThemeController& theme_;
     SettingsHooks hooks_;
     Palette palette_;

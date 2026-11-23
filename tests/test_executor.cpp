@@ -273,6 +273,48 @@ int main() {
         assert(Executor::launch_shell_command("exit 1"));  // no callback is fine
     }
 
+    // run_capture: stdout and exit status, no shell, timeout kills a slow child.
+    {
+        std::string out;
+        assert(Executor::run_capture({"echo", "hello world"}, out));
+        assert(out == "hello world\n");
+        assert(!Executor::run_capture({"false"}, out));
+        assert(!Executor::run_capture({"/nonexistent/nexus-test-binary"}, out));
+        assert(!Executor::run_capture({}, out));
+        assert(Executor::run_capture({"echo", "a;echo b"}, out));
+        assert(out == "a;echo b\n");  // no shell involved
+        const auto t0 = std::chrono::steady_clock::now();
+        assert(!Executor::run_capture({"sleep", "5"}, out, std::chrono::milliseconds(100)));
+        assert(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(3));
+    }
+
+    // run_capture: output past the cap is a failure (never a truncated value), and the endless child is killed.
+    {
+        std::string out;
+        const auto t0 = std::chrono::steady_clock::now();
+        assert(!Executor::run_capture({"head", "-c", "70000", "/dev/zero"}, out));  // exits 0, but output was cut
+        assert(!Executor::run_capture({"yes"}, out));
+        assert(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(3));
+    }
+
+    // run_capture: a child that closes stdout but keeps running is not waited on past the timeout.
+    {
+        std::string out;
+        const auto t0 = std::chrono::steady_clock::now();
+        assert(!Executor::run_capture({"sh", "-c", "exec >&-; sleep 5"}, out, std::chrono::milliseconds(200)));
+        assert(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(3));
+    }
+
+    // run_capture: the child gets SIGPIPE back at its default even though Nexus ignores it.
+    {
+        const auto previous = signal(SIGPIPE, SIG_IGN);
+        std::string out;
+        assert(Executor::run_capture({"grep", "^SigIgn:", "/proc/self/status"}, out));
+        const unsigned long ignored = std::stoul(out.substr(out.find(':') + 1), nullptr, 16);
+        assert((ignored & (1UL << (SIGPIPE - 1))) == 0);
+        signal(SIGPIPE, previous);
+    }
+
     // Do not spawn a real GUI opener in CI; the regression above uses a fake.
 
     std::cout << "All Executor tests passed successfully!\n";

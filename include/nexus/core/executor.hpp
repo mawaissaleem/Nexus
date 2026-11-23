@@ -73,6 +73,12 @@ public:
     // child gives EPIPE instead of killing Nexus; every child Nexus starts gets SIGPIPE back at its default.
     static ChildProcess spawn_with_pipes(const std::vector<std::string>& argv, const std::filesystem::path& cwd);
 
+    // Runs argv (PATH search, no shell) with stdin and stderr on /dev/null and waits up to `timeout` for it.
+    // True only when stdout reached EOF and the child exited 0. More than 64 KiB of output or a child still
+    // running at the timeout is killed and counts as failure.
+    static bool run_capture(const std::vector<std::string>& argv, std::string& output,
+                            std::chrono::milliseconds timeout = std::chrono::seconds(5));
+
 private:
     // posix_spawnp argv[0] with stdio on /dev/null, new session, and a detached reaper.
     static bool spawn_detached(const std::vector<std::string>& args);

@@ -252,6 +252,82 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
     return true;
 }
 
+bool Executor::run_capture(const std::vector<std::string>& args, std::string& output,
+                           std::chrono::milliseconds timeout) {
+    output.clear();
+    if (args.empty()) return false;
+
+    int out_pipe[2];
+    if (pipe2(out_pipe, O_CLOEXEC) != 0) return false;
+
+    std::vector<char*> argv;
+    for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&actions, out_pipe[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    sigset_t sigpipe_only;
+    sigemptyset(&sigpipe_only);
+    sigaddset(&sigpipe_only, SIGPIPE);
+    posix_spawnattr_setsigdefault(&attr, &sigpipe_only);  // Nexus ignores SIGPIPE; tools expect the default
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF);
+
+    pid_t pid = 0;
+    const int rc = posix_spawnp(&pid, argv[0], &actions, &attr, argv.data(), environ);
+    posix_spawnattr_destroy(&attr);
+    posix_spawn_file_actions_destroy(&actions);
+    close(out_pipe[1]);
+    if (rc != 0) {
+        close(out_pipe[0]);
+        return false;
+    }
+
+    constexpr std::size_t kMaxOutput = 64 * 1024;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    // Stays true unless stdout reaches EOF in time: a timeout or a truncated output both count as failure.
+    bool failed = true;
+    while (output.size() < kMaxOutput) {
+        const auto left = deadline - std::chrono::steady_clock::now();
+        const auto left_ms = std::chrono::duration_cast<std::chrono::milliseconds>(left).count();
+        if (left_ms <= 0) break;
+        pollfd pfd{out_pipe[0], POLLIN, 0};
+        const int ready = poll(&pfd, 1, static_cast<int>(left_ms));
+        if (ready < 0 && errno == EINTR) continue;
+        if (ready <= 0) break;
+        char chunk[4096];
+        const ssize_t n = read(out_pipe[0], chunk, sizeof chunk);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) {
+            failed = n < 0;  // 0 is EOF: the child closed stdout
+            break;
+        }
+        output.append(chunk, static_cast<size_t>(n));
+    }
+    close(out_pipe[0]);
+
+    // A child can close stdout and keep running, so the wait is bounded by the same deadline.
+    int status = 0;
+    pid_t reaped = 0;
+    while (!failed && reaped == 0 && std::chrono::steady_clock::now() < deadline) {
+        reaped = waitpid(pid, &status, WNOHANG);
+        if (reaped < 0 && errno == EINTR) reaped = 0;
+        if (reaped == 0) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    if (reaped != pid) {
+        failed = true;
+        kill(pid, SIGKILL);
+        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+        }
+    }
+    return !failed && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
 ChildProcess::ChildProcess(ChildProcess&& o) noexcept
     : pid_(std::exchange(o.pid_, -1)), in_(std::exchange(o.in_, -1)), out_(std::exchange(o.out_, -1)),
       buf_(std::move(o.buf_)) {}

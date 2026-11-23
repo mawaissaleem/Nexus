@@ -1,5 +1,6 @@
 #include "nexus/ui/gui_app.hpp"
 #include "nexus/app/services.hpp"
+#include "nexus/core/gnome_keybinding.hpp"
 #include "nexus/index/file_watcher.hpp"
 #include "nexus/ui/global_shortcut.hpp"
 #include "nexus/ui/ipc.hpp"
@@ -9,6 +10,7 @@
 #include "nexus/utils/shortcut.hpp"
 #include <QApplication>
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QMimeData>
 #include <QIcon>
 #include <QLocalServer>
@@ -126,6 +128,9 @@ private:
         if (!settings_) {
             SettingsHooks hooks;
             hooks.apply_shortcut = [this](const std::string& text) { return apply_shortcut(text); };
+            if (shortcut_mgr_.backend() == utils::HotkeyBackend::GnomeCustom) {
+                hooks.setup_gnome_shortcut = [this]() { return setup_gnome_shortcut(); };
+            }
             // Search directories added/removed in Settings take effect without a restart.
             hooks.directories_changed = [this]() { start_rebuild(); };
             for (const auto& p : services_.engine->providers()) hooks.providers.emplace_back(p->id(), p->name());
@@ -143,6 +148,12 @@ private:
         tray_icon_.setToolTip("Nexus Launcher (" + shortcut_text() + ")");
         toggle_action_->setText("Toggle Launcher (" + shortcut_text() + ")");
         return shortcut_mgr_.apply_shortcut(text);
+    }
+
+    // The Settings button: writes the GNOME custom keybinding for the configured shortcut.
+    std::string setup_gnome_shortcut() {
+        const std::string binary = QCoreApplication::applicationFilePath().toStdString();
+        return core::setup_gnome_shortcut(config_.get_shortcut(), binary, core::system_gsettings()).message;
     }
 
     // Single-instance IPC server for instant toggle from shortcuts.
@@ -178,12 +189,21 @@ private:
     void setup_shortcut() {
         QObject::connect(&shortcut_mgr_, &GlobalShortcutManager::activated, [this]() { launcher_->toggle_launcher(); });
         QObject::connect(&shortcut_mgr_, &GlobalShortcutManager::grab_failed, [this](const QString& msg) {
-            // On Wayland the single tray notice covers it; don't stack a second popup for the same cause.
-            if (utils::is_wayland_session()) {
+            // Without a portal the single tray notice covers it; don't stack a second popup for the same cause.
+            const bool portal = shortcut_mgr_.backend() == utils::HotkeyBackend::Portal;
+            if (utils::is_wayland_session() && !portal) {
                 NEXUS_LOG_WARN("Global shortcut grab failed: " + msg.toStdString());
                 return;
             }
+            // A portal failure message already says where to set the key; picking another in Settings won't help.
+            if (portal) {
+                QMessageBox::warning(nullptr, "Nexus global shortcut", msg);
+                return;
+            }
             QMessageBox::warning(nullptr, "Nexus global shortcut", msg + "\nChoose another one in Settings.");
+        });
+        QObject::connect(&shortcut_mgr_, &GlobalShortcutManager::compositor_decides, [this](const QString& msg) {
+            tray_icon_.showMessage("Nexus", msg, QSystemTrayIcon::Information, 8000);
         });
         shortcut_mgr_.apply_shortcut(config_.get_shortcut());
     }
@@ -212,10 +232,15 @@ private:
         const bool tray_available = QSystemTrayIcon::isSystemTrayAvailable();
         if (tray_available) tray_icon_.show();
 
-        // Once per process start. Without a tray only the log line is shown.
-        if (utils::is_wayland_session()) {
-            const QString hint =
+        // Once per process start, only when no hotkey backend works. Without a tray only the log line is shown.
+        const auto backend = shortcut_mgr_.backend();
+        if (backend == utils::HotkeyBackend::GnomeCustom || backend == utils::HotkeyBackend::None) {
+            QString hint =
                 "Global shortcuts don't work on Wayland. Bind `nexus --toggle` to a key in your compositor settings.";
+            if (backend == utils::HotkeyBackend::GnomeCustom) {
+                hint = "Global shortcuts don't work on Wayland. Open Nexus Settings and click \"Set up GNOME "
+                       "shortcut\", or bind `nexus --toggle` in GNOME's keyboard settings.";
+            }
             NEXUS_LOG_WARN(hint.toStdString());
             if (tray_available) tray_icon_.showMessage("Nexus", hint, QSystemTrayIcon::Warning, 10000);
         }

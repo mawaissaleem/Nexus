@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.6.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland is not supported, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
+> **Version 0.6.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland hotkey support is new and lightly tested, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -79,21 +79,20 @@ Esc             Close
 
 Listed honestly so you know what you are getting. These are planned — see the [roadmap](#roadmap).
 
-- **Wayland hotkey.** The global hotkey uses an X11 key grab, which does not work under a Wayland session. See [Wayland](#wayland).
 - **`.deb` and AppImage packages.** Install from source with `cmake --install`.
 
 
 ## Known issues
 
-None at the moment.
+- **Wayland hotkey without the portal.** On Wayland desktops that have neither the `GlobalShortcuts` portal nor GNOME, bind `nexus --toggle` yourself in the compositor's settings. See [Wayland](#wayland).
 
 
 ## Requirements
 
-- Linux, **X11 session** (see [Wayland](#wayland))
+- Linux, X11 or Wayland session (for the Wayland hotkey see [Wayland](#wayland))
 - CMake 3.22 or newer
 - A C++20 compiler (GCC 11+ or Clang 14+)
-- Qt — `Core`, `Gui`, `Widgets`, `Network`. Developed and tested against **Qt 5.15.3**. Qt 6 builds successfully and is covered by CI, but has had far less real-world testing — see [Known Qt6 differences](#known-qt6-differences) if you hit anything.
+- Qt — `Core`, `Gui`, `Widgets`, `Network`, `DBus`. Developed and tested against **Qt 5.15.3**. Qt 6 builds successfully and is covered by CI, but has had far less real-world testing — see [Known Qt6 differences](#known-qt6-differences) if you hit anything.
 - SQLite 3 development headers
 - Python 3 (standard library only), only for the shipped `web` and `system` plugins
 - libX11 development headers
@@ -213,15 +212,17 @@ In the launcher, `alias up >sudo apt update` works as typed. Shell aliases show 
 
 ## Wayland
 
-The global hotkey is implemented as an X11 `XGrabKey` on the root window. Under a Wayland session this will not receive key events and **the hotkey will silently do nothing**.
+The global hotkey is an X11 key grab, which receives nothing under Wayland. Nexus picks what works in your session when it starts:
 
-Nexus itself runs fine under XWayland, and shows a tray notice about this when it starts in a Wayland session. Until a portal-based implementation lands, bind the toggle yourself through your compositor's own shortcut settings:
+- **Desktop portal** (KDE Plasma 5.27+, GNOME 48+): Nexus asks the `GlobalShortcuts` portal for your configured shortcut. The desktop owns the key once bound, so if you change the shortcut in Settings and it does not move, change it in your system keyboard settings.
+- **GNOME without the portal** (for example GNOME 42 on Ubuntu 22.04): open Settings, Navigation tab, and click **Set up GNOME shortcut**. This adds one "Nexus" entry to GNOME's custom shortcuts that runs `nexus --toggle` with your configured shortcut; clicking again updates that entry and leaves your other shortcuts alone. Nothing is written unless you click. `Alt+Space` is GNOME's own window-menu key, so choose another shortcut first.
+- **Other Wayland compositors**: Nexus shows a tray notice when it starts. Bind the toggle yourself in your compositor's shortcut settings:
 
 ```
 Command: nexus --toggle
 ```
 
-GNOME: Settings → Keyboard → Custom Shortcuts. KDE: System Settings → Shortcuts → Custom Shortcuts.
+KDE: System Settings → Shortcuts → Custom Shortcuts.
 
 ## Known Qt6 differences
 

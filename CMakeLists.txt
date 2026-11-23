@@ -32,6 +32,7 @@ message(STATUS "Using Qt version: ${QT_VERSION_MAJOR} (${Qt${QT_VERSION_MAJOR}_V
 # Platform specific dependencies
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS DBus)
 endif()
 
 # Layered static libraries. Direction (checked against the real include graph by tests/check_layering.cmake):
@@ -45,6 +46,7 @@ add_library(nexus_utils STATIC
     src/utils/logger.cpp
     src/utils/fuzzy.cpp
     src/utils/shortcut.cpp
+    src/utils/hotkey_backend.cpp
     src/utils/json.cpp
     src/utils/theme.cpp
     src/utils/fs_watcher.cpp
@@ -64,6 +66,7 @@ add_library(nexus_core STATIC
     src/core/async_search_coordinator.cpp
     src/core/config_manager.cpp
     src/core/alias_manager.cpp
+    src/core/gnome_keybinding.cpp
 )
 target_link_libraries(nexus_core PUBLIC nexus_utils)
 
@@ -103,6 +106,7 @@ target_compile_definitions(nexus_app PUBLIC NEXUS_VERSION="${PROJECT_VERSION}")
 # UI Sources and Headers for AUTOMOC
 set(NEXUS_UI_HEADERS
     include/nexus/ui/global_shortcut.hpp
+    include/nexus/ui/portal_shortcut.hpp
     include/nexus/ui/result_widget.hpp
     include/nexus/ui/launcher_window.hpp
     include/nexus/ui/settings_dialog.hpp
@@ -116,6 +120,7 @@ set(NEXUS_UI_HEADERS
 
 set(NEXUS_UI_SOURCES
     src/ui/global_shortcut.cpp
+    src/ui/portal_shortcut.cpp
     src/ui/result_widget.cpp
     src/ui/launcher_window.cpp
     src/ui/settings_dialog.cpp
@@ -143,7 +148,7 @@ target_link_libraries(nexus PRIVATE
 )
 
 if(UNIX AND NOT APPLE)
-    target_link_libraries(nexus PRIVATE X11::X11)
+    target_link_libraries(nexus PRIVATE X11::X11 Qt${QT_VERSION_MAJOR}::DBus)
 elseif(WIN32)
     target_link_libraries(nexus PRIVATE user32 shell32)
 endif()

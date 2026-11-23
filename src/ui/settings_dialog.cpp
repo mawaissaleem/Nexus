@@ -668,6 +668,19 @@ void SettingsDialog::setup_ui() {
     shortcut_row->addWidget(shortcut_apply);
     card_layout->addLayout(shortcut_row);
 
+    if (hooks_.setup_gnome_shortcut) {
+        auto* gnome_button = new QPushButton("Set up GNOME shortcut", card);
+        gnome_status_ = new QLabel("Wayland has no global key grab here. This adds a GNOME shortcut that runs "
+                                   "nexus --toggle. GNOME keeps Alt+Space for its window menu, so apply a "
+                                   "different shortcut above first.",
+                                   card);
+        gnome_status_->setWordWrap(true);
+        gnome_status_->setStyleSheet("border: none; background: transparent;");
+        connect(gnome_button, &QPushButton::clicked, this, &SettingsDialog::on_setup_gnome_shortcut);
+        card_layout->addWidget(gnome_button);
+        card_layout->addWidget(gnome_status_);
+    }
+
     nav_layout->addWidget(card);
     nav_layout->addStretch();
 
@@ -949,6 +962,10 @@ void SettingsDialog::on_apply_shortcut() {
         return;
     }
     emit settings_changed();
+}
+
+void SettingsDialog::on_setup_gnome_shortcut() {
+    gnome_status_->setText(QString::fromStdString(hooks_.setup_gnome_shortcut()));
 }
 
 bool SettingsDialog::eventFilter(QObject* watched, QEvent* event) {

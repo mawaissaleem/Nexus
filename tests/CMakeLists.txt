@@ -37,6 +37,8 @@ set(TEST_TARGETS
     test_launcher_copy
     test_clipboard_provider
     test_ipc
+    test_hotkey_backend
+    test_gnome_keybinding
 )
 
 # Each test links the smallest layer it needs (see CMakeLists.txt), so layering is enforced at link time.
@@ -60,6 +62,8 @@ set(TEST_LIBS_test_cli nexus_app)
 set(TEST_LIBS_test_plugin_loader nexus_app)
 set(TEST_LIBS_test_launcher_copy nexus_core)
 set(TEST_LIBS_test_ipc nexus_providers)
+set(TEST_LIBS_test_hotkey_backend nexus_utils)
+set(TEST_LIBS_test_gnome_keybinding nexus_core)
 
 foreach(test_name ${TEST_TARGETS})
     add_executable(${test_name} ${test_name}.cpp)
