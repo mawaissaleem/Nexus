@@ -8,7 +8,7 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
-## [0.7.0] — YYYY-MM-DD
+## [0.7.0] — 2026-11-24
 
 Nexus's global hotkey now works on Wayland, and the destructive-command
 check gets fewer false alarms and misses.
