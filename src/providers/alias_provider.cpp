@@ -110,6 +110,8 @@ std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, 
                 }
                 case core::AliasType::Command:
                     res.action_kind = core::ActionKind::Launch;
+                    // Still launched directly; the check only asks first for destructive command words.
+                    res.confirm = is_dangerous_command(alias.target);
                     break;
                 default:
                     res.action_kind = core::ActionKind::Open;

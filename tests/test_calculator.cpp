@@ -72,6 +72,30 @@ int main() {
         assert(!val.has_value());
     }
 
+    // Test 7b: Input that cannot be read to the end is rejected, not cut to a prefix
+    {
+        for (const char* bad : {"5..", "5 .", "2+2)", "3 4", "5 # 3", "2=2", "2+=2", "2+2==", "="}) {
+            assert(!CalculatorProvider::evaluate(bad).has_value());
+        }
+        CalculatorProvider provider;
+        const std::atomic<bool> no_cancel{false};
+        assert(provider.search(nexus::core::Query("5 + 5 ."), no_cancel).empty());
+    }
+
+    // Test 7c: One trailing '=' just ends the input and stays out of the subtitle
+    {
+        assert(CalculatorProvider::evaluate("2+2=") == 4.0);
+        assert(CalculatorProvider::evaluate("2+2 =") == 4.0);
+        assert(CalculatorProvider::evaluate(" 2+2 = ") == 4.0);
+        CalculatorProvider provider;
+        const std::atomic<bool> no_cancel{false};
+        const auto results = provider.search(nexus::core::Query("2+2 ="), no_cancel);
+        assert(results.size() == 1);
+        assert(results[0].title == "4");
+        assert(results[0].subtitle == "= 2+2");
+        assert(provider.search(nexus::core::Query("2+2=="), no_cancel).empty());
+    }
+
     // Test 8: A comma locale changes neither parsing nor the shown result
     {
         const std::string previous = std::setlocale(LC_NUMERIC, nullptr);

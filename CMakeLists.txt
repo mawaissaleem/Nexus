@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(nexus VERSION 0.5.1 LANGUAGES CXX C)
+project(nexus VERSION 0.6.0 LANGUAGES CXX C)
 
 # Enforce C++20 standard
 set(CMAKE_CXX_STANDARD 20)
@@ -155,6 +155,20 @@ install(FILES plugins/web/plugin.json DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus
 install(PROGRAMS plugins/web/web.py DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/web)
 install(FILES plugins/system/plugin.json DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/system)
 install(PROGRAMS plugins/system/system.py DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/system)
+
+install(FILES packaging/nexus.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+
+# systemd user units live in <prefix>/lib/systemd/user (literal lib, even where libdir is lib64).
+# Written at install time so `cmake --install --prefix` is honoured, not only the configure-time prefix.
+install(CODE "
+  set(NEXUS_BINDIR \"${CMAKE_INSTALL_BINDIR}\")
+  if(NOT IS_ABSOLUTE \"\${NEXUS_BINDIR}\")
+    set(NEXUS_BINDIR \"\${CMAKE_INSTALL_PREFIX}/\${NEXUS_BINDIR}\")
+  endif()
+  configure_file(\"${CMAKE_CURRENT_SOURCE_DIR}/packaging/nexus.service.in\"
+                 \"${CMAKE_CURRENT_BINARY_DIR}/nexus.service\" @ONLY)
+")
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nexus.service DESTINATION lib/systemd/user)
 
 # Benchmarks: built by default so they keep compiling, but never registered with ctest.
 option(NEXUS_BUILD_BENCH "Build bench/bench_nexus" ON)

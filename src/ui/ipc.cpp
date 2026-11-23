@@ -3,6 +3,19 @@
 
 namespace nexus::ui {
 
+const char* ipc_command_for_args(const std::vector<std::string>& args) {
+    for (const std::string& arg : args) {
+        if (arg == "--hide") return "HIDE";
+        if (arg == "--show") return "SHOW";
+        if (arg == "--settings" || arg == "settings" || arg == "config") return kIpcSettings;
+        if (arg == "--toggle" || arg == "-t") return "TOGGLE";
+    }
+    for (const std::string& arg : args) {
+        if (arg == "-session") return kIpcNoop;
+    }
+    return "TOGGLE";
+}
+
 bool send_ipc_command(const QString& socket_name, const char* cmd) {
     QLocalSocket socket;
     socket.connectToServer(socket_name);

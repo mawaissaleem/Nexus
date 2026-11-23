@@ -131,6 +131,27 @@ int main() {
     }
     assert(mgr.remove_alias("upd") && mgr.remove_alias("dps") && mgr.remove_alias("nuke"));
 
+    // A destructive plain command alias asks first and its prompt names the target; harmless ones do not.
+    assert(mgr.add_alias("clean", "rm -rf ~/build"));
+    assert(mgr.add_alias("off", "shutdown now"));
+    assert(mgr.add_alias("wipe", "sudo dd if=/dev/zero of=/dev/sda"));
+    assert(mgr.add_alias("dk", "docker ps"));
+    assert(mgr.add_alias("ed", "code ."));
+    {
+        for (const char* name : {"clean", "off", "wipe"}) {
+            auto r = provider.search(Query(name), cancel);
+            assert(!r.empty() && r[0].title == name);
+            assert(r[0].confirm && r[0].action_kind == ActionKind::Launch);
+            assert(r[0].subtitle.find(r[0].execution_payload) != std::string::npos);
+        }
+        for (const char* name : {"dk", "ed"}) {
+            auto r = provider.search(Query(name), cancel);
+            assert(!r.empty() && r[0].title == name && !r[0].confirm);
+        }
+    }
+    assert(mgr.remove_alias("clean") && mgr.remove_alias("off") && mgr.remove_alias("wipe"));
+    assert(mgr.remove_alias("dk") && mgr.remove_alias("ed"));
+
     // Which executor path an alias action takes: a fake program on PATH records the argv it received.
     {
         const fs::path dir = fs::temp_directory_path() / ("nexus_test_alias_bin_" + pid);

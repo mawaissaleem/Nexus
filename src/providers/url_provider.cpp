@@ -42,7 +42,10 @@ bool is_ipv4(std::string_view host) {
     std::size_t start = 0;
     while (true) {
         const std::size_t dot = host.find('.', start);
-        if (!is_number_up_to(host.substr(start, dot - start), 255)) {
+        const std::string_view part = host.substr(start, dot - start);
+        // 010 reads as octal in some tools, so a leading zero is not a plain address
+        const bool leading_zero = part.size() > 1 && part.front() == '0';
+        if (leading_zero || !is_number_up_to(part, 255)) {
             return false;
         }
         ++parts;

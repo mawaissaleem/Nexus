@@ -11,7 +11,7 @@ namespace nexus::providers {
 
 namespace {
 
-enum class TokenType { Number, Plus, Minus, Multiply, Divide, Modulo, Power, LParen, RParen, Identifier, End };
+enum class TokenType { Number, Plus, Minus, Multiply, Divide, Modulo, Power, LParen, RParen, Identifier, End, Invalid };
 
 struct Token {
     TokenType type{TokenType::End};
@@ -63,7 +63,7 @@ private:
             if (whole_token) {
                 current_token_ = {TokenType::Number, number, std::string(digits)};
             } else {
-                current_token_ = {TokenType::End, 0.0, ""};
+                current_token_ = {TokenType::Invalid, 0.0, ""};
             }
             return;
         }
@@ -111,7 +111,7 @@ private:
                 current_token_ = {TokenType::RParen, 0.0, ")"};
                 return;
             default:
-                current_token_ = {TokenType::End, 0.0, ""};
+                current_token_ = {TokenType::Invalid, 0.0, ""};
                 return;
         }
     }
@@ -236,10 +236,26 @@ private:
     Token current_token_;
 };
 
+std::string_view trim_trailing_space(std::string_view text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
+// people often type "2+2=", so one trailing '=' just ends the input
+std::string_view without_trailing_equals(std::string_view expression) {
+    expression = trim_trailing_space(expression);
+    if (!expression.empty() && expression.back() == '=') {
+        expression.remove_suffix(1);
+    }
+    return trim_trailing_space(expression);
+}
+
 }  // namespace
 
 std::optional<double> CalculatorProvider::evaluate(std::string_view expression) {
-    MathParser parser(expression);
+    MathParser parser(without_trailing_equals(expression));
     return parser.parse();
 }
 
@@ -290,7 +306,7 @@ std::vector<core::SearchResult> CalculatorProvider::search(const core::Query& qu
     core::SearchResult res;
     res.id = "calc:" + result_str;
     res.title = result_str;
-    res.subtitle = "= " + std::string(expr);
+    res.subtitle = "= " + std::string(without_trailing_equals(expr));
     res.icon = "accessories-calculator";
     res.provider_id = id();
     res.score = prefixed ? 1000.0 : 750.0;

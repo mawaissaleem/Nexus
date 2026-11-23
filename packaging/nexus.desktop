@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus
+Comment=Keyboard-first application launcher
+Exec=nexus
+Terminal=false
+Categories=Utility;

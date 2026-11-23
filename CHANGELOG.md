@@ -8,27 +8,52 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
-## [Unreleased]
+## [0.6.0] — YYYY-MM-DD
+
+Nexus opens web addresses and converts units, asks before running
+destructive shell commands, tells you when a command fails, and installs
+with a desktop entry and a systemd user unit. Also fixes the known issues
+from 0.5.0 and makes unknown command-line arguments an error.
 
 ### Added
 
-- Unit conversion: type `120 km in miles`, `5 GB to MB` or `-5 c to f` (`in` or `to`, space after the number optional) and the answer appears at the top; Enter copies the number. Covers length, weight, temperature, data size (`KB` = 1000 bytes, `KiB` = 1024; `MB` is megabytes, `Mb` megabits), time, volume (litres and US gallons) and speed. Unknown units or mixing kinds (`km to kg`) show nothing.
-- Typing a web address (`github.com/x`, `https://...`, `localhost:8080` or `192.168.1.1`) offers "Open URL", which opens it in your browser. Bare `localhost` and IP addresses open as `http://`, other bare addresses as `https://`; bare file names such as `notes.txt` don't count.
-- Shell commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, `reboot` and similar, also after `sudo`, `;`, `&&` or `|`, or inside `sh -c "..."`) now ask yes/no before running, and so do aliases whose target starts with `>`; the default is No. The check is a safety net for typos, not a security boundary.
-- When a command run with `>` exits with an error or is killed by a signal, Nexus shows a tray message with the command and its exit status. Successful commands stay silent.
-
-### Fixed
-
-- The calculator read `1.5+1` as `1+1` when your system uses a decimal comma (German, French, Danish English and similar locales). Numbers now always use `.` as the decimal point.
-
-## [0.5.1] — 2026-11-17
-
-Fixes the three known issues from 0.5.0 and makes unknown command-line
-arguments an error.
-
-### Added
-
+- Typing a web address (`github.com/x`, `https://...`, `localhost:8080` or
+  `192.168.1.1`) offers "Open URL", which opens it in your browser. Bare
+  `localhost` and IP addresses open as `http://`, other bare addresses as
+  `https://`; bare file names such as `notes.txt` don't count, and
+  addresses with leading zeros such as `010.0.0.1` are not treated as IP
+  addresses.
+- Unit conversion: type `120 km in miles`, `5 GB to MB` or `-5 c to f` (`in`
+  or `to`, space after the number optional) and the answer appears at the
+  top; Enter copies the number. Covers length, weight, temperature, data
+  size (`KB` = 1000 bytes, `KiB` = 1024; `MB` is megabytes, `Mb` megabits),
+  time, volume (litres and US gallons) and speed. Unknown units or mixing
+  kinds (`km to kg`) show nothing.
+- Shell commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`,
+  `reboot` and similar, also after `sudo`, `;`, `&&` or `|`, or inside
+  `sh -c "..."`) now ask yes/no before running, and so do aliases whose
+  target is such a command, with or without a leading `>`; the default is
+  No. The check is a safety net for typos, not a security boundary.
+- When a command run with `>` exits with an error or is killed by a signal,
+  Nexus shows a tray message with the command and its exit status.
+  Successful commands stay silent.
+- `cmake --install` now installs the `nexus` binary, a `nexus.desktop`
+  entry and a systemd user unit (`systemctl --user enable --now
+  nexus.service`), as well as the plugins. CI checks the exact list of
+  installed files.
 - `nexus --version` (or `-V`) prints the installed version.
+
+### Changed
+
+- An unknown command-line argument (`nexus --bogus`, `nexus foo`) now
+  prints an error and the usage text and exits with a non-zero status,
+  instead of opening the launcher. Qt's own single-dash options such as
+  `-style fusion` or `-platform xcb` still work when given first.
+- `nexus --help` and `nexus --version` no longer create or touch your
+  config directory. `--help` therefore shows the default hotkey ("Alt+Space
+  by default") instead of the one you configured.
+- Internal: comments cleaned up, C++ code reformatted with `clang-format`,
+  and CI now checks C++ formatting.
 
 ### Fixed
 
@@ -36,20 +61,18 @@ arguments an error.
   clipboard history, newest first.
 - Typing only `web ` no longer shows apps and files matching "web"; it
   waits for your search term.
-- `cmake --install` now installs the `nexus` binary as well as the plugins,
-  so `sudo cmake --install build` is the whole install.
 - `nexus history clear` now also clears the clipboard history of a running
   launcher. A launcher started before the upgrade ignores this until it is
   restarted.
-
-### Changed
-
-- An unknown command-line argument now prints an error and the usage text
-  and exits with a non-zero status, instead of opening the launcher.
-  As the first argument, the Qt options `-platform`, `-style`, `-display`,
-  `-geometry`, `-stylesheet` and `-reverse` still work. Write a value with a
-  space (`-style fusion`); the `-style=fusion` form and other Qt options are
-  now rejected.
+- Starting Nexus with a Qt option first (`nexus -style fusion --settings`,
+  `nexus -session <id>`) no longer opens a second launcher when one is
+  running; the running launcher handles the command (a session-restore
+  start does nothing).
+- The calculator read `1.5+1` as `1+1` when your system uses a decimal
+  comma (German, French, Danish English and similar locales). Numbers now
+  always use `.` as the decimal point.
+- The calculator no longer answers part of an input it cannot fully read:
+  `5..`, `5 .` and similar now show no result instead of `5`.
 
 ---
 
@@ -475,7 +498,7 @@ Documented here deliberately rather than discovered by the next person.
 | Dependencies | Qt (`Core`, `Gui`, `Widgets`, `Network`), SQLite3, libX11 |
 | Desktop environments tested | Whatever the maintainer runs daily (X11-based). Not yet verified across GNOME, KDE, and XFCE independently |
 
-[0.5.1]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.5.1
+[0.6.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.3.0

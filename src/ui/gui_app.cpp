@@ -20,13 +20,12 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <thread>
 #include <utility>
 
 namespace nexus::ui {
 namespace {
-
-bool is_settings_arg(const std::string& a) { return a == "--settings" || a == "settings" || a == "config"; }
 
 // Shows "command failed" tray messages for shell commands whose exit is seen on a reaper thread. Reaper threads
 // are detached and can outlive the GUI, so close() makes later reports no-ops and waits out one in progress.
@@ -282,19 +281,16 @@ private:
 
 int run_gui(QApplication& app, const std::vector<std::string>& args, core::ConfigManager& config,
             core::AliasManager& aliases) {
-    const std::string arg1 = args.empty() ? "" : args[0];
-
     // Another instance already running: hand the command over and exit.
-    const char* cmd = args.empty() ? "TOGGLE" : nullptr;
-    if (arg1 == "--hide") cmd = "HIDE";
-    else if (arg1 == "--show") cmd = "SHOW";
-    else if (is_settings_arg(arg1)) cmd = "SETTINGS";
-    else if (arg1 == "--toggle" || arg1 == "-t") cmd = "TOGGLE";
-    if (cmd && send_ipc_command(kIpcSocketName, cmd)) return 0;
+    const char* cmd = ipc_command_for_args(args);
+    if (send_ipc_command(kIpcSocketName, cmd)) {
+        NEXUS_LOG_INFO(std::string("Nexus already running, sent ") + cmd);
+        return 0;
+    }
 
     // No instance and the user asked for settings: start one with the dialog open.
     GuiApp gui(app, config, aliases);
-    return gui.run(is_settings_arg(arg1));
+    return gui.run(std::string_view(cmd) == kIpcSettings);
 }
 
 }  // namespace nexus::ui

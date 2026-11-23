@@ -52,6 +52,14 @@ int main() {
     assert(!UrlProvider::normalize("1.2.3.4.5"));
     assert(!UrlProvider::normalize("256.1.1.1"));
     assert(!UrlProvider::normalize("http://256.1.1.1"));
+    assert(!UrlProvider::normalize("010.0.0.1"));
+    assert(!UrlProvider::normalize("08.0.0.1"));
+    assert(!UrlProvider::normalize("00.1.1.1"));
+    assert(!UrlProvider::normalize("http://010.0.0.1"));
+    assert(UrlProvider::normalize("127.0.0.1") == "http://127.0.0.1");
+    assert(UrlProvider::normalize("100.0.0.0") == "http://100.0.0.0");
+    assert(UrlProvider::normalize("0.0.0.0") == "http://0.0.0.0");
+    assert(UrlProvider::normalize("10.0.0.1") == "http://10.0.0.1");
 
     // Ports stop at 65535
     assert(UrlProvider::normalize("example.com:65535") == "https://example.com:65535");

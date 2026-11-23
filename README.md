@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.5.1.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland is not supported, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
+> **Version 0.6.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland is not supported, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -51,7 +51,7 @@ Nexus collapses those into a single keystroke. It is built around four ideas:
 | Unit conversion | `120 km in miles`, `72 f to c`, `5 GB to MB`, `-5c to f` (also `to`); length, weight, temperature, data size, time, volume (litres, US gallons) and speed. `MB` is megabytes, `Mb` megabits; enter copies the number |
 | File & folder search | `file thesis.pdf` searches an index of your configured directories, kept current as files change |
 | Open URL | Type `github.com/x`, `https://example.com` or `localhost:8080`; Enter opens it in your browser (only http and https; a bare file name like `notes.txt` is not treated as an address) |
-| Shell commands | `> docker ps` — the `>` prefix is required, never implicit. Commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, ...) ask yes/no first (default No), also when run through a `>` alias. If a command exits with an error, a tray message shows its exit status |
+| Shell commands | `> docker ps` — the `>` prefix is required, never implicit. Commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, ...) ask yes/no first (default No), also when run through an alias. If a command exits with an error, a tray message shows its exit status |
 | Aliases | `alias gh https://github.com`, then type `gh` |
 | Web search | `web rust lifetimes` opens a search in your browser (DuckDuckGo by default; a plugin, needs Python 3) |
 | Clipboard history | `clip` followed by text searches what you copied since Nexus started; Enter copies an entry again. `clip ` alone lists the whole history, newest first. `clip clear` empties the history |
@@ -80,6 +80,7 @@ Esc             Close
 Listed honestly so you know what you are getting. These are planned — see the [roadmap](#roadmap).
 
 - **Wayland hotkey.** The global hotkey uses an X11 key grab, which does not work under a Wayland session. See [Wayland](#wayland).
+- **`.deb` and AppImage packages.** Install from source with `cmake --install`.
 
 
 ## Known issues
@@ -143,29 +144,21 @@ Nexus starts in the background, registers the hotkey, and shows the window once 
 sudo cmake --install build
 ```
 
-Install from the Release build above; the [Tests](#tests) steps use a separate `build-debug/` directory. This installs `nexus` to `/usr/local/bin/` and the web and system plugins to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
+Install from the Release build above; the [Tests](#tests) steps use a separate `build-debug/` directory. This installs `nexus` to `/usr/local/bin/`, `nexus.desktop` to `/usr/local/share/applications/`, the systemd user unit `nexus.service` to `/usr/local/lib/systemd/user/` and the web and system plugins to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
 
 **Start on login**
 
-There is no packaged service unit yet. Add `/usr/local/bin/nexus` to your desktop environment's startup applications, or write a user unit:
-
-```ini
-# ~/.config/systemd/user/nexus.service
-[Unit]
-Description=Nexus Launcher
-After=graphical-session.target
-
-[Service]
-ExecStart=/usr/local/bin/nexus
-Restart=on-failure
-
-[Install]
-WantedBy=graphical-session.target
-```
+`cmake --install` also installs a systemd user unit (if you followed an older README and wrote your own `~/.config/systemd/user/nexus.service`, delete it first, since it takes precedence over the installed unit), so after installing run:
 
 ```bash
-systemctl --user enable --now nexus
+systemctl --user enable --now nexus.service
 ```
+
+If you installed to `~/.local` instead, systemd does not look in `~/.local/lib/systemd/user`; pass the full path, which links the unit into `~/.config/systemd/user/`: `systemctl --user enable --now ~/.local/lib/systemd/user/nexus.service`.
+
+The unit starts with `graphical-session.target` and needs `DISPLAY` in the systemd user environment; GNOME, KDE and other full desktops provide both. With a bare window manager, use the autostart alternative below, or have its startup script run `systemctl --user import-environment DISPLAY XAUTHORITY && systemctl --user start nexus.service`.
+
+Alternative, XDG autostart (if your window manager doesn't run it, put `nexus` in its startup script): `mkdir -p ~/.config/autostart && cp /usr/local/share/applications/nexus.desktop ~/.config/autostart/`.
 
 
 ## Command line
@@ -267,8 +260,10 @@ Deleting `nexus.db` also works: it is rebuilt on the next launch, and schema upg
                       └────────┬─────────┘
           ┌──────────┬─────────┼─────────┬──────────┐
           ▼          ▼         ▼         ▼          ▼
-       Alias       Apps      Files     Calc      Shell   Clipboard
-                                                    ... plus plugins
+       Alias       Apps      Files     Calc       Shell
+       Units       URL     Clipboard            (destructive commands
+                                                 ask first)
+                    ... plus plugins
                      │
                      ▼
               ┌─────────────┐
@@ -278,9 +273,11 @@ Deleting `nexus.db` also works: it is rebuilt on the next launch, and schema upg
 
 ```
 include/nexus/ , src/
+├── app/         Command-line handling and service wiring
 ├── core/        Query parsing, search engine, ranking, executor, config, aliases
 ├── index/       Desktop-entry parsing, application and file indexers, watchers, SQLite layer
-├── providers/   Application, file, calculator, shell, alias, clipboard, plugin host
+├── providers/   Application, file, calculator, unit conversion, URL, shell, alias, clipboard, plugin host,
+│                destructive-command check
 ├── ui/          Launcher window, result widget, settings dialog, X11 hotkey
 └── utils/       Fuzzy matcher, logger, inotify wrapper, shortcut parsing
 ```
@@ -298,7 +295,7 @@ cmake --build build-debug -j$(nproc)
 ctest --test-dir build-debug --output-on-failure
 ```
 
-The test suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, unit conversion, URL detection, the destructive-command check, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history and confirm prompts. A separate integration suite does not exist yet. See the [roadmap](#roadmap).
+The test suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, unit conversion, URL detection, the destructive-command check, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history, confirm prompts, the command line, single-instance messaging, and a check that each layer includes only the layers it may depend on and no Qt outside the UI. Separate integration, failure and performance suites do not exist yet. See the [roadmap](#roadmap).
 
 
 ## Performance
@@ -335,8 +332,8 @@ The specification targets under 50 ms per query and under 20 ms for cached queri
 | ~~0.3.0~~ | **Shipped.** File index with live inotify watching, automatic app indexing, schema migrations, configurable shortcut, published benchmarks |
 | ~~0.4.0~~ | **Shipped.** Themes, settings coverage, history controls, query-aware ranking with recency |
 | ~~0.5.0~~ | **Shipped.** Out-of-process plugins, web search, clipboard history and system actions, parallel search |
-| ~~0.5.1~~ | **Shipped.** Fixes for the 0.5.0 known issues, `--version`, `cmake --install` installs the binary |
-| 0.6.0 | Wayland support, packaging, tested across GNOME / KDE / XFCE |
+| ~~0.6.0~~ | **Shipped.** URL opening, unit conversion, confirmation for destructive commands, exit-status messages, `--version`, install target with desktop entry and systemd user unit |
+| 0.7.0 | Wayland support, `.deb` / AppImage packaging, tested across GNOME / KDE / XFCE, integration, failure and performance test suites |
 | 1.0.0 | Stable plugin API, accessibility, security review |
 
 The file index, schema migrations and benchmarks were first planned for
@@ -354,7 +351,7 @@ Nexus can launch processes, so a few things are deliberate:
 - No telemetry, no analytics endpoint. Nexus itself makes no network requests; the `web` plugin only hands a URL to your browser.
 - **Plugins are not sandboxed.** A plugin is a program that runs with your user's rights, so it can read your files and use the network. The permissions in its manifest limit only the kinds of result it may return, not what the process does. Install only plugins you trust and have read. Details are in [docs/plugins.md](docs/plugins.md).
 
-Shell commands that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, ...) ask for confirmation, and so do plugin results that request it (the shipped system actions do). The check only catches typos; it is not a security boundary, since `>` can run anything.
+Shell commands and command aliases that look destructive (`rm -rf`, `dd`, `mkfs`, `shutdown`, ...) ask for confirmation, and so do plugin results that request it (the shipped system actions do). The check only catches typos; it is not a security boundary, since `>` can run anything.
 
 Found a security problem? Open an issue, or mail the address on the author's GitHub profile if you would rather not disclose it publicly.
 

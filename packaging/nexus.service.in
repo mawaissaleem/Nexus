@@ -1,0 +1,12 @@
+[Unit]
+Description=Nexus Launcher
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+# quoted so a prefix with a space still names one executable
+ExecStart="@NEXUS_BINDIR@/nexus"
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

@@ -7,6 +7,8 @@
 #include <QString>
 #include <QTimer>
 #include <cassert>
+#include <string>
+#include <vector>
 #include <unistd.h>
 
 using namespace nexus;
@@ -28,6 +30,16 @@ int main(int argc, char** argv) {
     assert(!ui::handle_ipc_clipboard_command("TOGGLE", clip) && count() == 1);
     assert(!ui::handle_ipc_clipboard_command("clear_clipboard; rm -rf", clip) && count() == 1);
     assert(ui::handle_ipc_clipboard_command(ui::kIpcClearClipboard, clip) && count() == 0);
+
+    // Command scan: Qt options may come before, between or after it.
+    using Args = std::vector<std::string>;
+    assert(std::string(ui::ipc_command_for_args(Args{})) == "TOGGLE");
+    assert(std::string(ui::ipc_command_for_args(Args{"-style", "fusion"})) == "TOGGLE");
+    assert(std::string(ui::ipc_command_for_args(Args{"--hide"})) == "HIDE");
+    assert(std::string(ui::ipc_command_for_args(Args{"-style", "fusion", "--settings"})) == "SETTINGS");
+    assert(std::string(ui::ipc_command_for_args(Args{"--settings", "-platform", "xcb"})) == "SETTINGS");
+    assert(std::string(ui::ipc_command_for_args(Args{"-platform", "xcb", "--show"})) == "SHOW");
+    assert(std::string(ui::ipc_command_for_args(Args{"-session", "abc"})) == ui::kIpcNoop);
 
     // No server listening: the send reports false, nothing else happens.
     QLocalServer::removeServer(name);
