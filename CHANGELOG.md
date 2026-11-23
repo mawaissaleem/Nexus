@@ -8,7 +8,7 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
-## [0.6.0] — YYYY-MM-DD
+## [0.6.0] — 2026-11-23
 
 Nexus opens web addresses and converts units, asks before running
 destructive shell commands, tells you when a command fails, and installs
