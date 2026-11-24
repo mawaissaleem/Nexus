@@ -1,5 +1,6 @@
 #include "nexus/utils/json.hpp"
 #include <cassert>
+#include "check.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -15,8 +16,9 @@ int main() {
     assert(v.is_object());
     const auto* a = v.find("a");
     assert(a && a->is_array() && a->array.size() == 5);
-    assert(a->array[0].string == "1" && a->array[1].string == "-2.5e3");
-    assert(a->array[2].string == "x\n\xC3\xA9\xF0\x9F\x98\x80");
+    CHECK_EQ(a->array[0].string, "1");
+    CHECK_EQ(a->array[1].string, "-2.5e3");
+    CHECK_EQ(a->array[2].string, "x\n\xC3\xA9\xF0\x9F\x98\x80");
     assert(a->array[3].is_bool() && a->array[3].boolean);
     assert(v.find("b")->find("c")->boolean == false);
     assert(v.find("missing") == nullptr);

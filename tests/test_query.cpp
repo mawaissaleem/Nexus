@@ -1,4 +1,5 @@
 #include <cassert>
+#include "check.hpp"
 #include <iostream>
 #include "nexus/core/query.hpp"
 
@@ -9,17 +10,17 @@ int main() {
     {
         Query q("hello world");
         assert(q.prefix().empty());
-        assert(q.text() == "hello world");
+        CHECK_EQ(q.text(), "hello world");
     }
 
     // A prefix given by the caller is stripped (and trimmed); shell text keeps its case, normalized() lowercases
     {
         Query q("> LS -la", ">");
-        assert(q.prefix() == ">");
-        assert(q.text() == "LS -la");
-        assert(q.normalized() == "ls -la");
+        CHECK_EQ(q.prefix(), ">");
+        CHECK_EQ(q.text(), "LS -la");
+        CHECK_EQ(q.normalized(), "ls -la");
         Query nospace(">ls", ">");
-        assert(nospace.text() == "ls");
+        CHECK_EQ(nospace.text(), "ls");
         Query c("  calc 5 + 5  ", "calc ");
         assert(c.prefix() == "calc " && c.text() == "5 + 5");
     }
@@ -49,7 +50,7 @@ int main() {
     // normalized() lowercases (note: it does not collapse internal multiple spaces)
     {
         Query q("  Fire   Fox  ");
-        assert(q.normalized() == "fire   fox");
+        CHECK_EQ(q.normalized(), "fire   fox");
     }
 
     // tokens() splits normalized into words
