@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.7.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland hotkey support (desktop portal or a GNOME shortcut button) is new and lightly tested, and a few rough edges are listed under [Not implemented yet](#not-implemented-yet) and [Known issues](#known-issues). Read both before installing.
+> **Version 0.7.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland hotkey support (desktop portal or a GNOME shortcut button) is new and lightly tested, and a few rough edges are listed under [Known issues](#known-issues). Read it before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -75,13 +75,6 @@ Esc             Close
 ```
 
 
-## Not implemented yet
-
-Listed honestly so you know what you are getting. These are planned — see the [roadmap](#roadmap).
-
-- **`.deb` and AppImage packages.** Install from source with `cmake --install`.
-
-
 ## Known issues
 
 - **Wayland hotkey without the portal.** On Wayland desktops that have neither the `GlobalShortcuts` portal nor GNOME, bind `nexus --toggle` yourself in the compositor's settings. See [Wayland](#wayland).
@@ -96,6 +89,7 @@ Listed honestly so you know what you are getting. These are planned — see the 
 - SQLite 3 development headers
 - Python 3 (standard library only), only for the shipped `web` and `system` plugins
 - libX11 development headers
+- The Qt Wayland platform plugin (`qtwayland5` for Qt 5, `qt6-wayland` for Qt 6) to run on Wayland. A Qt 6 build runs natively on Wayland, GNOME included; a Qt 5 build uses XWayland on GNOME. The `.deb` recommends the plugin; the AppImage bundles it
 
 **Debian / Ubuntu**
 
@@ -115,6 +109,35 @@ sudo dnf install gcc-c++ cmake \
 
 ```bash
 sudo pacman -S base-devel cmake qt6-base sqlite libx11
+```
+
+
+## Install a package
+
+Both packages are attached to each [GitHub release](https://github.com/mawaissaleem/Nexus/releases) and built by CI on every push. They need Python 3 on the system for the shipped plugins; neither bundles it.
+
+**`.deb`** (Debian, Ubuntu)
+
+```bash
+sudo apt install ./nexus_<version>_amd64.deb
+```
+
+Library dependencies are resolved by apt. It installs the same files as `cmake --install`, under `/usr` instead of `/usr/local`, including the systemd user unit, so the **Start on login** steps under [Build](#build) apply; for the autostart alternative copy `/usr/share/applications/nexus.desktop`.
+
+**AppImage**
+
+```bash
+chmod +x Nexus-<version>-x86_64.AppImage
+./Nexus-<version>-x86_64.AppImage
+```
+
+The bundled web and system plugins are found inside the image. An AppImage cannot install the systemd user unit, so for start on login use XDG autostart: create `~/.config/autostart/nexus.desktop` with the full path to the image.
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Nexus
+Exec=/full/path/to/Nexus-<version>-x86_64.AppImage
 ```
 
 

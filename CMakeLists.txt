@@ -163,6 +163,7 @@ install(FILES plugins/system/plugin.json DESTINATION ${CMAKE_INSTALL_DATADIR}/ne
 install(PROGRAMS plugins/system/system.py DESTINATION ${CMAKE_INSTALL_DATADIR}/nexus/plugins/system)
 
 install(FILES packaging/nexus.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES packaging/nexus.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 
 # systemd user units live in <prefix>/lib/systemd/user (literal lib, even where libdir is lib64).
 # Written at install time so `cmake --install --prefix` is honoured, not only the configure-time prefix.
@@ -175,6 +176,25 @@ install(CODE "
                  \"${CMAKE_CURRENT_BINARY_DIR}/nexus.service\" @ONLY)
 ")
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nexus.service DESTINATION lib/systemd/user)
+
+# .deb via `cpack -G DEB` (configure with CMAKE_INSTALL_PREFIX=/usr). Library deps come from shlibdeps.
+set(CPACK_PACKAGE_NAME nexus)
+set(CPACK_PACKAGE_CONTACT "mawaissaleem <mawaissaleem@users.noreply.github.com>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Keyboard-first application launcher")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_SECTION utils)
+# Package directories must not inherit the builder's umask (a 002 umask would make them group-writable).
+set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+# python3 runs the shipped plugins; the Wayland platform plugin lets Qt run natively on Wayland.
+set(CPACK_DEBIAN_PACKAGE_DEPENDS python3)
+if(QT_VERSION_MAJOR EQUAL 6)
+    set(CPACK_DEBIAN_PACKAGE_RECOMMENDS qt6-wayland)
+else()
+    set(CPACK_DEBIAN_PACKAGE_RECOMMENDS qtwayland5)
+endif()
+include(CPack)
 
 # Benchmarks: built by default so they keep compiling; tests/CMakeLists.txt registers a run as the perf test.
 option(NEXUS_BUILD_BENCH "Build bench/bench_nexus" ON)

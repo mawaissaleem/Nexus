@@ -57,6 +57,7 @@ static void test_discover() {
 }
 
 static void test_search_dirs() {
+    unsetenv("APPDIR");
     setenv("XDG_DATA_HOME", "/h/data", 1);
     setenv("XDG_DATA_DIRS", "/a:/b", 1);
     auto d = providers::plugin_search_dirs();
@@ -80,6 +81,22 @@ static void test_search_dirs() {
     d = providers::plugin_search_dirs();
     assert((d == std::vector<fs::path>{"/hh/.local/share/nexus/plugins", "/a/nexus/plugins"}));
     unsetenv("XDG_DATA_DIRS");
+    // An AppImage's own plugins are searched last, but only when this binary runs from inside APPDIR.
+    const fs::path exe_dir = fs::canonical("/proc/self/exe").parent_path();
+    setenv("APPDIR", exe_dir.c_str(), 1);
+    d = providers::plugin_search_dirs();
+    assert(d.back() == exe_dir / "usr" / "share" / "nexus" / "plugins");
+    assert(d.size() == 4);
+    // An inherited APPDIR that doesn't hold this binary (another user may own it now) is ignored.
+    const fs::path foreign = root / "foreign_appdir";
+    fs::create_directories(foreign);
+    setenv("APPDIR", foreign.c_str(), 1);
+    assert(providers::plugin_search_dirs().size() == 3);
+    setenv("APPDIR", (root / "missing_appdir").c_str(), 1);
+    assert(providers::plugin_search_dirs().size() == 3);
+    setenv("APPDIR", "rel", 1);
+    assert(providers::plugin_search_dirs().size() == 3);
+    unsetenv("APPDIR");
     setenv("HOME", home.c_str(), 1);
     // The services test opens a database under $XDG_DATA_HOME: keep it inside the temp dir.
     setenv("XDG_DATA_HOME", (root / "data").c_str(), 1);

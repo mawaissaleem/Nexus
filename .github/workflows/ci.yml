@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -78,3 +79,63 @@ jobs:
         run: |
           desktop-file-validate packaging/nexus.desktop
           packaging/check_install.sh build
+
+  packages:
+    name: .deb and AppImage
+    # 22.04 keeps the AppImage runnable on older distributions (older glibc)
+    runs-on: ubuntu-22.04
+    # a tag with failing tests or formatting must not get packages attached
+    needs: [ format-check, build-and-test ]
+    # write access is only used to attach files to a release on a v* tag
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            qtbase5-dev qtbase5-dev-tools qtwayland5 \
+            libsqlite3-dev libx11-dev \
+            python3 dpkg-dev desktop-file-utils
+
+      - name: Configure
+        run: >
+          cmake -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_INSTALL_PREFIX=/usr
+          -DBUILD_TESTING=OFF
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Build and check the .deb
+        run: |
+          cpack --config build/CPackConfig.cmake -G DEB -B dist
+          packaging/check_deb.sh dist/nexus_*_amd64.deb
+
+      - name: Build and check the AppImage
+        run: |
+          packaging/build_appimage.sh build dist
+          packaging/check_appimage.sh dist/Nexus-*-x86_64.AppImage
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+
+      - name: Attach packages to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 \
+            || gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" dist/*.deb dist/*.AppImage --clobber

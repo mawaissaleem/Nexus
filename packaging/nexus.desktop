@@ -2,6 +2,7 @@
 Type=Application
 Name=Nexus
 Comment=Keyboard-first application launcher
+Icon=nexus
 Exec=nexus
 Terminal=false
 Categories=Utility;

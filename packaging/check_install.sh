@@ -12,6 +12,7 @@ expected=$(cat <<EOF
 bin/nexus
 lib/systemd/user/nexus.service
 share/applications/nexus.desktop
+share/icons/hicolor/scalable/apps/nexus.svg
 share/nexus/plugins/system/plugin.json
 share/nexus/plugins/system/system.py
 share/nexus/plugins/web/plugin.json

@@ -11,6 +11,7 @@ namespace nexus::providers {
 
 // `$XDG_DATA_HOME/nexus/plugins` (default ~/.local/share/nexus/plugins), then `nexus/plugins` under each
 // `$XDG_DATA_DIRS` entry (default /usr/local/share:/usr/share). Earlier entries win on the same id.
+// Inside an AppImage (`$APPDIR` set and holding the running binary) `$APPDIR/usr/share/nexus/plugins` comes last.
 [[nodiscard]] std::vector<std::filesystem::path> plugin_search_dirs();
 
 // Valid manifests of every `<root>/<id>/` in `roots` (earlier root wins; a shadowed copy is skipped with an
