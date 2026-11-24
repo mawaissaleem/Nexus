@@ -97,6 +97,31 @@ int main() {
     while (!done) assert(find(*indexer.get_applications(), "concurrent"));
     rebuilder.join();
 
+    // A relative XDG_DATA_DIRS entry is skipped: a planted ./share/applications must not be indexed.
+    {
+        const fs::path cwd = fs::current_path();
+        fs::create_directories(root / "cwd");
+        fs::current_path(root / "cwd");
+        write_desktop(root / "cwd" / "share" / "applications", "planted", "Planted App");
+        write_desktop(sys, "real", "Real App");
+        setenv("XDG_DATA_DIRS", ("share:" + (root / "sys").string()).c_str(), 1);
+        AppIndexer scan;
+        scan.rebuild_index();
+        assert(!find(*scan.get_applications(), "planted"));
+        assert(find(*scan.get_applications(), "real"));
+
+        // Relative HOME and XDG_DATA_HOME count as unset.
+        setenv("XDG_DATA_HOME", "share", 1);
+        setenv("HOME", ".", 1);
+        scan.rebuild_index();
+        assert(!find(*scan.get_applications(), "planted"));
+        fs::current_path(cwd);
+        fs::remove(sys / "real.desktop");
+        setenv("XDG_DATA_HOME", (root / "home").c_str(), 1);
+        setenv("HOME", (root / "fakehome").c_str(), 1);
+        setenv("XDG_DATA_DIRS", (root / "sys").c_str(), 1);
+    }
+
     // Explicit directory list (seam): exactly these dirs, hermetic regardless of host snap/flatpak.
     {
         write_desktop(sys, "plain", "Plain App");

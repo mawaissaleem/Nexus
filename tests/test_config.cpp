@@ -282,6 +282,23 @@ int main() {
         unsetenv("XDG_CONFIG_HOME");
         CHECK_EQ(ConfigManager::resolve_config_path(), std::string());
 
+        // `~` search dirs are skipped (not kept relative) when HOME is relative or unset.
+        {
+            const fs::path cfg = fs::temp_directory_path() / ("nexus_config_tilde_" + pid + ".json");
+            std::ofstream(cfg) << "{\"search_directories\": [\"~/docs\", \"/tmp\"]}";
+            const ConfigManager tilde(cfg.string());
+            const auto tilde_dirs = tilde.get_search_directories();
+            CHECK_EQ(tilde_dirs.size(), size_t(1));
+            CHECK_EQ(tilde_dirs[0], std::string("/tmp"));
+            ConfigManager adder((planted_dir / "absent2.json").string());
+            CHECK_EQ(adder.add_search_directory("~"), false);
+            unsetenv("HOME");
+            const ConfigManager no_home(cfg.string());
+            CHECK_EQ(no_home.get_search_directories().size(), size_t(1));
+            setenv("HOME", ".", 1);
+            fs::remove(cfg);
+        }
+
         // A relative XDG_CONFIG_HOME falls back to an absolute HOME.
         setenv("XDG_CONFIG_HOME", "rel", 1);
         setenv("HOME", abs_home.c_str(), 1);

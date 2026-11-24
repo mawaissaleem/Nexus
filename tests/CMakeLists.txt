@@ -14,6 +14,7 @@ set(TEST_TARGETS
     test_file_search
     test_config
     test_json
+    test_xdg
     test_theme
     test_query
     test_executor
@@ -47,6 +48,7 @@ set(TEST_TARGETS
 set(TEST_LIBS_DEFAULT nexus_providers)
 set(TEST_LIBS_test_fuzzy nexus_utils)
 set(TEST_LIBS_test_json nexus_utils)
+set(TEST_LIBS_test_xdg nexus_utils)
 set(TEST_LIBS_test_theme nexus_utils)
 set(TEST_LIBS_test_shortcut nexus_utils)
 set(TEST_LIBS_test_query nexus_core)

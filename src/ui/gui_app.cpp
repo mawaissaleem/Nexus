@@ -159,12 +159,14 @@ private:
     // Single-instance IPC server for instant toggle from shortcuts.
     void setup_ipc() {
         ipc_server_ = std::make_unique<QLocalServer>(&app_);
-        QLocalServer::removeServer(kIpcSocketName);  // Clean any previous stale socket file
-        if (!ipc_server_->listen(kIpcSocketName)) {
+        const QString socket_name = ipc_socket_name();
+        ipc_server_->setSocketOptions(QLocalServer::UserAccessOption);
+        QLocalServer::removeServer(socket_name);  // Clean any previous stale socket file
+        if (!ipc_server_->listen(socket_name)) {
             NEXUS_LOG_WARN("Could not start IPC server: " + ipc_server_->errorString().toStdString());
             return;
         }
-        NEXUS_LOG_INFO("Nexus IPC server listening on: " + std::string(kIpcSocketName));
+        NEXUS_LOG_INFO("Nexus IPC server listening on: " + socket_name.toStdString());
         QObject::connect(ipc_server_.get(), &QLocalServer::newConnection, [this]() {
             QLocalSocket* client = ipc_server_->nextPendingConnection();
             if (!client) return;
@@ -308,7 +310,7 @@ int run_gui(QApplication& app, const std::vector<std::string>& args, core::Confi
             core::AliasManager& aliases) {
     // Another instance already running: hand the command over and exit.
     const char* cmd = ipc_command_for_args(args);
-    if (send_ipc_command(kIpcSocketName, cmd)) {
+    if (send_ipc_command(ipc_socket_name(), cmd)) {
         NEXUS_LOG_INFO(std::string("Nexus already running, sent ") + cmd);
         return 0;
     }

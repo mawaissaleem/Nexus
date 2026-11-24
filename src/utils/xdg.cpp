@@ -19,4 +19,13 @@ std::filesystem::path xdg_user_dir(const char* xdg_var, const std::filesystem::p
     return home / home_subdir;
 }
 
+std::optional<std::string> expand_home(std::string_view path) {
+    const bool is_home_path = path == "~" || path.substr(0, 2) == "~/";
+    if (!is_home_path) return std::string(path);
+
+    const std::filesystem::path home = home_dir();
+    if (home.empty()) return std::nullopt;
+    return home.string() + std::string(path.substr(1));
+}
+
 }  // namespace nexus::utils

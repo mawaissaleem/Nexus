@@ -10,33 +10,21 @@
 
 namespace nexus::core {
 
-namespace {
-
-std::string expand_home(std::string_view path) {
-    if (path.empty()) return "";
-    if (path[0] == '~') {
-        const char* home = std::getenv("HOME");
-        if (home) {
-            return std::string(home) + std::string(path.substr(1));
-        }
-    }
-    return std::string(path);
-}
-
-}  // namespace
-
 AliasType AliasManager::detect_type(std::string_view target) {
     if (!target.empty() && target.front() == '>') return AliasType::Shell;
     for (const std::string_view prefix : {"http://", "https://", "www."}) {
         if (target.rfind(prefix, 0) == 0) return AliasType::Url;
     }
 
-    std::string expanded = expand_home(target);
+    // `~` with no usable HOME can't name a file: stays a plain command rather than a cwd-relative path.
+    const std::optional<std::string> expanded = utils::expand_home(target);
+    if (!expanded) return AliasType::Command;
+
     std::error_code ec;
-    if (std::filesystem::is_directory(expanded, ec)) {
+    if (std::filesystem::is_directory(*expanded, ec)) {
         return AliasType::Directory;
     }
-    if (std::filesystem::is_regular_file(expanded, ec)) {
+    if (std::filesystem::is_regular_file(*expanded, ec)) {
         return AliasType::File;
     }
 

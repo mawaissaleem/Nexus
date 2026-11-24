@@ -39,6 +39,17 @@ int main() {
     // A file alias whose file is missing is a direct command, never Shell.
     assert(AliasManager::detect_type("/nonexistent_nexus_dir/file.txt") == AliasType::Command);
 
+    // A `~` target with a relative HOME is a plain command, never a path under the cwd.
+    {
+        const char* old_home = std::getenv("HOME");
+        const std::string saved_home = old_home ? old_home : "";
+        setenv("HOME", ".", 1);
+        assert(AliasManager::detect_type("~") == AliasType::Command);
+        unsetenv("HOME");
+        assert(AliasManager::detect_type("~/x") == AliasType::Command);
+        if (old_home) setenv("HOME", saved_home.c_str(), 1);
+    }
+
     // Test 2: Add and list aliases
     assert(mgr.add_alias("gh", "https://github.com"));
     assert(mgr.add_alias("tmpdir", "/tmp"));

@@ -1,5 +1,6 @@
 #include "nexus/index/app_indexer.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/xdg.hpp"
 #include <unordered_set>
 #include <cstdlib>
 #include <sstream>
@@ -31,15 +32,8 @@ std::vector<std::filesystem::path> AppIndexer::get_default_app_directories() {
     };
 
     // 1. User local applications
-    const char* xdg_data_home = std::getenv("XDG_DATA_HOME");
-    if (xdg_data_home && *xdg_data_home) {
-        add_dir(std::filesystem::path(xdg_data_home) / "applications");
-    } else {
-        const char* home = std::getenv("HOME");
-        if (home && *home) {
-            add_dir(std::filesystem::path(home) / ".local" / "share" / "applications");
-        }
-    }
+    const std::filesystem::path data_home = utils::xdg_user_dir("XDG_DATA_HOME", ".local/share");
+    if (!data_home.empty()) add_dir(data_home / "applications");
 
     // 2. XDG_DATA_DIRS
     const char* xdg_data_dirs = std::getenv("XDG_DATA_DIRS");
@@ -47,7 +41,8 @@ std::vector<std::filesystem::path> AppIndexer::get_default_app_directories() {
         std::istringstream ss(xdg_data_dirs);
         std::string token;
         while (std::getline(ss, token, ':')) {
-            if (!token.empty()) {
+            // A relative entry would resolve against the cwd and could index a planted .desktop file.
+            if (std::filesystem::path(token).is_absolute()) {
                 add_dir(std::filesystem::path(token) / "applications");
             }
         }
@@ -61,10 +56,8 @@ std::vector<std::filesystem::path> AppIndexer::get_default_app_directories() {
     add_dir("/var/lib/snapd/desktop/applications");
     add_dir("/var/lib/flatpak/exports/share/applications");
 
-    const char* home = std::getenv("HOME");
-    if (home && *home) {
-        add_dir(std::filesystem::path(home) / ".local" / "share" / "flatpak" / "exports" / "share" / "applications");
-    }
+    const std::filesystem::path home = utils::home_dir();
+    if (!home.empty()) add_dir(home / ".local" / "share" / "flatpak" / "exports" / "share" / "applications");
 
     return dirs;
 }

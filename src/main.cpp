@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     // The CLI stays Qt-free; this is how `history clear` reaches a running launcher.
     const auto clear_running_clipboard = [&]() {
         QCoreApplication core(argc, argv);  // local sockets want one; it is gone again before the GUI's QApplication
-        return nexus::ui::send_ipc_command(nexus::ui::kIpcSocketName, nexus::ui::kIpcClearClipboard);
+        return nexus::ui::send_ipc_command(nexus::ui::ipc_socket_name(), nexus::ui::kIpcClearClipboard);
     };
     if (const auto rc = nexus::app::run_cli(args, config, aliases, std::cout, std::cerr, clear_running_clipboard))
         return *rc;

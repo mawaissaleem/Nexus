@@ -13,17 +13,6 @@ namespace nexus::core {
 
 namespace {
 
-std::string expand_home(std::string_view path) {
-    if (path.empty()) return "";
-    if (path[0] == '~') {
-        const char* home = std::getenv("HOME");
-        if (home) {
-            return std::string(home) + std::string(path.substr(1));
-        }
-    }
-    return std::string(path);
-}
-
 // Exclusions are bare entry names, never paths.
 bool valid_exclusion(const std::string& name) {
     return !name.empty() && name.find_first_of("\"\\/") == std::string::npos;
@@ -164,7 +153,13 @@ bool ConfigManager::load(const std::string& custom_path) {
     if (const auto* v = root.find("search_directories"); v && v->is_array()) {
         std::vector<std::string> dirs;
         for (const auto& item : v->array) {
-            if (item.is_string() && !item.string.empty()) dirs.push_back(expand_home(item.string));
+            if (!item.is_string() || item.string.empty()) continue;
+            const std::optional<std::string> expanded = utils::expand_home(item.string);
+            if (expanded) {
+                dirs.push_back(*expanded);
+            } else {
+                NEXUS_LOG_WARN("Skipping search directory " + item.string + ": HOME is unset or not absolute");
+            }
         }
         if (!dirs.empty()) search_directories_ = std::move(dirs);
     }
@@ -222,7 +217,10 @@ std::vector<std::string> ConfigManager::get_search_directories() const {
 }
 
 bool ConfigManager::add_search_directory(const std::string& path) {
-    std::string expanded = expand_home(path);
+    const std::optional<std::string> home_expanded = utils::expand_home(path);
+    if (!home_expanded) return false;
+
+    const std::string& expanded = *home_expanded;
     std::error_code ec;
     if (!std::filesystem::exists(expanded, ec) || !std::filesystem::is_directory(expanded, ec)) {
         return false;
@@ -241,7 +239,7 @@ bool ConfigManager::add_search_directory(const std::string& path) {
 }
 
 bool ConfigManager::remove_search_directory(const std::string& path) {
-    std::string expanded = expand_home(path);
+    const std::string expanded = utils::expand_home(path).value_or(path);
     std::error_code ec;
     std::string canonical = std::filesystem::canonical(expanded, ec).string();
     if (canonical.empty()) canonical = expanded;

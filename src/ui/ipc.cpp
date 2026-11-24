@@ -1,7 +1,21 @@
 #include "nexus/ui/ipc.hpp"
 #include <QLocalSocket>
+#include <cstdlib>
+#include <filesystem>
+#include <unistd.h>
 
 namespace nexus::ui {
+
+QString ipc_socket_name_for(const char* runtime_dir, unsigned uid) {
+    std::error_code ec;
+    const std::filesystem::path dir = runtime_dir ? runtime_dir : "";
+    if (dir.is_absolute() && std::filesystem::is_directory(dir, ec)) {
+        return QString::fromStdString((dir / "nexus_launcher_ipc").string());
+    }
+    return QString("nexus_launcher_ipc_%1").arg(uid);
+}
+
+QString ipc_socket_name() { return ipc_socket_name_for(std::getenv("XDG_RUNTIME_DIR"), getuid()); }
 
 const char* ipc_command_for_args(const std::vector<std::string>& args) {
     for (const std::string& arg : args) {
