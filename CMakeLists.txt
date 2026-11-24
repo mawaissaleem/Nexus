@@ -175,7 +175,7 @@ install(CODE "
 ")
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nexus.service DESTINATION lib/systemd/user)
 
-# Benchmarks: built by default so they keep compiling, but never registered with ctest.
+# Benchmarks: built by default so they keep compiling; tests/CMakeLists.txt registers a run as the perf test.
 option(NEXUS_BUILD_BENCH "Build bench/bench_nexus" ON)
 if(NEXUS_BUILD_BENCH)
     add_executable(bench_nexus bench/bench_nexus.cpp)

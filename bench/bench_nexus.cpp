@@ -1,4 +1,6 @@
-// Benchmark harness, not part of ctest: bench_nexus [--apps N] [--files M] [--iters I] [--usage-rows a,b,c]
+// Benchmark harness: bench_nexus [--apps N] [--files M] [--iters I] [--usage-rows a,b,c]
+//                                [--max-query-p95-ms X] [--max-index-ms Y]
+// With a --max-* limit it exits 1 when a measurement goes over it; the perf ctest runs it that way.
 // Runs in a per-process temp dir with HOME and XDG_* redirected before any singleton reads them,
 // so the real ~/.config/nexus and ~/.local/share/nexus are never touched.
 #include "nexus/core/config_manager.hpp"
@@ -136,11 +138,15 @@ int main(int argc, char** argv) {
 
     int n_apps = 200, n_files = 20000, iters = 200;
     std::vector<int> usage_rows = {0, 10000, 50000};
+    double max_query_p95_ms = 0;  // 0 = no limit
+    double max_index_ms = 0;
     for (int i = 1; i + 1 < argc; i += 2) {
         std::string a = argv[i];
         if (a == "--apps") n_apps = std::atoi(argv[i + 1]);
         else if (a == "--files") n_files = std::atoi(argv[i + 1]);
         else if (a == "--iters") iters = std::atoi(argv[i + 1]);
+        else if (a == "--max-query-p95-ms") max_query_p95_ms = std::atof(argv[i + 1]);
+        else if (a == "--max-index-ms") max_index_ms = std::atof(argv[i + 1]);
         else if (a == "--usage-rows") {
             usage_rows.clear();
             std::stringstream ss(argv[i + 1]);
@@ -236,6 +242,7 @@ int main(int argc, char** argv) {
 
     std::cout << "| Query set | p50 ms | p95 ms | samples |\n|---|---|---|---|\n";
     size_t seen = 0;
+    double worst_query_p95 = 0;
     const std::vector<std::string> app_q = {"fire", "code", "term", "pho", "xyzzy"};
     // Same four queries as the pre-index baseline
     // (then: "fire_"/"pdf" stopped after 30 hits, the others walked the tree).
@@ -243,16 +250,31 @@ int main(int argc, char** argv) {
     for (int rows : usage_rows) {
         set_usage_rows(db_path, rows, n_apps);
         auto s = time_queries(*eng, app_q, iters, seen);
+        worst_query_p95 = std::max(worst_query_p95, s.p95);
         row("app query, usage_events=" + std::to_string(rows), s, static_cast<size_t>(iters) * app_q.size());
     }
     set_usage_rows(db_path, 0, n_apps);
     const int file_iters = std::max(10, iters / 10);
-    for (const auto& q : file_q)
-        row("`" + q + "`, " + std::to_string(n_files) + " files", time_queries(*eng, {q}, file_iters, seen),
-            static_cast<size_t>(file_iters));
+    for (const auto& q : file_q) {
+        const Stats s = time_queries(*eng, {q}, file_iters, seen);
+        worst_query_p95 = std::max(worst_query_p95, s.p95);
+        row("`" + q + "`, " + std::to_string(n_files) + " files", s, static_cast<size_t>(file_iters));
+    }
     std::cout << "\n(total results returned: " << seen << ", guards against empty-result measurements)\n";
     assert(seen > 0);  // note: "xyzzy"/"zzqx" legitimately return nothing
 
     fs::remove_all(root);
-    return 0;
+
+    const double worst_index = std::max(percentile(builds, 50), percentile(file_builds, 50));
+    int status = 0;
+    if (max_query_p95_ms > 0 && worst_query_p95 > max_query_p95_ms) {
+        std::cerr << "FAIL: query p95 " << worst_query_p95 << " ms is over the limit of " << max_query_p95_ms
+                  << " ms\n";
+        status = 1;
+    }
+    if (max_index_ms > 0 && worst_index > max_index_ms) {
+        std::cerr << "FAIL: index build p50 " << worst_index << " ms is over the limit of " << max_index_ms << " ms\n";
+        status = 1;
+    }
+    return status;
 }

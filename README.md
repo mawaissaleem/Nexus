@@ -296,12 +296,23 @@ cmake --build build-debug -j$(nproc)
 ctest --test-dir build-debug --output-on-failure
 ```
 
-The test suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, unit conversion, URL detection, the destructive-command check, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history, confirm prompts, the command line, single-instance messaging, and a check that each layer includes only the layers it may depend on and no Qt outside the UI. Separate integration, failure and performance suites do not exist yet. See the [roadmap](#roadmap).
+The test suites cover fuzzy matching, desktop-entry parsing, ranking and a ranking-quality evaluation of fixed queries, JSON parsing, the calculator, unit conversion, URL detection, the destructive-command check, the database layer and its migrations, aliases, file search, the file indexer, the file and application watchers, the application provider and indexer, configuration, theme resolution, shortcut parsing, query parsing, OS integration (`Executor`), the search engine, async search cancellation, the plugin protocol and host, the shipped plugins, clipboard history, confirm prompts, the command line, single-instance messaging, and a check that each layer includes only the layers it may depend on and no Qt outside the UI. Two further suites run the real pipeline: an integration test (temp config, database, files and `.desktop` entries, through search, ranking and dispatch with fake launchers) and a failure test (corrupt database, unreadable directory, malformed config, misbehaving plugins, missing `gsettings`). A performance test runs `bench_nexus` on a small generated tree with budgets far above normal numbers, so it only fails on a real regression.
+
+Every test has one label. Run a group with `ctest --test-dir build-debug -L <label>`:
+
+| Label | What it runs |
+|---|---|
+| `unit` | One component at a time |
+| `integration` | The whole pipeline from files on disk to the action that would launch |
+| `failure` | Error paths: broken files, crashing plugins, missing tools |
+| `perf` | Index build and search time against generous budgets |
+
+Configuring with `-DNEXUS_BUILD_BENCH=OFF` skips the benchmark, so the `perf` label is then empty.
 
 
 ## Performance
 
-`bench_nexus` (built with the project, not run by `ctest`) measures search latency in a throwaway temp directory, so it never touches your real config or data:
+`bench_nexus` measures search latency in a throwaway temp directory, so it never touches your real config or data. It is built with the project, and `ctest` runs it as the `perf` label on a small tree with generous limits (`--max-query-p95-ms`, `--max-index-ms`; it exits 1 when a measurement goes over one):
 
 ```bash
 cmake -B build-rel -DCMAKE_BUILD_TYPE=Release

@@ -39,6 +39,8 @@ set(TEST_TARGETS
     test_ipc
     test_hotkey_backend
     test_gnome_keybinding
+    test_integration
+    test_failure
 )
 
 # Each test links the smallest layer it needs (see CMakeLists.txt), so layering is enforced at link time.
@@ -64,6 +66,8 @@ set(TEST_LIBS_test_launcher_copy nexus_core)
 set(TEST_LIBS_test_ipc nexus_providers)
 set(TEST_LIBS_test_hotkey_backend nexus_utils)
 set(TEST_LIBS_test_gnome_keybinding nexus_core)
+set(TEST_LIBS_test_integration nexus_app)
+set(TEST_LIBS_test_failure nexus_providers)
 
 foreach(test_name ${TEST_TARGETS})
     add_executable(${test_name} ${test_name}.cpp)
@@ -98,3 +102,29 @@ set_tests_properties(test_run_action PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offs
 # Local-socket test: uses a per-process socket name, never the running launcher's.
 target_sources(test_ipc PRIVATE ${CMAKE_SOURCE_DIR}/src/ui/ipc.cpp)
 target_link_libraries(test_ipc PRIVATE Qt${QT_VERSION_MAJOR}::Network)
+
+# Performance suite: the benchmark harness on a small generated tree, failing only far above local numbers.
+# With NEXUS_BUILD_BENCH=OFF there is no harness, so the perf label stays empty.
+if(NEXUS_BUILD_BENCH)
+    add_test(NAME bench_budget
+             COMMAND bench_nexus --apps 100 --files 5000 --iters 20 --usage-rows 0,10000
+                     --max-query-p95-ms 250 --max-index-ms 2000)
+endif()
+
+# Every test gets exactly one label: perf, failure, integration, or unit (everything else).
+set(PERF_TESTS bench_budget)
+set(FAILURE_TESTS test_failure)
+set(INTEGRATION_TESTS test_integration)
+get_property(ALL_TESTS DIRECTORY PROPERTY TESTS)
+foreach(test_name ${ALL_TESTS})
+    if(test_name IN_LIST PERF_TESTS)
+        set(label perf)
+    elseif(test_name IN_LIST FAILURE_TESTS)
+        set(label failure)
+    elseif(test_name IN_LIST INTEGRATION_TESTS)
+        set(label integration)
+    else()
+        set(label unit)
+    endif()
+    set_tests_properties(${test_name} PROPERTIES LABELS ${label})
+endforeach()
