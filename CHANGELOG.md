@@ -8,7 +8,7 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
-## [0.8.0] — YYYY-MM-DD
+## [0.8.0] — 2026-11-25
 
 Nexus ships as a `.deb` and an AppImage, and no longer reads its config,
 aliases, database or plugins from the current directory or `/tmp`.
