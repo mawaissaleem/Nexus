@@ -10,23 +10,6 @@ namespace nexus::providers {
 
 namespace fs = std::filesystem;
 
-// Programs launched from the AppImage inherit $APPDIR, and once the image unmounts another user could recreate
-// that path. So it only counts when this very binary runs from inside it.
-static fs::path appimage_plugin_dir() {
-    const char* appdir = std::getenv("APPDIR");
-    if (!appdir || !fs::path(appdir).is_absolute()) return {};
-
-    std::error_code exe_error;
-    std::error_code root_error;
-    const fs::path exe = fs::canonical("/proc/self/exe", exe_error);
-    const fs::path root = fs::canonical(appdir, root_error);
-    if (exe_error || root_error) return {};
-
-    const bool exe_inside_root = exe.native().starts_with(root.native() + "/");
-    if (!exe_inside_root) return {};
-    return root / "usr" / "share" / "nexus" / "plugins";
-}
-
 std::vector<fs::path> plugin_search_dirs() {
     std::vector<fs::path> dirs;
     const fs::path data_home = utils::xdg_user_dir("XDG_DATA_HOME", fs::path(".local") / "share");
@@ -40,8 +23,8 @@ std::vector<fs::path> plugin_search_dirs() {
     }
 
     // Inside an AppImage the plugins sit under $APPDIR, which is not on XDG_DATA_DIRS. Last, so installed copies win.
-    const fs::path appimage_plugins = appimage_plugin_dir();
-    if (!appimage_plugins.empty()) dirs.push_back(appimage_plugins);
+    const fs::path appimage_root = utils::appimage_root();
+    if (!appimage_root.empty()) dirs.push_back(appimage_root / "usr" / "share" / "nexus" / "plugins");
     return dirs;
 }
 

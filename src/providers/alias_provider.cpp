@@ -3,6 +3,7 @@
 #include "nexus/core/executor.hpp"
 #include "nexus/providers/dangerous_command.hpp"
 #include "nexus/utils/fuzzy.hpp"
+#include "nexus/utils/xdg.hpp"
 #include <sstream>
 
 namespace nexus::providers {
@@ -22,6 +23,37 @@ std::string get_icon_for_type(core::AliasType type) {
             return "utilities-terminal";
     }
     return "emblem-favorite";
+}
+
+// One literal Exec-line word. A backslash is doubled twice: the string-escape pass and the quote pass each strip one.
+std::string exec_quoted(std::string_view text) {
+    std::string out = "\"";
+    for (const char c : text) {
+        if (c == '\\') {
+            out += "\\\\\\\\";
+        } else if (c == '"') {
+            out += "\\\"";
+        } else if (c == '%') {
+            out += "%%";
+        } else {
+            out += c;
+        }
+    }
+    out += '"';
+    return out;
+}
+
+// `~` becomes the real home: passed on literally it would resolve against the cwd. Nullopt when there is no usable
+// home. A shell alias keeps its text, since the shell expands `~` itself.
+std::optional<std::string> resolve_target(const core::AliasEntry& alias) {
+    if (alias.type == core::AliasType::Shell) return alias.target;
+
+    const auto expanded = utils::expand_home(alias.target);
+    const bool home_expanded = expanded && *expanded != alias.target;
+    if (alias.type != core::AliasType::Command || !home_expanded) return expanded;
+
+    // A command is re-read as an Exec line, so a space, quote or `%` in the home must stay part of the path.
+    return exec_quoted(utils::home_dir().string()) + alias.target.substr(1);
 }
 
 }  // namespace
@@ -89,6 +121,10 @@ std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, 
         }
 
         if (score > 0.0) {
+            const auto resolved = resolve_target(alias);
+            if (!resolved) continue;  // no usable HOME: offer nothing rather than a cwd-relative path
+            const std::string& target = *resolved;
+
             core::SearchResult res;
             res.id = "alias:" + alias.name;
             res.title = alias.name;
@@ -99,7 +135,7 @@ std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, 
             res.score = score;
             res.matched_indices = std::move(matched_indices);
 
-            res.execution_payload = alias.target;
+            res.execution_payload = target;
             // Only a '>' target reaches the shell; plain commands are tokenised like a .desktop Exec line.
             switch (alias.type) {
                 case core::AliasType::Shell: {
@@ -112,7 +148,7 @@ std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, 
                 case core::AliasType::Command: {
                     res.action_kind = core::ActionKind::Launch;
                     // Check the argv the executor will really launch, not a shell reading of the text.
-                    const auto argv = core::Executor::parse_desktop_exec(alias.target);
+                    const auto argv = core::Executor::parse_desktop_exec(target);
                     res.confirm = argv && is_dangerous_argv(*argv);
                     break;
                 }

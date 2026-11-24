@@ -1,5 +1,6 @@
 #include "nexus/core/executor.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/xdg.hpp"
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -7,6 +8,8 @@
 #include <fcntl.h>
 #include <sstream>
 #include <vector>
+#include <set>
+#include <string_view>
 #include <cstring>
 #include <cstdlib>
 #include <cerrno>
@@ -23,6 +26,35 @@
 extern char** environ;
 
 namespace nexus::core {
+
+namespace {
+
+// Environment for launched programs. Inside an AppImage the launcher's own bundle variables are removed so they
+// don't re-theme system apps or leak the mount path. The theme variable is dropped too: the AppImage startup
+// hook sets it and keeps no record of a user's own value, so the two can't be told apart.
+class ChildEnvironment {
+public:
+    ChildEnvironment() {
+        const bool in_appimage = !utils::appimage_root().empty();
+        const std::set<std::string_view> bundle_vars = {"APPDIR", "APPIMAGE", "ARGV0", "OWD", "QT_QPA_PLATFORMTHEME"};
+        for (char** entry = environ; entry && *entry; ++entry) {
+            const std::string_view line = *entry;
+            const std::string_view name = line.substr(0, line.find('='));
+            if (in_appimage && bundle_vars.contains(name)) continue;
+            kept_.emplace_back(line);
+        }
+        for (auto& line : kept_) pointers_.push_back(line.data());
+        pointers_.push_back(nullptr);
+    }
+
+    [[nodiscard]] char** get() { return pointers_.data(); }
+
+private:
+    std::vector<std::string> kept_;
+    std::vector<char*> pointers_;
+};
+
+}  // namespace
 
 std::optional<std::vector<std::string>> Executor::parse_desktop_exec(std::string_view exec_line) {
     // Pass 1: the "string" escapes of the Desktop Entry spec (the file loader keeps values raw).
@@ -163,6 +195,7 @@ bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_
     std::string cmd_str(command);
     NEXUS_LOG_INFO("Executing command: " + cmd_str);
 
+    ChildEnvironment env;  // built before fork: the child must not allocate
     pid_t pid = fork();
     if (pid < 0) {
         NEXUS_LOG_ERROR("fork() failed");
@@ -179,7 +212,7 @@ bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_
             // nothing to do: run the command anyway
         }
 
-        execl("/bin/sh", "sh", "-c", cmd_str.c_str(), static_cast<char*>(nullptr));
+        execle("/bin/sh", "sh", "-c", cmd_str.c_str(), static_cast<char*>(nullptr), env.get());
         _exit(127);  // the shell's own "cannot execute" status
     }
 
@@ -228,7 +261,8 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID | POSIX_SPAWN_SETSIGDEF);
 
     pid_t pid = 0;
-    int rc = posix_spawnp(&pid, argv[0], &actions, &attr, argv.data(), environ);
+    ChildEnvironment env;
+    int rc = posix_spawnp(&pid, argv[0], &actions, &attr, argv.data(), env.get());
 
     if (stdin_fd >= 0) close(stdin_fd);
     if (stdout_fd >= 0) close(stdout_fd);
@@ -279,7 +313,8 @@ bool Executor::run_capture(const std::vector<std::string>& args, std::string& ou
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF);
 
     pid_t pid = 0;
-    const int rc = posix_spawnp(&pid, argv[0], &actions, &attr, argv.data(), environ);
+    ChildEnvironment env;
+    const int rc = posix_spawnp(&pid, argv[0], &actions, &attr, argv.data(), env.get());
     posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&actions);
     close(out_pipe[1]);
@@ -455,7 +490,8 @@ ChildProcess Executor::spawn_with_pipes(const std::vector<std::string>& args, co
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF);
 
     pid_t pid = 0;
-    const int rc = posix_spawn(&pid, argv[0], &actions, &attr, argv.data(), environ);
+    ChildEnvironment env;
+    const int rc = posix_spawn(&pid, argv[0], &actions, &attr, argv.data(), env.get());
     posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&actions);
     close(to_child[0]);

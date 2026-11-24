@@ -225,6 +225,58 @@ int main() {
         r = run("missingrec", "/nonexistent_nexus_dir/file.txt");
         assert(!r.first && !fs::exists(out));
 
+        // (d) `~/` command target runs the HOME-expanded program.
+        const std::string saved_home = home ? home : "";
+        setenv("HOME", dir.c_str(), 1);
+        r = run("tilderec", "~/nexus-fake-rec x");
+        CHECK_EQ(r.first, true);
+        CHECK_EQ(r.second, std::string("[x]"));
+
+        // A home whose name has Exec-line specials still launches the right program with the right args.
+        const fs::path odd_home = dir / "my home \"q\" \\s 100%f";
+        fs::create_directories(odd_home);
+        fs::copy_file(dir / "nexus-fake-rec", odd_home / "nexus-fake-rec");
+        setenv("HOME", odd_home.c_str(), 1);
+        r = run("oddhomerec", "~/nexus-fake-rec x");
+        CHECK_EQ(r.first, true);
+        CHECK_EQ(r.second, std::string("[x]"));
+        setenv("HOME", dir.c_str(), 1);
+
+        // File and Directory aliases hand xdg-open the absolute expanded path (a fake xdg-open records it).
+        fs::copy_file(dir / "nexus-fake-rec", dir / "xdg-open");
+        std::ofstream(dir / "note.txt") << "x";
+        fs::create_directories(dir / "sub");
+        r = run("tildefile", "~/note.txt");
+        CHECK_EQ(r.first, true);
+        CHECK_EQ(r.second, "[" + (dir / "note.txt").string() + "]");
+        r = run("tildedir", "~/sub");
+        CHECK_EQ(r.first, true);
+        CHECK_EQ(r.second, "[" + (dir / "sub").string() + "]");
+        r = run("tildehome", "~");
+        CHECK_EQ(r.first, true);
+        CHECK_EQ(r.second, "[" + dir.string() + "]");
+
+        // A '>' alias keeps its literal `~` for the shell, which expands it.
+        assert(mgr.add_alias("tildeshell", ">nexus-fake-rec ~"));
+        const auto shell_hits = provider.search(Query("tildeshell"), cancel);
+        CHECK_EQ(shell_hits.at(0).execution_payload, std::string("nexus-fake-rec ~"));
+        assert(mgr.remove_alias("tildeshell"));
+        r = run("tildeshell", ">nexus-fake-rec ~");
+        CHECK_EQ(r.first, true);
+        CHECK_EQ(r.second, "[" + dir.string() + "]");
+
+        // (e) no usable HOME: the alias is not offered, so nothing can run from a cwd-relative path.
+        fs::remove(out);
+        assert(mgr.add_alias("tildenohome", "~/nexus-fake-rec x"));
+        setenv("HOME", "relative/home", 1);
+        CHECK_EQ(provider.search(Query("tildenohome"), cancel).empty(), true);
+        assert(mgr.remove_alias("tildenohome"));
+        if (home) {
+            setenv("HOME", saved_home.c_str(), 1);
+        } else {
+            unsetenv("HOME");
+        }
+
         setenv("PATH", saved_path.c_str(), 1);
         fs::remove_all(dir);
     }

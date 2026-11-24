@@ -28,4 +28,19 @@ std::optional<std::string> expand_home(std::string_view path) {
     return home.string() + std::string(path.substr(1));
 }
 
+std::filesystem::path appimage_root() {
+    const char* appdir = std::getenv("APPDIR");
+    if (!appdir || !std::filesystem::path(appdir).is_absolute()) return {};
+
+    std::error_code exe_error;
+    std::error_code root_error;
+    const std::filesystem::path exe = std::filesystem::canonical("/proc/self/exe", exe_error);
+    const std::filesystem::path root = std::filesystem::canonical(appdir, root_error);
+    if (exe_error || root_error) return {};
+
+    const bool exe_inside_root = exe.native().starts_with(root.native() + "/");
+    if (!exe_inside_root) return {};
+    return root;
+}
+
 }  // namespace nexus::utils

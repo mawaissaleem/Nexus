@@ -5,12 +5,14 @@
 #include <atomic>
 #include <csignal>
 #include <fstream>
+#include <iterator>
 #include <iostream>
 #include <mutex>
 #include <thread>
 #include <string>
 #include <vector>
 #include <unistd.h>
+#include "check.hpp"
 #include "nexus/core/executor.hpp"
 
 using namespace nexus::core;
@@ -99,6 +101,73 @@ int main() {
         assert(r.second == "[-e][fakeapp][x y][z]");
 
         setenv("PATH", saved.c_str(), 1);
+        std::filesystem::remove_all(dir);
+    }
+
+    // Launched programs lose the AppImage's variables only when this binary runs from inside $APPDIR.
+    {
+        const auto dir = std::filesystem::temp_directory_path() / ("nexus_test_env_" + std::to_string(getpid()));
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directories(dir);
+        const auto out = dir / "env.txt";
+        const auto exe_dir = std::filesystem::canonical("/proc/self/exe").parent_path();
+
+        const auto script = dir / "dump.sh";
+        {
+            std::ofstream f(script);
+            f << "#!/bin/sh\nenv > '" << out.string() << ".tmp' && mv '" << out.string() << ".tmp' '" << out.string()
+              << "'\n";
+        }
+        std::filesystem::permissions(script, std::filesystem::perms::owner_all);
+
+        // Runs the dump script directly or through the shell path and returns the env it saw.
+        auto dump_env = [&](bool via_shell) {
+            std::filesystem::remove(out);
+            bool ok = false;
+            if (via_shell) {
+                ok = Executor::launch_shell_command("'" + script.string() + "'");
+            } else {
+                ok = Executor::launch_desktop_exec(script.string());
+            }
+            CHECK_EQ(ok, true);
+            for (int i = 0; i < 250 && !std::filesystem::exists(out); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+            std::ifstream in(out);
+            return "\n" + std::string(std::istreambuf_iterator<char>(in), {});
+        };
+        auto has = [](const std::string& all, const char* name) {
+            return all.find(std::string("\n") + name + "=") != std::string::npos;
+        };
+
+        setenv("KEEP_ME", "1", 1);
+        setenv("APPIMAGE", "/tmp/x.AppImage", 1);
+        setenv("ARGV0", "x", 1);
+        setenv("OWD", "/tmp", 1);
+        setenv("QT_QPA_PLATFORMTHEME", "gtk2", 1);
+
+        // $APPDIR set but this binary is not inside it: nothing is removed.
+        setenv("APPDIR", dir.c_str(), 1);
+        for (const bool via_shell : {false, true}) {
+            const std::string all = dump_env(via_shell);
+            for (const char* name : {"APPDIR", "APPIMAGE", "ARGV0", "OWD", "QT_QPA_PLATFORMTHEME"}) {
+                CHECK_EQ(has(all, name), true);
+            }
+        }
+
+        // Running from inside $APPDIR: the bundle variables are gone, everything else stays.
+        setenv("APPDIR", exe_dir.c_str(), 1);
+        for (const bool via_shell : {false, true}) {
+            const std::string all = dump_env(via_shell);
+            for (const char* name : {"APPDIR", "APPIMAGE", "ARGV0", "OWD", "QT_QPA_PLATFORMTHEME"}) {
+                CHECK_EQ(has(all, name), false);
+            }
+            CHECK_EQ(has(all, "KEEP_ME"), true);
+        }
+
+        for (const char* name : {"KEEP_ME", "APPDIR", "APPIMAGE", "ARGV0", "OWD", "QT_QPA_PLATFORMTHEME"}) {
+            unsetenv(name);
+        }
         std::filesystem::remove_all(dir);
     }
 
