@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(nexus VERSION 0.7.0 LANGUAGES CXX C)
+project(nexus VERSION 0.8.0 LANGUAGES CXX C)
 
 # Enforce C++20 standard
 set(CMAKE_CXX_STANDARD 20)
@@ -179,7 +179,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nexus.service DESTINATION lib/systemd/
 
 # .deb via `cpack -G DEB` (configure with CMAKE_INSTALL_PREFIX=/usr). Library deps come from shlibdeps.
 set(CPACK_PACKAGE_NAME nexus)
-set(CPACK_PACKAGE_CONTACT "mawaissaleem <mawaissaleem@users.noreply.github.com>")
+set(CPACK_PACKAGE_CONTACT "mawaissaleem <mawaissaleem932595+nexus@gmail.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Keyboard-first application launcher")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)

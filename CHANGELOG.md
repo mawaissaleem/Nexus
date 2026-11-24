@@ -8,6 +8,62 @@ version is `0`, expect breaking changes between minor versions.
 
 ---
 
+## [0.8.0] — YYYY-MM-DD
+
+Nexus ships as a `.deb` and an AppImage, and no longer reads its config,
+aliases, database or plugins from the current directory or `/tmp`.
+
+### Added
+
+- `.deb` and AppImage packages, attached to each GitHub release. The `.deb`
+  recommends the Qt Wayland platform plugin; the AppImage bundles it. Both
+  need Python 3 on the system for the shipped plugins. See "Install a
+  package" in the README.
+- Inside an AppImage, Nexus finds the bundled web and system plugins in the
+  image.
+- Nexus has its own icon in application menus; `cmake --install` and the
+  packages install it.
+- Test suites that run the real search pipeline (integration), broken-input
+  cases (failure) and a performance check, each with a `ctest` label
+  (`unit`, `integration`, `failure`, `perf`).
+
+### Changed
+
+- The single-instance socket moved from a shared name in `/tmp` to your
+  runtime directory (`XDG_RUNTIME_DIR`) and is reachable only by you. If a
+  0.7 instance is still running when you first start 0.8, a second instance
+  opens: quit the old one first.
+- Config, aliases, database, plugin and application folders ignore relative
+  `XDG_*` paths and a relative or missing `HOME`. With no usable config
+  directory, settings and aliases are not saved (`nexus dir add` and
+  `nexus alias add` report the failure) instead of being written to `/tmp`
+  or the current directory. With no usable data directory Nexus keeps its
+  database in memory.
+- An alias target that starts with `~` (`~/bin/tool`, `~/notes.txt`) now
+  opens or runs from your home directory, also when your home path contains
+  spaces or quotes; a `~` later in a plain command is still passed as plain
+  text. Without a usable `HOME` such an alias is not offered.
+- Programs launched from an AppImage no longer inherit the AppImage's own
+  environment variables (`APPDIR`, `APPIMAGE`, `ARGV0`, `OWD`,
+  `QT_QPA_PLATFORMTHEME`).
+
+### Fixed
+
+- The destructive-command check now sees long `sudo` and `env` options that
+  take a separate value (`sudo --user bob rm -rf x`).
+- The Wayland portal shortcut no longer keeps listening for answers to
+  requests it already received.
+
+### Known issues
+
+- Inside an AppImage, your own `QT_QPA_PLATFORMTHEME` is not passed on to
+  launched programs.
+- **Open Folder** in Settings hands the folder to the system directly, so
+  under an AppImage that file manager still inherits the AppImage's
+  variables.
+- The AppImage does not bundle Python 3; the web and system plugins need
+  `python3` on the system.
+
 ## [0.7.0] — 2026-11-24
 
 Nexus's global hotkey now works on Wayland, and the destructive-command
@@ -535,6 +591,7 @@ Documented here deliberately rather than discovered by the next person.
 | Dependencies | Qt (`Core`, `Gui`, `Widgets`, `Network`), SQLite3, libX11 |
 | Desktop environments tested | Whatever the maintainer runs daily (X11-based). Not yet verified across GNOME, KDE, and XFCE independently |
 
+[0.8.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.8.0
 [0.7.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/mawaissaleem/Nexus/releases/tag/v0.5.0

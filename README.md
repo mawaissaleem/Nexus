@@ -4,7 +4,7 @@ A fast, keyboard-first productivity launcher for Linux.
 
 Press `Alt + Space`, type, press Enter. Nexus finds applications, evaluates expressions, opens files and folders, runs shell commands, and resolves your own aliases — from one window, without touching the mouse.
 
-> **Version 0.7.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland hotkey support (desktop portal or a GNOME shortcut button) is new and lightly tested, and a few rough edges are listed under [Known issues](#known-issues). Read it before installing.
+> **Version 0.8.0.** Nexus is usable daily on X11 and is the author's primary launcher. It is not feature-complete: Wayland hotkey support (desktop portal or a GNOME shortcut button) is new and lightly tested, and a few rough edges are listed under [Known issues](#known-issues). Read it before installing.
 
 ![Nexus launcher](docs/media/demo.gif)
 
@@ -78,6 +78,7 @@ Esc             Close
 ## Known issues
 
 - **Wayland hotkey without the portal.** On Wayland desktops that have neither the `GlobalShortcuts` portal nor GNOME, bind `nexus --toggle` yourself in the compositor's settings. See [Wayland](#wayland).
+- **AppImage.** Your own `QT_QPA_PLATFORMTHEME` is not passed on to launched programs. The folder button in Settings does not clean the AppImage variables, so that file manager still inherits them. Python 3 is not bundled; the web and system plugins need `python3` on the system.
 
 
 ## Requirements
@@ -166,7 +167,7 @@ Nexus starts in the background, registers the hotkey, and shows the window once 
 sudo cmake --install build
 ```
 
-Install from the Release build above; the [Tests](#tests) steps use a separate `build-debug/` directory. This installs `nexus` to `/usr/local/bin/`, `nexus.desktop` to `/usr/local/share/applications/`, the systemd user unit `nexus.service` to `/usr/local/lib/systemd/user/` and the web and system plugins to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
+Install from the Release build above; the [Tests](#tests) steps use a separate `build-debug/` directory. This installs `nexus` to `/usr/local/bin/`, `nexus.desktop` to `/usr/local/share/applications/`, the icon `nexus.svg` to `/usr/local/share/icons/hicolor/scalable/apps/`, the systemd user unit `nexus.service` to `/usr/local/lib/systemd/user/` and the web and system plugins to `/usr/local/share/nexus/plugins/`, which Nexus reads when `XDG_DATA_DIRS` is unset or includes `/usr/local/share`. Otherwise, copy them for your user only: `mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins" && cp -r plugins/web plugins/system "${XDG_DATA_HOME:-$HOME/.local/share}/nexus/plugins/"`. They need Python 3. Restart Nexus afterwards; plugins are found at startup.
 
 **Start on login**
 
@@ -223,7 +224,7 @@ nexus alias list
 nexus alias remove gh
 ```
 
-Aliases resolve to URLs, directories, files or commands; the type is detected from the target. A plain command is split into words and run directly, without a shell: `|`, `&&`, `$VAR`, redirects and `~` are passed through as plain text, single quotes do not group words, and `%` sequences such as `%f` are removed (`%%` gives one `%`). Use double quotes to keep words together in a plain command, for example `code "My Projects"`. To run a target through the shell, start it with `>`, for example `>code ~/nexus`. From a terminal, quote the whole target so your own shell does not treat `>` as a redirect or split it into separate words:
+Aliases resolve to URLs, directories, files or commands; the type is detected from the target. A plain command is split into words and run directly, without a shell: `|`, `&&`, `$VAR`, redirects and a `~` after the first word are passed through as plain text (a target starting with `~/` is resolved against your home directory), single quotes do not group words, and `%` sequences such as `%f` are removed (`%%` gives one `%`). Use double quotes to keep words together in a plain command, for example `code "My Projects"`. To run a target through the shell, start it with `>`, for example `>code ~/nexus`. From a terminal, quote the whole target so your own shell does not treat `>` as a redirect or split it into separate words:
 
 ```bash
 nexus alias add up '>sudo apt update'
@@ -369,7 +370,7 @@ The specification targets under 50 ms per query and under 20 ms for cached queri
 | ~~0.5.0~~ | **Shipped.** Out-of-process plugins, web search, clipboard history and system actions, parallel search |
 | ~~0.6.0~~ | **Shipped.** URL opening, unit conversion, confirmation for destructive commands, exit-status messages, `--version`, install target with desktop entry and systemd user unit |
 | ~~0.7.0~~ | **Shipped.** Wayland hotkey through the `GlobalShortcuts` portal (for example KDE Plasma 5.27+ and GNOME 48+) or a one-click GNOME custom shortcut in Settings, sturdier destructive-command check |
-| 0.8.0 | `.deb` / AppImage packaging, tested across GNOME / KDE / XFCE, integration, failure and performance test suites |
+| ~~0.8.0~~ | **Shipped.** `.deb` and AppImage packages, integration, failure and performance test suites, config and data never read from the current directory or `/tmp`, per-user single-instance socket |
 | 1.0.0 | Stable plugin API, accessibility, security review |
 
 The file index, schema migrations and benchmarks were first planned for
