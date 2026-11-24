@@ -79,6 +79,15 @@ QString PortalShortcut::expect_response(const char* slot) {
     return token;
 }
 
+void PortalShortcut::unsubscribe(const QString& path, const char* slot) {
+    QDBusConnection::sessionBus().disconnect(kService, path, kRequestInterface, "Response", this, slot);
+}
+
+void PortalShortcut::unsubscribe_current_request(const char* slot) {
+    if (!calledFromDBus()) return;
+    unsubscribe(message().path(), slot);
+}
+
 void PortalShortcut::send(const QDBusMessage& call, const QString& token, const char* slot) {
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, token, slot](QDBusPendingCallWatcher* w) {
@@ -86,6 +95,7 @@ void PortalShortcut::send(const QDBusMessage& call, const QString& token, const 
         const QDBusPendingReply<QDBusObjectPath> reply = *w;
         // A refused call never sends a Response, so report it here or the shortcut silently stays unbound.
         if (reply.isError()) {
+            unsubscribe(request_path(token), slot);
             creating_ = false;
             NEXUS_LOG_WARN("Portal call failed: " + reply.error().message().toStdString());
             emit failed("The desktop portal refused the Nexus shortcut. Set it in your system keyboard settings.");
@@ -94,6 +104,7 @@ void PortalShortcut::send(const QDBusMessage& call, const QString& token, const 
         // Old portals may answer on a different request path than the one built from the token.
         const QString handle = reply.value().path();
         if (handle != request_path(token)) {
+            unsubscribe(request_path(token), slot);
             QDBusConnection::sessionBus().connect(kService, handle, kRequestInterface, "Response", this, slot);
         }
     });
@@ -122,6 +133,7 @@ void PortalShortcut::bind(const QString& trigger) {
 }
 
 void PortalShortcut::on_create_session_response(uint code, const QVariantMap& results) {
+    unsubscribe_current_request(SLOT(on_create_session_response(uint, QVariantMap)));
     creating_ = false;
     session_ = session_from(results);
     if (code != 0 || session_.isEmpty()) {
@@ -150,6 +162,7 @@ void PortalShortcut::send_bind_request() {
 }
 
 void PortalShortcut::on_bind_response(uint code, const QVariantMap&) {
+    unsubscribe_current_request(SLOT(on_bind_response(uint, QVariantMap)));
     // 1 = the user cancelled the compositor's prompt, 2 = failure.
     if (code != 0) emit failed("The desktop did not bind the Nexus shortcut. Set it in your system keyboard settings.");
 }

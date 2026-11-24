@@ -20,7 +20,22 @@ constexpr std::array<std::string_view, 11> kAlwaysDangerous = {
 constexpr std::array<std::string_view, 8> kWrappers = {"sudo", "doas",    "env",  "nohup",
                                                        "time", "command", "exec", "xargs"};
 // Options of a wrapper that take the next word as their value, so `sudo -u bob rm` skips "bob" too.
-constexpr std::array<std::pair<std::string_view, std::string_view>, 14> kValueOptions = {{
+// `--opt=value` is one word and needs no entry.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 28> kValueOptions = {{
+    {"exec", "-a"},
+    {"sudo", "--user"},
+    {"sudo", "--group"},
+    {"sudo", "--chdir"},
+    {"sudo", "--chroot"},
+    {"sudo", "--host"},
+    {"sudo", "--prompt"},
+    {"sudo", "--role"},
+    {"sudo", "--type"},
+    {"sudo", "--other-user"},
+    {"sudo", "--close-from"},
+    {"sudo", "--command-timeout"},
+    {"env", "--unset"},
+    {"env", "--chdir"},
     {"sudo", "-u"},
     {"sudo", "-g"},
     {"sudo", "-C"},
@@ -126,7 +141,11 @@ size_t prefix_length(const Words& words, size_t i, std::string_view wrapper) {
 
     const bool is_option = i > 0 && word.starts_with('-');
     if (!is_option) return 0;
-    if (!is_short_cluster(word)) return 1;
+    if (!is_short_cluster(word)) {
+        const std::pair<std::string_view, std::string_view> long_option{wrapper, word};
+        const bool takes_value = contains(kValueOptions, long_option);
+        return takes_value ? 2 : 1;
+    }
     // Read the cluster like getopt: the first value option takes the rest of the word as its value, or the next
     // word when it closes the cluster (`sudo -iu bob rm` skips "bob", `sudo -uroot rm` skips nothing more).
     for (size_t k = 1; k < word.size(); ++k) {
@@ -148,8 +167,7 @@ bool runs_dangerous_script(const Words& args) {
     return false;
 }
 
-// shortcut: `nice`/`watch` prefixes, globs like `chmod -R 777 /*` and long options with a separate value
-// (`sudo --user bob`) are missed, upgrade if they show up in practice.
+// shortcut: `nice`/`watch` prefixes and globs like `chmod -R 777 /*` are missed, upgrade if they show up in practice.
 bool is_dangerous_argv_impl(const Words& words) {
     size_t i = 0;
     std::string_view wrapper;

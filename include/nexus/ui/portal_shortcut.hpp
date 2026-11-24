@@ -3,13 +3,14 @@
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
+#include <QtDBus/QDBusContext>
 #include <QtDBus/QDBusMessage>
 #include <QtDBus/QDBusObjectPath>
 
 namespace nexus::ui {
 
 // Client for org.freedesktop.portal.GlobalShortcuts: one session, one shortcut ("toggle").
-class PortalShortcut : public QObject {
+class PortalShortcut : public QObject, protected QDBusContext {
     Q_OBJECT
 
 public:
@@ -34,6 +35,9 @@ private slots:
 
 private:
     void send_bind_request();
+    void unsubscribe(const QString& path, const char* slot);
+    // Drops the Response subscription of the request being answered; each request answers only once.
+    void unsubscribe_current_request(const char* slot);
     // Subscribes to the Request.Response signal for a new token, then returns the token to send with the call.
     QString expect_response(const char* slot);
     // Sends a portal call; a D-Bus error emits failed(), a request handle other than the expected one is followed.

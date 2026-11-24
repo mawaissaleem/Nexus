@@ -155,7 +155,7 @@ systemctl --user enable --now nexus.service
 
 If you installed to `~/.local` instead, systemd does not look in `~/.local/lib/systemd/user`; pass the full path, which links the unit into `~/.config/systemd/user/`: `systemctl --user enable --now ~/.local/lib/systemd/user/nexus.service`.
 
-The unit starts with `graphical-session.target` and needs `DISPLAY` in the systemd user environment; GNOME, KDE and other full desktops provide both. With a bare window manager, use the autostart alternative below, or have its startup script run `systemctl --user import-environment DISPLAY XAUTHORITY && systemctl --user start nexus.service`.
+The unit starts with `graphical-session.target` and takes its display from the systemd user environment. Built with Qt 5, Nexus runs on X11, through XWayland on a Wayland desktop, so it needs `DISPLAY` even there. It runs natively on Wayland, and then needs `WAYLAND_DISPLAY`, only when `XDG_SESSION_TYPE=wayland` is set on a desktop other than GNOME, or when you set `QT_QPA_PLATFORM=wayland`. Nexus also reads `XDG_SESSION_TYPE` and `XDG_CURRENT_DESKTOP` to pick its Wayland hotkey route (see [Wayland](#wayland)). GNOME, KDE and other full desktops provide all of these. With a bare window manager, use the autostart alternative below, or have its startup script run `systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XAUTHORITY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP && systemctl --user start nexus.service`.
 
 Alternative, XDG autostart (if your window manager doesn't run it, put `nexus` in its startup script): `mkdir -p ~/.config/autostart && cp /usr/local/share/applications/nexus.desktop ~/.config/autostart/`.
 
