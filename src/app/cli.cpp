@@ -72,7 +72,7 @@ int run_dir(const Args& args, core::ConfigManager& config, std::ostream& out, st
     const std::string sub = args.size() >= 2 ? args[1] : "";
     if (sub == "add" && args.size() >= 3) {
         if (!config.add_search_directory(args[2])) {
-            err << "Failed: directory does not exist or is invalid: " << args[2] << '\n';
+            err << "Failed: directory does not exist or the config could not be saved: " << args[2] << '\n';
             return 1;
         }
         out << "Added search directory: " << args[2]

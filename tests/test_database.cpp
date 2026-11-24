@@ -1,9 +1,13 @@
 #include "nexus/index/database.hpp"
+#include "check.hpp"
 #include <ctime>
 #include <iostream>
 #include <cassert>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <optional>
 #include <sqlite3.h>
 #include <unistd.h>
 
@@ -158,6 +162,56 @@ int main() {
         assert(c && c->usage_events == 1 && c->queries == 1 && c->file_compacted);
         assert(!leaks());
         fs::remove_all(d);
+    }
+
+    // No usable data dir (unset or relative HOME and XDG_DATA_HOME): in-memory DB, never a file in /tmp or cwd.
+    {
+        namespace fs = std::filesystem;
+        const std::string pid = std::to_string(getpid());
+        const fs::path work = fs::temp_directory_path() / ("nexus_db_nodir_" + pid);
+        const fs::path abs_home = fs::temp_directory_path() / ("nexus_db_home_" + pid);
+        fs::remove_all(work);
+        fs::create_directories(work);
+        const fs::path saved_cwd = fs::current_path();
+        fs::current_path(work);
+        const bool tmp_existed = fs::exists("/tmp/nexus");
+        std::optional<std::string> saved_home;
+        std::optional<std::string> saved_xdg;
+        if (const char* v = std::getenv("HOME")) saved_home = v;
+        if (const char* v = std::getenv("XDG_DATA_HOME")) saved_xdg = v;
+
+        unsetenv("HOME");
+        unsetenv("XDG_DATA_HOME");
+        CHECK_EQ(Database::default_db_path(), std::string(":memory:"));
+        setenv("XDG_DATA_HOME", "rel", 1);
+        CHECK_EQ(Database::default_db_path(), std::string(":memory:"));
+        setenv("HOME", ".", 1);
+        CHECK_EQ(Database::default_db_path(), std::string(":memory:"));
+        // A relative XDG_DATA_HOME falls back to an absolute HOME.
+        setenv("HOME", abs_home.c_str(), 1);
+        CHECK_EQ(Database::default_db_path(), (abs_home / ".local" / "share" / "nexus" / "nexus.db").string());
+
+        // The launcher and CLI still get a working database.
+        setenv("HOME", ".", 1);
+        Database mem;
+        assert(mem.open());
+        DesktopEntry e;
+        e.id = "mem";
+        e.name = "Mem";
+        e.exec = "mem";
+        assert(mem.save_applications({e}));
+        mem.close();
+
+        CHECK_EQ(std::distance(fs::directory_iterator(work), fs::directory_iterator{}), 0);
+        CHECK_EQ(fs::exists("/tmp/nexus"), tmp_existed);
+        CHECK_EQ(fs::exists(abs_home), false);
+
+        unsetenv("HOME");
+        unsetenv("XDG_DATA_HOME");
+        if (saved_home) setenv("HOME", saved_home->c_str(), 1);
+        if (saved_xdg) setenv("XDG_DATA_HOME", saved_xdg->c_str(), 1);
+        fs::current_path(saved_cwd);
+        fs::remove_all(work);
     }
 
     std::cout << "All Database tests passed successfully!\n";

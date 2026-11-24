@@ -3,6 +3,7 @@
 #include "nexus/providers/alias_provider.hpp"
 #include "nexus/core/query.hpp"
 #include "nexus/core/search_engine.hpp"
+#include "check.hpp"
 #include <iostream>
 #include <cassert>
 #include <atomic>
@@ -252,6 +253,79 @@ int main() {
     // Clean up
     fs::remove(temp_alias_file);
     fs::remove(temp_alias_file.string() + ".malformed");
+
+    // No usable per-user config dir: planted files in cwd are ignored, nothing is written to cwd or /tmp.
+    {
+        const fs::path planted_dir = fs::temp_directory_path() / ("nexus_alias_planted_" + pid);
+        const fs::path abs_home = fs::temp_directory_path() / ("nexus_alias_home_" + pid);
+        fs::remove_all(planted_dir);
+        fs::remove_all(abs_home);
+        fs::create_directories(planted_dir);
+        const fs::path saved_cwd = fs::current_path();
+        fs::current_path(planted_dir);
+        // The old cwd fallback, and where XDG_CONFIG_HOME=rel or HOME=. would resolve if honoured.
+        const fs::path planted[] = {".nexus_aliases.json", fs::path("rel") / "nexus" / "aliases.json",
+                                    fs::path(".config") / "nexus" / "aliases.json"};
+        const std::string payload = "[{\"name\": \"evil\", \"target\": \"/bin/sh\"}]";
+        for (const auto& p : planted) {
+            if (p.has_parent_path()) fs::create_directories(p.parent_path());
+            std::ofstream(p) << payload;
+        }
+        const fs::path home_file = planted_dir / "home_is_a_file";
+        std::ofstream(home_file) << "x";
+        const auto entries_before = std::distance(fs::directory_iterator(planted_dir), fs::directory_iterator{});
+        const bool tmp_existed = fs::exists("/tmp/nexus");
+
+        std::optional<std::string> saved_home;
+        std::optional<std::string> saved_xdg;
+        if (const char* v = std::getenv("HOME")) saved_home = v;
+        if (const char* v = std::getenv("XDG_CONFIG_HOME")) saved_xdg = v;
+        unsetenv("HOME");
+        unsetenv("XDG_CONFIG_HOME");
+        CHECK_EQ(AliasManager::resolve_aliases_path(), std::string());
+
+        // Relative values count as unset.
+        setenv("XDG_CONFIG_HOME", "rel", 1);
+        CHECK_EQ(AliasManager::resolve_aliases_path(), std::string());
+        setenv("HOME", ".", 1);
+        CHECK_EQ(AliasManager::resolve_aliases_path(), std::string());
+        // Built-in directory aliases come from HOME too: none may point at a relative path.
+        const AliasManager rel_home((planted_dir / "absent.json").string());
+        for (const auto& a : rel_home.get_aliases()) {
+            if (a.type == AliasType::Directory) CHECK_EQ(fs::path(a.target).is_absolute(), true);
+        }
+        unsetenv("XDG_CONFIG_HOME");
+        CHECK_EQ(AliasManager::resolve_aliases_path(), std::string());
+
+        // A relative XDG_CONFIG_HOME falls back to an absolute HOME.
+        setenv("XDG_CONFIG_HOME", "rel", 1);
+        setenv("HOME", abs_home.c_str(), 1);
+        CHECK_EQ(AliasManager::resolve_aliases_path(), (abs_home / ".config" / "nexus" / "aliases.json").string());
+        unsetenv("XDG_CONFIG_HOME");
+
+        // HOME that is a regular file: the config dir cannot be created.
+        setenv("HOME", home_file.c_str(), 1);
+        CHECK_EQ(AliasManager::resolve_aliases_path(), std::string());
+        unsetenv("HOME");
+
+        AliasManager unusable(AliasManager::resolve_aliases_path());
+        for (const auto& a : unusable.get_aliases()) CHECK_EQ(a.name == "evil", false);
+        CHECK_EQ(unusable.save(), false);
+
+        // Unwritable path: save fails and does not fall back to cwd.
+        AliasManager unwritable((planted_dir / "missing_dir" / "x.json").string());
+        CHECK_EQ(unwritable.save(), false);
+
+        for (const auto& p : planted) CHECK_EQ(fs::file_size(p), payload.size());
+        CHECK_EQ(fs::exists("/tmp/nexus"), tmp_existed);
+        CHECK_EQ(std::distance(fs::directory_iterator(planted_dir), fs::directory_iterator{}), entries_before);
+
+        if (saved_home) setenv("HOME", saved_home->c_str(), 1);
+        if (saved_xdg) setenv("XDG_CONFIG_HOME", saved_xdg->c_str(), 1);
+        fs::current_path(saved_cwd);
+        fs::remove_all(planted_dir);
+        fs::remove_all(abs_home);
+    }
 
     std::cout << "All Alias tests passed successfully!\n";
     return 0;

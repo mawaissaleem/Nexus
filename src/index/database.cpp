@@ -2,6 +2,7 @@
 #include "nexus/index/database_migrations.hpp"
 #include "nexus/utils/fuzzy.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/xdg.hpp"
 #include <algorithm>
 #include <cctype>
 #include <sqlite3.h>
@@ -43,16 +44,14 @@ Database::Database(std::string db_path) : db_path_(std::move(db_path)) {
 Database::~Database() { close(); }
 
 std::string Database::default_db_path() {
-    const char* xdg_data = std::getenv("XDG_DATA_HOME");
-    std::filesystem::path base;
-    if (xdg_data && *xdg_data) {
-        base = xdg_data;
-    } else {
-        const char* home = std::getenv("HOME");
-        base = home ? std::filesystem::path(home) / ".local" / "share" : std::filesystem::path("/tmp");
+    const std::filesystem::path base = utils::xdg_user_dir("XDG_DATA_HOME", std::filesystem::path(".local") / "share");
+    if (base.empty()) {
+        // No /tmp or cwd fallback: a DB planted there could inject exec lines.
+        NEXUS_LOG_WARN("No usable data directory (HOME and XDG_DATA_HOME unset or relative); "
+                       "using in-memory database");
+        return ":memory:";
     }
-    std::filesystem::path dir = base / "nexus";
-    return (dir / "nexus.db").string();
+    return (base / "nexus" / "nexus.db").string();
 }
 
 bool validate_migrations(const std::vector<Migration>& migrations) {

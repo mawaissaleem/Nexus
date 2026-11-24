@@ -1,5 +1,6 @@
 #include "nexus/providers/plugin_loader.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/xdg.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -11,15 +12,14 @@ namespace fs = std::filesystem;
 
 std::vector<fs::path> plugin_search_dirs() {
     std::vector<fs::path> dirs;
-    const char* data_home = std::getenv("XDG_DATA_HOME");
-    const char* home = std::getenv("HOME");
-    if (data_home && *data_home) dirs.push_back(fs::path(data_home) / "nexus" / "plugins");
-    else if (home && *home) dirs.push_back(fs::path(home) / ".local" / "share" / "nexus" / "plugins");
+    const fs::path data_home = utils::xdg_user_dir("XDG_DATA_HOME", fs::path(".local") / "share");
+    if (!data_home.empty()) dirs.push_back(data_home / "nexus" / "plugins");
 
     const char* xdg = std::getenv("XDG_DATA_DIRS");
     std::stringstream ss((xdg && *xdg) ? xdg : "/usr/local/share:/usr/share");
     for (std::string entry; std::getline(ss, entry, ':');) {
-        if (!entry.empty()) dirs.push_back(fs::path(entry) / "nexus" / "plugins");
+        // Relative entries are invalid per the XDG spec and would run plugins from the cwd.
+        if (fs::path(entry).is_absolute()) dirs.push_back(fs::path(entry) / "nexus" / "plugins");
     }
     return dirs;
 }

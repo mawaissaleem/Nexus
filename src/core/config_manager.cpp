@@ -2,6 +2,7 @@
 #include "nexus/utils/logger.hpp"
 #include "nexus/utils/json.hpp"
 #include "nexus/utils/shortcut.hpp"
+#include "nexus/utils/xdg.hpp"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -36,20 +37,20 @@ ConfigManager::ConfigManager(const std::string& config_path) : config_file_path_
 }
 
 std::string ConfigManager::resolve_config_path() {
-    const char* xdg_config = std::getenv("XDG_CONFIG_HOME");
-    std::filesystem::path dir;
-    if (xdg_config && *xdg_config) {
-        dir = std::filesystem::path(xdg_config) / "nexus";
-    } else {
-        const char* home = std::getenv("HOME");
-        dir = home ? std::filesystem::path(home) / ".config" / "nexus" : std::filesystem::path("/tmp/nexus");
+    const std::filesystem::path base = utils::xdg_user_dir("XDG_CONFIG_HOME", ".config");
+    if (base.empty()) {
+        NEXUS_LOG_WARN("No usable config directory (HOME and XDG_CONFIG_HOME unset or relative); "
+                       "using default settings, settings not saved");
+        return "";
     }
 
+    const std::filesystem::path dir = base / "nexus";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     if (ec) {
-        // Fallback to local workspace config
-        return ".nexus_config.json";
+        NEXUS_LOG_WARN("Cannot create " + dir.string() + ": " + ec.message() +
+                       "; using default settings, settings not saved");
+        return "";
     }
 
     return (dir / "config.json").string();
@@ -70,9 +71,8 @@ void ConfigManager::set_defaults() {
     shortcut_ = "Alt+Space";
     search_directories_.clear();
 
-    const char* home = std::getenv("HOME");
-    if (home) {
-        std::filesystem::path home_path(home);
+    const std::filesystem::path home_path = utils::home_dir();
+    if (!home_path.empty()) {
         std::error_code ec;
 
         std::vector<std::string> standard_dirs = {(home_path / "Documents").string(),
@@ -174,12 +174,14 @@ bool ConfigManager::load(const std::string& custom_path) {
 
 bool ConfigManager::save() {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (config_file_path_.empty()) {
+        NEXUS_LOG_ERROR("No config directory; settings not saved");
+        return false;
+    }
     std::ofstream file(config_file_path_);
     if (!file.is_open()) {
-        // Try fallback to local directory
-        config_file_path_ = ".nexus_config.json";
-        file.open(config_file_path_);
-        if (!file.is_open()) return false;
+        NEXUS_LOG_ERROR("Cannot write " + config_file_path_);
+        return false;
     }
 
     file << "{\n";

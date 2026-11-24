@@ -64,7 +64,7 @@ public:
     };
     std::optional<ClearedHistory> clear_history();
 
-    // Get default XDG database path (~/.local/share/nexus/nexus.db)
+    // ~/.local/share/nexus/nexus.db (or under $XDG_DATA_HOME); ":memory:" when there is no usable data dir
     static std::string default_db_path();
 
 private:

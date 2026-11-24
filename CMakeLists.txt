@@ -50,6 +50,7 @@ add_library(nexus_utils STATIC
     src/utils/json.cpp
     src/utils/theme.cpp
     src/utils/fs_watcher.cpp
+    src/utils/xdg.cpp
 )
 target_include_directories(nexus_utils PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

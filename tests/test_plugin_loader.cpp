@@ -70,6 +70,16 @@ static void test_search_dirs() {
     setenv("HOME", "/hh", 1);
     d = providers::plugin_search_dirs();
     assert(d[0] == "/hh/.local/share/nexus/plugins");
+    // Relative values are ignored, so plugins never run from the cwd.
+    setenv("HOME", "rel", 1);
+    setenv("XDG_DATA_DIRS", "share:/a:./b:", 1);
+    d = providers::plugin_search_dirs();
+    assert((d == std::vector<fs::path>{"/a/nexus/plugins"}));
+    setenv("XDG_DATA_HOME", "data", 1);
+    setenv("HOME", "/hh", 1);
+    d = providers::plugin_search_dirs();
+    assert((d == std::vector<fs::path>{"/hh/.local/share/nexus/plugins", "/a/nexus/plugins"}));
+    unsetenv("XDG_DATA_DIRS");
     setenv("HOME", home.c_str(), 1);
     // The services test opens a database under $XDG_DATA_HOME: keep it inside the temp dir.
     setenv("XDG_DATA_HOME", (root / "data").c_str(), 1);

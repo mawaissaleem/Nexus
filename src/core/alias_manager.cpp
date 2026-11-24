@@ -1,6 +1,7 @@
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/utils/json.hpp"
 #include "nexus/utils/logger.hpp"
+#include "nexus/utils/xdg.hpp"
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -48,19 +49,20 @@ AliasManager::AliasManager(const std::string& aliases_path) : file_path_(aliases
 }
 
 std::string AliasManager::resolve_aliases_path() {
-    const char* xdg_config = std::getenv("XDG_CONFIG_HOME");
-    std::filesystem::path dir;
-    if (xdg_config && *xdg_config) {
-        dir = std::filesystem::path(xdg_config) / "nexus";
-    } else {
-        const char* home = std::getenv("HOME");
-        dir = home ? std::filesystem::path(home) / ".config" / "nexus" : std::filesystem::path("/tmp/nexus");
+    const std::filesystem::path base = utils::xdg_user_dir("XDG_CONFIG_HOME", ".config");
+    if (base.empty()) {
+        NEXUS_LOG_WARN("No usable config directory (HOME and XDG_CONFIG_HOME unset or relative); "
+                       "using built-in aliases, aliases not saved");
+        return "";
     }
 
+    const std::filesystem::path dir = base / "nexus";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     if (ec) {
-        return ".nexus_aliases.json";
+        NEXUS_LOG_WARN("Cannot create " + dir.string() + ": " + ec.message() +
+                       "; using built-in aliases, aliases not saved");
+        return "";
     }
 
     return (dir / "aliases.json").string();
@@ -69,8 +71,7 @@ std::string AliasManager::resolve_aliases_path() {
 void AliasManager::set_defaults() {
     aliases_.clear();
 
-    const char* home = std::getenv("HOME");
-    std::string home_str = home ? home : "";
+    const std::string home_str = utils::home_dir().string();
 
     std::error_code ec;
     auto cwd = std::filesystem::current_path(ec).string();
@@ -130,11 +131,14 @@ bool AliasManager::load(const std::string& custom_path) {
 
 bool AliasManager::save() {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (file_path_.empty()) {
+        NEXUS_LOG_ERROR("No config directory; aliases not saved");
+        return false;
+    }
     std::ofstream file(file_path_);
     if (!file.is_open()) {
-        file_path_ = ".nexus_aliases.json";
-        file.open(file_path_);
-        if (!file.is_open()) return false;
+        NEXUS_LOG_ERROR("Cannot write " + file_path_);
+        return false;
     }
 
     file << "[\n";
