@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
@@ -340,6 +341,19 @@ int main() {
         assert(slow.reasons == std::vector<std::string>{"exited with status 2"});
         assert(std::chrono::steady_clock::now() - t0 >= std::chrono::milliseconds(250));
         assert(Executor::launch_shell_command("exit 1"));  // no callback is fine
+
+        // The child's stdin, stdout and stderr all point at /dev/null (fd 3 carries the answer out).
+        const auto stdio_file = std::filesystem::temp_directory_path() / ("nexus_stdio_" + std::to_string(getpid()));
+        assert(Executor::launch_shell_command("exec 3>'" + stdio_file.string() +
+                                              "'; for fd in 0 1 2; do readlink /proc/$$/fd/$fd | cat >&3; done"));
+        std::string stdio_text;
+        for (int i = 0; i < 250 && std::count(stdio_text.begin(), stdio_text.end(), '\n') < 3; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            std::ifstream in(stdio_file);
+            stdio_text.assign(std::istreambuf_iterator<char>(in), {});
+        }
+        assert(stdio_text == "/dev/null\n/dev/null\n/dev/null\n");
+        std::filesystem::remove(stdio_file);
     }
 
     // run_capture: stdout and exit status, no shell, timeout kills a slow child.

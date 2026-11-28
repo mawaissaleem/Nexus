@@ -1,6 +1,7 @@
 #include "nexus/ui/settings_dialog.hpp"
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/core/config_manager.hpp"
+#include "nexus/core/executor.hpp"
 #include "nexus/utils/logger.hpp"
 
 #include <QVBoxLayout>
@@ -9,8 +10,6 @@
 #include <QHeaderView>
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QDesktopServices>
-#include <QUrl>
 #include <QFileInfo>
 #include <QIcon>
 #include <QDialogButtonBox>
@@ -935,7 +934,7 @@ void SettingsDialog::on_remove_exclusion() {
 void SettingsDialog::on_open_directory() {
     auto* item = dir_list_->currentItem();
     if (!item) return;
-    QDesktopServices::openUrl(QUrl::fromLocalFile(item->text()));
+    core::Executor::open_path_or_url(item->text().toStdString());
 }
 
 void SettingsDialog::on_ctrl_np_toggled(bool checked) {

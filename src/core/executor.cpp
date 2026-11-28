@@ -187,6 +187,17 @@ void reap_shell_child(pid_t pid, std::string command, ShellFailureFn on_failure)
     }
 }
 
+// Only async-signal-safe calls: this runs between fork and exec, where a stdio lock held by another thread
+// would deadlock freopen.
+void redirect_stdio_to_null() {
+    const int null_fd = open("/dev/null", O_RDWR);
+    if (null_fd < 0) return;  // run the command anyway
+    dup2(null_fd, STDIN_FILENO);
+    dup2(null_fd, STDOUT_FILENO);
+    dup2(null_fd, STDERR_FILENO);
+    if (null_fd > STDERR_FILENO) close(null_fd);
+}
+
 }  // namespace
 
 bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_failure) {
@@ -206,11 +217,7 @@ bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_
         // Own session: the command survives Nexus quitting and gets no terminal signals.
         setsid();
         signal(SIGPIPE, SIG_DFL);  // Nexus ignores SIGPIPE (spawn_with_pipes); commands expect the default
-        // Keep command output off Nexus's terminal; checked only to silence warn_unused_result
-        if (freopen("/dev/null", "r", stdin) == nullptr || freopen("/dev/null", "w", stdout) == nullptr ||
-            freopen("/dev/null", "w", stderr) == nullptr) {
-            // nothing to do: run the command anyway
-        }
+        redirect_stdio_to_null();
 
         execle("/bin/sh", "sh", "-c", cmd_str.c_str(), static_cast<char*>(nullptr), env.get());
         _exit(127);  // the shell's own "cannot execute" status
