@@ -29,16 +29,17 @@
 namespace nexus::ui {
 namespace {
 
-// Shows "command failed" tray messages for shell commands whose exit is seen on a reaper thread. Reaper threads
-// are detached and can outlive the GUI, so close() makes later reports no-ops and waits out one in progress.
-class ShellFailureRelay {
+// Shows "failed" tray messages for actions that could not start and for shell commands whose exit is seen on a
+// reaper thread. Reaper threads are detached and can outlive the GUI, so close() makes later reports no-ops and
+// waits out one in progress.
+class FailureRelay {
 public:
-    explicit ShellFailureRelay(QSystemTrayIcon* tray) : tray_(tray) {}
+    explicit FailureRelay(QSystemTrayIcon* tray) : tray_(tray) {}
 
     void report(const std::string& command, const std::string& reason) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (tray_ == nullptr) return;
-        const QString text = QString::fromStdString("Command failed (" + reason + "):\n" + command);
+        const QString text = QString::fromStdString("\"" + command + "\" failed:\n" + reason);
         QSystemTrayIcon* tray = tray_;
         QMetaObject::invokeMethod(
             tray, [tray, text]() { tray->showMessage("Nexus", text, QSystemTrayIcon::Warning, 8000); },
@@ -64,10 +65,10 @@ public:
           file_watcher_(
               services_.db,
               [this]() { QMetaObject::invokeMethod(&app_, [this]() { start_rebuild(); }, Qt::QueuedConnection); }),
-          theme_(config.get_theme()), shell_failures_(std::make_shared<ShellFailureRelay>(&tray_icon_)),
+          theme_(config.get_theme()), failures_(std::make_shared<FailureRelay>(&tray_icon_)),
           launcher_(std::make_unique<LauncherWindow>(
               services_.engine, theme_, config, ConfirmFn{},
-              [relay = shell_failures_](const std::string& command, const std::string& reason) {
+              [relay = failures_](const std::string& command, const std::string& reason) {
                   relay->report(command, reason);
               })) {
         // New/removed .desktop files update the app index on the watcher's own thread (a rebuild is ~5 ms, so a
@@ -109,8 +110,8 @@ public:
 
         NEXUS_LOG_INFO("Nexus is running in the background. Press " + config_.get_shortcut() + " to toggle.");
         const int rc = app_.exec();
-        shell_failures_->close();  // a command that fails after this point is no longer reported
-        quitting_ = true;          // walkers poll this, so quit mid-build returns within one directory entry
+        failures_->close();  // a command that fails after this point is no longer reported
+        quitting_ = true;    // walkers poll this, so quit mid-build returns within one directory entry
         if (startup_index_thread_.joinable()) startup_index_thread_.join();
         if (rebuild_thread_.joinable())
             rebuild_thread_.join();  // quit during a rebuild: wait, never destroy a joinable thread
@@ -143,11 +144,15 @@ private:
     }
 
     // Settings dialog applies a new shortcut: persist, re-grab, refresh labels.
-    bool apply_shortcut(const std::string& text) {
-        if (!config_.set_shortcut(text)) return false;
+    utils::Status apply_shortcut(const std::string& text) {
+        utils::Status saved = config_.set_shortcut(text);
+        if (!saved) return saved;
         tray_icon_.setToolTip("Nexus Launcher (" + shortcut_text() + ")");
         toggle_action_->setText("Toggle Launcher (" + shortcut_text() + ")");
-        return shortcut_mgr_.apply_shortcut(text);
+        if (!shortcut_mgr_.apply_shortcut(text)) {
+            return utils::Status::error("saved " + text + ", but can't grab it: global shortcuts don't work here");
+        }
+        return {};
     }
 
     // The Settings button: writes the GNOME custom keybinding for the configured shortcut.
@@ -294,7 +299,7 @@ private:
     std::thread startup_index_thread_;
     std::thread rebuild_thread_;
     ThemeController theme_;
-    std::shared_ptr<ShellFailureRelay> shell_failures_;  // declared before launcher_, which holds a copy
+    std::shared_ptr<FailureRelay> failures_;  // declared before launcher_, which holds a copy
     std::unique_ptr<LauncherWindow> launcher_;
     std::unique_ptr<QLocalServer> ipc_server_;
     GlobalShortcutManager shortcut_mgr_;

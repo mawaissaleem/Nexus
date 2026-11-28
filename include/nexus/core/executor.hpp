@@ -1,5 +1,6 @@
 #pragma once
 
+#include "nexus/utils/status.hpp"
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -54,15 +55,16 @@ using ShellFailureFn = std::function<void(const std::string& command, const std:
 
 class Executor {
 public:
-    // Execute a desktop application Exec string (tokenised, run without a shell)
-    static bool launch_desktop_exec(std::string_view exec_line, bool terminal = false);
+    // Execute a desktop application Exec string (tokenised, run without a shell).
+    // The error says why it could not start (empty or malformed command, program not found, ...).
+    static utils::Status launch_desktop_exec(std::string_view exec_line, bool terminal = false);
 
-    // Runs `command` via /bin/sh in its own session, output discarded. Returns false only if it could not be
+    // Runs `command` via /bin/sh in its own session, output discarded. The error says why it could not be
     // started. A reaper thread waits for it (never the caller) and reports a failure exit through `on_failure`.
-    static bool launch_shell_command(std::string_view command, ShellFailureFn on_failure = {});
+    static utils::Status launch_shell_command(std::string_view command, ShellFailureFn on_failure = {});
 
     // Open a file or URL with default system handler (xdg-open)
-    static bool open_path_or_url(std::string_view target);
+    static utils::Status open_path_or_url(std::string_view target);
 
     // Tokenise a Desktop Entry Exec value into argv (spec quoting/escapes, field codes removed).
     // nullopt for an unterminated quote or an empty command.
@@ -81,7 +83,7 @@ public:
 
 private:
     // posix_spawnp argv[0] with stdio on /dev/null, new session, and a detached reaper.
-    static bool spawn_detached(const std::vector<std::string>& args);
+    static utils::Status spawn_detached(const std::vector<std::string>& args);
 };
 
 }  // namespace nexus::core

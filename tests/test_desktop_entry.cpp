@@ -60,7 +60,7 @@ int main() {
         out << "payload\n";
     }
 
-    Executor::open_path_or_url(malicious_path.string());
+    static_cast<void>(Executor::open_path_or_url(malicious_path.string()));  // only the marker matters here
     assert(!std::filesystem::exists(marker_path));
 
     std::filesystem::remove_all(temp_root);

@@ -70,10 +70,10 @@ std::vector<core::SearchResult> ClipboardProvider::search(const core::Query& que
     return results;
 }
 
-bool ClipboardProvider::on_executed(const core::SearchResult& result) {
-    if (result.id != kClearId) return true;  // Copy results need nothing here
+utils::Status ClipboardProvider::on_executed(const core::SearchResult& result) {
+    if (result.id != kClearId) return {};  // Copy results need nothing here
     clear();
-    return true;
+    return {};
 }
 
 void ClipboardProvider::clear() {

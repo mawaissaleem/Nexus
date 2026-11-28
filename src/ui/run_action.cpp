@@ -21,7 +21,9 @@ bool ask_yes_no(const core::SearchResult& res) {
 bool run_action(const core::SearchResult& res, const std::vector<core::SearchProviderPtr>& providers,
                 const ConfirmFn& confirm, core::ShellFailureFn on_shell_failure) {
     if (res.confirm && !confirm(res)) return false;
-    core::dispatch_action(res, providers, std::move(on_shell_failure));
+    const core::ShellFailureFn report = on_shell_failure;
+    const utils::Status status = core::dispatch_action(res, providers, std::move(on_shell_failure));
+    if (!status && report) report(res.title, status.message());
     copy_result(res);  // dispatcher treats Copy as handled; the clipboard is Qt, so it happens here
     return true;
 }

@@ -8,6 +8,8 @@
 #include <iterator>
 #include <optional>
 #include <cstdlib>
+#include <csignal>
+#include <sys/resource.h>
 #include <unistd.h>
 
 int main() {
@@ -33,7 +35,7 @@ int main() {
     fs::remove_all(work);
 
     // Test 1: Default state is true
-    config.load(temp_config_file.string());
+    assert(!config.load(temp_config_file.string()));  // nothing saved yet, so the defaults stay
     assert(config.is_ctrl_np_navigation_enabled() == true);
 
     // Test 2: Disable Ctrl+N/P navigation and verify persistence
@@ -41,14 +43,14 @@ int main() {
     assert(config.is_ctrl_np_navigation_enabled() == false);
 
     // Reload from file to ensure it was written and parsed correctly
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert(config.is_ctrl_np_navigation_enabled() == false);
 
     // Test 3: Re-enable Ctrl+N/P navigation and verify persistence
     config.set_ctrl_np_navigation_enabled(true);
     assert(config.is_ctrl_np_navigation_enabled() == true);
 
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert(config.is_ctrl_np_navigation_enabled() == true);
 
     // Test 4: Global shortcut persists; invalid strings are rejected and leave it unchanged
@@ -56,16 +58,16 @@ int main() {
     assert(config.get_shortcut() == "Ctrl+Shift+K");
     assert(!config.set_shortcut("Space"));
     assert(config.get_shortcut() == "Ctrl+Shift+K");
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert(config.get_shortcut() == "Ctrl+Shift+K");
     assert(config.is_ctrl_np_navigation_enabled() == true);
-    config.set_shortcut("Alt+Space");
+    assert(config.set_shortcut("Alt+Space"));
 
     // Test 5: file exclusions default to the built-in list and survive a save/load round trip
     assert(config.get_file_exclusions() == ConfigManager::default_file_exclusions());
     assert(config.get_file_exclusions().size() == 10);
     config.set_ctrl_np_navigation_enabled(true);  // forces a save
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert(config.get_file_exclusions() == ConfigManager::default_file_exclusions());
 
     // Test 6: custom list is read; names that are paths or contain quote/backslash are dropped
@@ -73,23 +75,23 @@ int main() {
         std::ofstream(temp_config_file) << "{\n  \"file_exclusions\": [\n    \"vendor\",\n    \"bad\\\\name\",\n"
                                            "    \"a/b\",\n    \"x\\\"y\",\n    \"tmp\"\n  ]\n}\n";
     }
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert((config.get_file_exclusions() == std::vector<std::string>{"vendor", "tmp"}));
 
     // Test 7: an explicit empty list means "exclude nothing"
     std::ofstream(temp_config_file) << "{\n  \"file_exclusions\": []\n}\n";
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert(config.get_file_exclusions().empty());
 
     // Test 8: malformed JSON logs an error and falls back to defaults (nothing from the file leaks in)
     std::ofstream(temp_config_file)
         << "{\n  \"enable_ctrl_np_navigation\": false,\n  \"global_shortcut\": \"Ctrl+K\"\n";  // unterminated
-    config.load(temp_config_file.string());
+    assert(!config.load(temp_config_file.string()));
     assert(config.is_ctrl_np_navigation_enabled() == true);
     assert(config.get_shortcut() == "Alt+Space");
     assert(config.get_file_exclusions() == ConfigManager::default_file_exclusions());
     std::ofstream(temp_config_file) << "[1, 2]";  // valid JSON, wrong shape
-    assert(config.load(temp_config_file.string()) == false);
+    assert(!config.load(temp_config_file.string()));
 
     // Test 9: one-line arrays parse
     std::ofstream(temp_config_file) << "{\"file_exclusions\": [\"a\", \"b\"], \"search_directories\": [\"/tmp\"]}";
@@ -99,10 +101,10 @@ int main() {
 
     // Test 10: keys absent from the file reset to defaults instead of keeping the last load
     std::ofstream(temp_config_file) << "{\"enable_ctrl_np_navigation\": false}";
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert(config.is_ctrl_np_navigation_enabled() == false);
     std::ofstream(temp_config_file) << "{}";
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     assert(config.is_ctrl_np_navigation_enabled() == true);
     assert(config.get_file_exclusions() == ConfigManager::default_file_exclusions());
 
@@ -110,7 +112,7 @@ int main() {
     const fs::path odd = fs::temp_directory_path() / ("nexus_cfg_odd\\\"dir_" + pid);
     fs::create_directories(odd);
     assert(config.add_search_directory(odd.string()));
-    config.load(temp_config_file.string());
+    assert(config.load(temp_config_file.string()));
     auto dirs = config.get_search_directories();
     assert(std::find(dirs.begin(), dirs.end(), fs::canonical(odd).string()) != dirs.end());
     fs::remove_all(odd);
@@ -291,7 +293,7 @@ int main() {
             CHECK_EQ(tilde_dirs.size(), size_t(1));
             CHECK_EQ(tilde_dirs[0], std::string("/tmp"));
             ConfigManager adder((planted_dir / "absent2.json").string());
-            CHECK_EQ(adder.add_search_directory("~"), false);
+            assert(!adder.add_search_directory("~"));
             unsetenv("HOME");
             const ConfigManager no_home(cfg.string());
             CHECK_EQ(no_home.get_search_directories().size(), size_t(1));
@@ -312,11 +314,14 @@ int main() {
 
         ConfigManager unusable(ConfigManager::resolve_config_path());
         CHECK_EQ(unusable.get_result_count() == 13, false);
-        CHECK_EQ(unusable.save(), false);
+        assert(!unusable.save());
 
         // Unwritable path: save fails and does not fall back to cwd.
         ConfigManager unwritable((planted_dir / "missing_dir" / "x.json").string());
-        CHECK_EQ(unwritable.save(), false);
+        const nexus::utils::Status unwritable_status = unwritable.save();
+        assert(!unwritable_status);
+        assert(unwritable_status.message().find("missing_dir") != std::string::npos);
+        assert(unwritable_status.message().find("No such file or directory") != std::string::npos);
 
         for (const auto& p : planted) CHECK_EQ(fs::file_size(p), payload.size());
         CHECK_EQ(fs::exists("/tmp/nexus"), tmp_existed);
@@ -327,6 +332,59 @@ int main() {
         fs::current_path(saved_cwd);
         fs::remove_all(planted_dir);
         fs::remove_all(abs_home);
+    }
+
+    // Failures say why: the path and the system's reason, or what was wrong with the input.
+    {
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::temp_directory_path() / ("nexus_config_status_" + std::to_string(getpid()));
+        fs::create_directories(dir);
+        auto has = [](const nexus::utils::Status& s, const std::string& text) {
+            return s.message().find(text) != std::string::npos;
+        };
+
+        ConfigManager manager((dir / "config.json").string());
+        const auto missing = manager.load((dir / "absent.json").string());
+        assert(!missing && has(missing, (dir / "absent.json").string()) && has(missing, "No such file or directory"));
+
+        std::ofstream(dir / "bad.json") << "{ not json";
+        const auto malformed = manager.load((dir / "bad.json").string());
+        assert(!malformed && has(malformed, "bad.json") && has(malformed, ".malformed"));
+
+        assert(!manager.load((dir / "config.json").string()));  // not written yet; switches the save path back
+        const auto no_dir = manager.add_search_directory((dir / "nope").string());
+        assert(!no_dir && has(no_dir, "no such directory"));
+        std::ofstream(dir / "a_file") << "x";
+        const auto not_dir = manager.add_search_directory((dir / "a_file").string());
+        assert(!not_dir && has(not_dir, "not a directory"));
+        const auto not_listed = manager.remove_search_directory((dir / "never_added").string());
+        assert(!not_listed && has(not_listed, "never_added"));
+        const auto bad_shortcut = manager.set_shortcut("not a shortcut");
+        assert(!bad_shortcut && has(bad_shortcut, "not a shortcut"));
+        assert(manager.add_search_directory(dir.string()));  // writes config.json in the temp dir
+
+        // A directory that can't be checked says so, instead of claiming it doesn't exist. Root reads anything.
+        if (geteuid() != 0) {
+            fs::create_directories(dir / "locked" / "inner");
+            fs::permissions(dir / "locked", fs::perms::none);
+            const auto denied = manager.add_search_directory((dir / "locked" / "inner").string());
+            fs::permissions(dir / "locked", fs::perms::owner_all);
+            assert(!denied && has(denied, "inner") && has(denied, "Permission denied"));
+        }
+
+        // A soft file-size limit makes the write fail late, inside close(), the way a full disk does.
+        signal(SIGXFSZ, SIG_IGN);
+        rlimit old_limit{};
+        getrlimit(RLIMIT_FSIZE, &old_limit);
+        rlimit tiny = old_limit;
+        tiny.rlim_cur = 16;
+        setrlimit(RLIMIT_FSIZE, &tiny);
+        const auto too_big = manager.save();
+        setrlimit(RLIMIT_FSIZE, &old_limit);
+        signal(SIGXFSZ, SIG_DFL);
+        assert(!too_big && has(too_big, (dir / "config.json").string()) && has(too_big, "File too large"));
+
+        fs::remove_all(dir);
     }
 
     // Cleanup

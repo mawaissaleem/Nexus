@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <unistd.h>
@@ -103,11 +104,20 @@ int main() {
     r = run({"alias", "remove", "gh"}, config, aliases);
     assert(r.rc == 0 && has(r.out, "Removed alias: gh"));
     r = run({"alias", "remove", "gh"}, config, aliases);
-    assert(r.rc == 1 && has(r.err, "Alias not found: gh") && r.out.empty());
+    assert(r.rc == 1 && has(r.err, "Failed: there is no alias named \"gh\"") && r.out.empty());
     for (const auto& usage :
          std::vector<std::vector<std::string>>{{"alias"}, {"alias", "add", "x"}, {"alias", "bogus"}}) {
         r = run(usage, config, aliases);
         assert(r.rc == 0 && has(r.out, "Usage: nexus alias"));
+    }
+
+    // A save that fails says why on stderr and exits non-zero.
+    {
+        const std::string blocked = (root / "missing_dir" / "aliases.json").string();
+        nexus::core::AliasManager unwritable(blocked);
+        r = run({"alias", "add", "x", "https://x.example"}, config, unwritable);
+        assert(r.rc == 1 && has(r.err, "Failed: can't write " + blocked) && has(r.err, "No such file or directory"));
+        assert(r.out.empty());
     }
 
     // dir add / list / remove
@@ -117,11 +127,11 @@ int main() {
     r = run({"dir", "list"}, config, aliases);
     assert(r.rc == 0 && has(r.out, "Configured search directories (") && has(r.out, dir1));
     r = run({"dir", "add", (root / "missing").string()}, config, aliases);
-    assert(r.rc == 1 && has(r.err, "directory does not exist"));
+    assert(r.rc == 1 && has(r.err, "Failed: can't add ") && has(r.err, "no such directory"));
     r = run({"dir", "remove", dir1}, config, aliases);
     assert(r.rc == 0 && has(r.out, "Removed search directory: " + dir1));
     r = run({"dir", "remove", dir1}, config, aliases);
-    assert(r.rc == 1 && has(r.err, "Directory not found in search list"));
+    assert(r.rc == 1 && has(r.err, "is not in the search directory list"));
     for (const auto& usage : std::vector<std::vector<std::string>>{{"dir"}, {"dir", "add"}, {"dir", "bogus"}}) {
         r = run(usage, config, aliases);
         assert(r.rc == 0 && has(r.out, "Usage: nexus dir"));
@@ -164,6 +174,11 @@ int main() {
                        return true;
                    }) == 0 &&
            notified == 1);
+
+    // A database file that isn't SQLite: history clear fails, says why on stderr and exits non-zero.
+    std::ofstream(data_home / "nexus" / "nexus.db", std::ios::trunc) << std::string(4096, 'x');
+    r = run({"history", "clear"}, config, aliases);
+    assert(r.rc == 1 && has(r.err, "Failed: ") && has(r.err, "not a database") && r.out.empty());
 
     fs::remove_all(root);
     return 0;

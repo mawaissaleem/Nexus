@@ -23,7 +23,7 @@ public:
     std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
 
     // Records usage and query history (when history is on) for the launched application.
-    bool on_executed(const core::SearchResult& result) override;
+    utils::Status on_executed(const core::SearchResult& result) override;
 
 private:
     std::shared_ptr<index::AppIndexer> indexer_;

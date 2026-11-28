@@ -808,10 +808,15 @@ void SettingsDialog::on_filter_aliases(const QString& text) {
     }
 }
 
+void SettingsDialog::warn_failed(const QString& title, const utils::Status& status) {
+    QMessageBox::warning(this, title, QString::fromStdString(status.message()));
+}
+
 void SettingsDialog::on_add_alias() {
     AliasEditDialog dlg(palette_, this);
     if (dlg.exec() == QDialog::Accepted) {
-        aliases_.add_alias(dlg.name().toStdString(), dlg.target().toStdString());
+        const utils::Status status = aliases_.add_alias(dlg.name().toStdString(), dlg.target().toStdString());
+        if (!status) warn_failed("Failed to Add Alias", status);
         reload_aliases();
         emit settings_changed();
     }
@@ -827,9 +832,11 @@ void SettingsDialog::on_edit_alias() {
     AliasEditDialog dlg(palette_, this, current_name, current_target);
     if (dlg.exec() == QDialog::Accepted) {
         if (dlg.name() != current_name) {
-            aliases_.remove_alias(current_name.toStdString());
+            // add_alias below rewrites the whole file, so its Status covers a failed save here too.
+            static_cast<void>(aliases_.remove_alias(current_name.toStdString()));
         }
-        aliases_.add_alias(dlg.name().toStdString(), dlg.target().toStdString());
+        const utils::Status status = aliases_.add_alias(dlg.name().toStdString(), dlg.target().toStdString());
+        if (!status) warn_failed("Failed to Save Alias", status);
         reload_aliases();
         emit settings_changed();
     }
@@ -844,7 +851,8 @@ void SettingsDialog::on_delete_alias() {
                                      QString("Are you sure you want to remove alias '%1'?").arg(name),
                                      QMessageBox::Yes | QMessageBox::No);
     if (res == QMessageBox::Yes) {
-        aliases_.remove_alias(name.toStdString());
+        const utils::Status status = aliases_.remove_alias(name.toStdString());
+        if (!status) warn_failed("Failed to Remove Alias", status);
         reload_aliases();
         emit settings_changed();
     }
@@ -868,12 +876,13 @@ void SettingsDialog::reload_directories() {
 void SettingsDialog::on_add_directory() {
     QString dir = QFileDialog::getExistingDirectory(this, "Choose Search Directory", QDir::homePath());
     if (!dir.isEmpty()) {
-        if (config_.add_search_directory(dir.toStdString())) {
+        const utils::Status status = config_.add_search_directory(dir.toStdString());
+        if (status) {
             reload_directories();
             if (hooks_.directories_changed) hooks_.directories_changed();
             emit settings_changed();
         } else {
-            QMessageBox::warning(this, "Failed to Add Directory", "Directory could not be added or already exists.");
+            warn_failed("Failed to Add Directory", status);
         }
     }
 }
@@ -886,7 +895,8 @@ void SettingsDialog::on_remove_directory() {
     auto res = QMessageBox::question(this, "Confirm Removal", QString("Remove '%1' from search paths?").arg(path),
                                      QMessageBox::Yes | QMessageBox::No);
     if (res == QMessageBox::Yes) {
-        config_.remove_search_directory(path.toStdString());
+        const utils::Status status = config_.remove_search_directory(path.toStdString());
+        if (!status) warn_failed("Failed to Remove Directory", status);
         reload_directories();
         if (hooks_.directories_changed) hooks_.directories_changed();
         emit settings_changed();
@@ -934,7 +944,8 @@ void SettingsDialog::on_remove_exclusion() {
 void SettingsDialog::on_open_directory() {
     auto* item = dir_list_->currentItem();
     if (!item) return;
-    core::Executor::open_path_or_url(item->text().toStdString());
+    const utils::Status status = core::Executor::open_path_or_url(item->text().toStdString());
+    if (!status) warn_failed("Failed to Open Directory", status);
 }
 
 void SettingsDialog::on_ctrl_np_toggled(bool checked) {
@@ -955,9 +966,10 @@ void SettingsDialog::on_history_toggled(bool checked) {
 
 void SettingsDialog::on_apply_shortcut() {
     const std::string text = shortcut_edit_->text().toStdString();
-    if (!hooks_.apply_shortcut || !hooks_.apply_shortcut(text)) {
-        QMessageBox::warning(this, "Invalid shortcut",
-                             "Use modifiers plus a key, for example Alt+Space or Ctrl+Shift+K.");
+    if (!hooks_.apply_shortcut) return;
+    const utils::Status status = hooks_.apply_shortcut(text);
+    if (!status) {
+        warn_failed("Shortcut Not Applied", status);
         return;
     }
     emit settings_changed();

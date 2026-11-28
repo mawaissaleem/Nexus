@@ -35,6 +35,7 @@ set(TEST_TARGETS
     test_plugin_web
     test_plugin_system
     test_run_action
+    test_settings_dialog
     test_launcher_copy
     test_clipboard_provider
     test_ipc
@@ -100,6 +101,13 @@ set_tests_properties(test_launcher_copy PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=o
 target_sources(test_run_action PRIVATE ${CMAKE_SOURCE_DIR}/src/ui/copy_result.cpp ${CMAKE_SOURCE_DIR}/src/ui/run_action.cpp)
 target_link_libraries(test_run_action PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 set_tests_properties(test_run_action PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)
+
+# The headers are listed so AUTOMOC generates their signal code.
+target_sources(test_settings_dialog PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/ui/settings_dialog.cpp ${CMAKE_SOURCE_DIR}/src/ui/theme.cpp
+    ${CMAKE_SOURCE_DIR}/include/nexus/ui/settings_dialog.hpp ${CMAKE_SOURCE_DIR}/include/nexus/ui/theme.hpp)
+target_link_libraries(test_settings_dialog PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+set_tests_properties(test_settings_dialog PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)
 
 # Local-socket test: uses a per-process socket name, never the running launcher's.
 target_sources(test_ipc PRIVATE ${CMAKE_SOURCE_DIR}/src/ui/ipc.cpp)

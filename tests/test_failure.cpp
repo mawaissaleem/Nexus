@@ -32,8 +32,11 @@ static void corrupt_database() {
     const fs::path db_path = root / "corrupt.db";
     write_file(db_path, std::string(4096, 'x'));
     index::Database db(db_path.string());
-    assert(!db.open());
+    const utils::Status opened = db.open();
+    assert(!opened);
     assert(!db.is_open());
+    assert(opened.message().find("corrupt.db") != std::string::npos);
+    assert(opened.message().find("not a database") != std::string::npos);
     assert(db.load_applications().empty());
     assert(db.find_files("x").empty());
     assert(!db.record_usage("app", "q"));

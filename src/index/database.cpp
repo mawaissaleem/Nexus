@@ -300,9 +300,9 @@ void set_database_migrations_for_testing(Database& db, std::vector<Migration> mi
 }
 }  // namespace internal
 
-bool Database::open() {
+utils::Status Database::open() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (db_) return true;
+    if (db_) return {};
 
     auto try_open_path = [this](const std::string& path) -> bool {
         if (path != ":memory:") {
@@ -326,16 +326,19 @@ bool Database::open() {
         return false;
     };
 
-    auto finish_open = [this]() -> bool {
+    auto finish_open = [this]() -> utils::Status {
         if (!init_schema()) {
-            if (db_) {
-                sqlite3_close(db_);
-                db_ = nullptr;
-            }
-            return false;
+            // Newer-schema and similar refusals are not sqlite errors, so errmsg has nothing useful to say.
+            std::string reason = sqlite3_errmsg(db_);
+            if (sqlite3_errcode(db_) == SQLITE_OK)
+                reason = "its schema is newer than this Nexus or could not be upgraded";
+            const std::string path = db_path_;
+            sqlite3_close(db_);
+            db_ = nullptr;
+            return utils::Status::error("can't use the database " + path + ": " + reason);
         }
         sqlite3_busy_timeout(db_, 250);
-        return true;
+        return {};
     };
 
     if (try_open_path(db_path_)) {
@@ -351,7 +354,7 @@ bool Database::open() {
     }
 
     NEXUS_LOG_ERROR("Failed to initialize any SQLite database backend.");
-    return false;
+    return utils::Status::error("can't open any SQLite database, not even one in memory");
 }
 
 void Database::close() {
@@ -677,25 +680,29 @@ bool Database::record_query(const std::string& query_text, const std::string& se
 
 namespace nexus::index {
 
-std::optional<Database::ClearedHistory> Database::clear_history() {
+utils::Status Database::clear_history(ClearedHistory& out) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!db_) return std::nullopt;
+    if (!db_) return utils::Status::error("can't clear history: the database is not open");
 
-    if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) return std::nullopt;
+    if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        return utils::Status::error("can't clear history in " + db_path_ + ": " + sqlite3_errmsg(db_));
+    }
     ClearedHistory cleared;
     bool ok = sqlite3_exec(db_, "DELETE FROM usage_events;", nullptr, nullptr, nullptr) == SQLITE_OK;
     if (ok) cleared.usage_events = sqlite3_changes(db_);
     ok = ok && sqlite3_exec(db_, "DELETE FROM query_history;", nullptr, nullptr, nullptr) == SQLITE_OK;
     if (ok) cleared.queries = sqlite3_changes(db_);
     if (!ok || sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        const std::string reason = sqlite3_errmsg(db_);
         sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-        return std::nullopt;
+        return utils::Status::error("can't clear history in " + db_path_ + ": " + reason);
     }
     // Rewrite the file so no free page (from this or any earlier delete) keeps old query text.
     cleared.file_compacted = sqlite3_exec(db_, "VACUUM;", nullptr, nullptr, nullptr) == SQLITE_OK;
     if (!cleared.file_compacted)
         NEXUS_LOG_WARN(std::string("VACUUM after history clear failed: ") + sqlite3_errmsg(db_));
-    return cleared;
+    out = cleared;
+    return {};
 }
 
 }  // namespace nexus::index

@@ -111,7 +111,8 @@ static double elapsed_ms(Clock::time_point t0) {
 static void test_basic() {
     auto p = make_plugin("basic");
     assert(p->provider->id() == "basic" && p->provider->prefixes() == std::vector<std::string>{""});
-    assert(!p->provider->on_executed({}));  // not started yet
+    const auto not_started = p->provider->on_executed({});
+    assert(!not_started && not_started.message().find("not running") != std::string::npos);
     auto r = p->search("a");
     assert(r.size() == 1 && r[0].id == "r1" && r[0].title == "T1" && r[0].provider_id == "basic");
     r = p->search("b");
@@ -258,7 +259,7 @@ static void test_on_executed_while_search_waits() {
     std::thread t([&] {
         std::this_thread::sleep_for(100ms);
         const auto t1 = Clock::now();
-        sent = p->provider->on_executed(res);
+        sent = static_cast<bool>(p->provider->on_executed(res));
         executed_ms = elapsed_ms(t1);
     });
     const auto t0 = Clock::now();
@@ -284,7 +285,8 @@ static void test_failed_executed_write_restarts() {
     assert(p->search("slow", cancelled).empty());  // the plugin now sleeps 0.3 s without reading stdin
     core::SearchResult res;
     res.id = std::string(100000, 'z');  // more than a pipe holds
-    assert(!p->provider->on_executed(res));
+    const auto unsent = p->provider->on_executed(res);
+    assert(!unsent && unsent.message().find("not reading its input") != std::string::npos);
     std::this_thread::sleep_for(500ms);  // the plugin drains the pipe, waits for the line's end
     const auto t0 = Clock::now();
     assert(p->search("b").empty() && p->dead() && elapsed_ms(t0) < 1000);

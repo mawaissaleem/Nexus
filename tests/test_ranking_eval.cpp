@@ -68,7 +68,7 @@ static std::vector<core::SearchResult> run(const Case& c, core::AliasManager& al
     engine.register_provider(std::make_shared<providers::ShellProvider>());
     auto results = engine.search(core::Query(c.query));
 
-    for (const auto& [n, t] : c.aliases) aliases.remove_alias(n);
+    for (const auto& [n, t] : c.aliases) assert(aliases.remove_alias(n));
     return results;
 }
 

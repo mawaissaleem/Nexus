@@ -1,5 +1,6 @@
 #pragma once
 
+#include "nexus/utils/status.hpp"
 #include "nexus/utils/theme.hpp"
 #include <string>
 #include <vector>
@@ -14,12 +15,14 @@ public:
     explicit ConfigManager(const std::string& config_path);
     static std::string resolve_config_path();
 
-    bool load(const std::string& custom_path = "");
-    bool save();
+    // Each Status says why it failed (missing or unwritable file, bad directory, ...). The setters that return
+    // void save too, but log a failure instead of reporting it.
+    utils::Status load(const std::string& custom_path = "");
+    utils::Status save();
 
     std::vector<std::string> get_search_directories() const;
-    bool add_search_directory(const std::string& path);
-    bool remove_search_directory(const std::string& path);
+    utils::Status add_search_directory(const std::string& path);
+    utils::Status remove_search_directory(const std::string& path);
 
     // Names (not paths) the file indexer skips. Edited by hand in config.json ("file_exclusions").
     std::vector<std::string> get_file_exclusions() const;
@@ -56,8 +59,8 @@ public:
     void set_theme(utils::ThemeMode mode);
 
     std::string get_shortcut() const;
-    // Returns false (and changes nothing) if `shortcut` does not parse.
-    bool set_shortcut(const std::string& shortcut);
+    // Fails (and changes nothing) if `shortcut` does not parse.
+    utils::Status set_shortcut(const std::string& shortcut);
 
     std::string get_config_path() const { return config_file_path_; }
 

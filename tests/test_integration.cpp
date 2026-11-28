@@ -66,10 +66,10 @@ int main() {
 
     fs::create_directories(root / "config/nexus");
     core::ConfigManager config((root / "config/nexus/config.json").string());
-    for (const auto& dir : config.get_search_directories()) config.remove_search_directory(dir);
-    config.add_search_directory((root / "files").string());
+    for (const auto& dir : config.get_search_directories()) assert(config.remove_search_directory(dir));
+    assert(config.add_search_directory((root / "files").string()));
     core::AliasManager aliases((root / "config/nexus/aliases.json").string());
-    aliases.add_alias("zed", "nexus-fake-app a|b");
+    assert(aliases.add_alias("zed", "nexus-fake-app a|b"));
 
     app::Services services = app::make_services(config, aliases, {});
     const std::atomic<bool> no_cancel{false};

@@ -58,13 +58,33 @@ int main() {
 
     // launch_shell_command with harmless command 'true' should succeed
     {
-        bool ok = Executor::launch_shell_command("true");
+        const bool ok = static_cast<bool>(Executor::launch_shell_command("true"));
         assert(ok);
     }
 
     assert(Executor::launch_desktop_exec("/bin/true"));
     assert(!Executor::launch_desktop_exec("app \"unterminated"));
     assert(!Executor::launch_desktop_exec("/nonexistent/nexus-no-such-binary"));
+
+    // Failures say why: the program that could not start and the system's reason.
+    {
+        const nexus::utils::Status missing = Executor::launch_desktop_exec("/nonexistent/nexus-no-such-binary --x");
+        assert(!missing);
+        assert(missing.message().find("/nonexistent/nexus-no-such-binary") != std::string::npos);
+        assert(missing.message().find("No such file or directory") != std::string::npos);
+
+        const nexus::utils::Status malformed = Executor::launch_desktop_exec("app \"unterminated");
+        assert(malformed.message().find("malformed") != std::string::npos);
+        assert(Executor::launch_desktop_exec("").message().find("empty") != std::string::npos);
+
+        const nexus::utils::Status empty_shell = Executor::launch_shell_command("");
+        assert(!empty_shell);
+        assert(empty_shell.message().find("empty") != std::string::npos);
+
+        const nexus::utils::Status nothing = Executor::open_path_or_url("");
+        assert(!nothing);
+        assert(nothing.message().find("nothing to open") != std::string::npos);
+    }
 
     // launch_desktop_exec runs argv directly: a fake program records what it received.
     {
@@ -84,7 +104,7 @@ int main() {
 
         auto run = [&](const char* exec, bool term) {
             std::filesystem::remove(out);
-            bool ok = Executor::launch_desktop_exec(exec, term);
+            const bool ok = static_cast<bool>(Executor::launch_desktop_exec(exec, term));
             for (int i = 0; i < 250 && !std::filesystem::exists(out); ++i)
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
             std::string got;
@@ -126,9 +146,9 @@ int main() {
             std::filesystem::remove(out);
             bool ok = false;
             if (via_shell) {
-                ok = Executor::launch_shell_command("'" + script.string() + "'");
+                ok = static_cast<bool>(Executor::launch_shell_command("'" + script.string() + "'"));
             } else {
-                ok = Executor::launch_desktop_exec(script.string());
+                ok = static_cast<bool>(Executor::launch_desktop_exec(script.string()));
             }
             CHECK_EQ(ok, true);
             for (int i = 0; i < 250 && !std::filesystem::exists(out); ++i) {
@@ -182,7 +202,7 @@ int main() {
         const char* current_path = std::getenv("PATH");
         const std::string saved_path = current_path ? current_path : "";
         setenv("PATH", fake_bin.c_str(), 1);
-        bool ok = Executor::open_path_or_url("https://example.invalid");
+        const bool ok = static_cast<bool>(Executor::open_path_or_url("https://example.invalid"));
         if (current_path) {
             setenv("PATH", saved_path.c_str(), 1);
         } else {
@@ -306,7 +326,7 @@ int main() {
             std::vector<std::string> reasons;
         };
         auto run = [](const char* command, Seen& seen, bool expect_report) {
-            const bool started =
+            const nexus::utils::Status started =
                 Executor::launch_shell_command(command, [&seen](const std::string&, const std::string& reason) {
                     std::lock_guard<std::mutex> lock(seen.m);
                     seen.reasons.push_back(reason);

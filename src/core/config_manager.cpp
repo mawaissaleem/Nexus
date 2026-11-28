@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cerrno>
 #include <cstdlib>
 #include <charconv>
 
@@ -22,7 +23,7 @@ bool valid_exclusion(const std::string& name) {
 
 ConfigManager::ConfigManager(const std::string& config_path) : config_file_path_(config_path) {
     set_defaults();
-    load();
+    static_cast<void>(load());  // a missing file means defaults; a malformed one is logged inside load()
 }
 
 std::string ConfigManager::resolve_config_path() {
@@ -81,7 +82,7 @@ void ConfigManager::set_defaults() {
     }
 }
 
-bool ConfigManager::load(const std::string& custom_path) {
+utils::Status ConfigManager::load(const std::string& custom_path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!custom_path.empty()) {
         config_file_path_ = custom_path;
@@ -91,7 +92,7 @@ bool ConfigManager::load(const std::string& custom_path) {
 
     std::ifstream file(config_file_path_);
     if (!file.is_open()) {
-        return false;
+        return utils::Status::from_errno("can't read " + config_file_path_, errno);
     }
     std::stringstream buf;
     buf << file.rdbuf();
@@ -104,7 +105,8 @@ bool ConfigManager::load(const std::string& custom_path) {
         const std::string kept_at = backup.empty() ? "nowhere (backup failed)" : backup;
         NEXUS_LOG_ERROR("Malformed config " + config_file_path_ + ": " + reason +
                         "; using defaults, original kept at " + kept_at);
-        return false;
+        return utils::Status::error("can't use " + config_file_path_ + ": " + reason +
+                                    " (using defaults, the original is kept at " + kept_at + ")");
     }
 
     if (const auto* v = root.find("enable_ctrl_np_navigation"); v && v->is_bool()) {
@@ -164,19 +166,20 @@ bool ConfigManager::load(const std::string& custom_path) {
         if (!dirs.empty()) search_directories_ = std::move(dirs);
     }
 
-    return true;
+    return {};
 }
 
-bool ConfigManager::save() {
+utils::Status ConfigManager::save() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (config_file_path_.empty()) {
         NEXUS_LOG_ERROR("No config directory; settings not saved");
-        return false;
+        return utils::Status::error("can't save settings: there is no usable config directory");
     }
     std::ofstream file(config_file_path_);
     if (!file.is_open()) {
-        NEXUS_LOG_ERROR("Cannot write " + config_file_path_);
-        return false;
+        const utils::Status status = utils::Status::from_errno("can't write " + config_file_path_, errno);
+        NEXUS_LOG_ERROR(status.message());
+        return status;
     }
 
     file << "{\n";
@@ -208,7 +211,14 @@ bool ConfigManager::save() {
     file << "  ]\n";
     file << "}\n";
 
-    return true;
+    // Close now so a write that failed late (disk full) is caught here and not lost in the destructor.
+    file.close();
+    if (file.fail()) {
+        const utils::Status status = utils::Status::from_errno("can't write " + config_file_path_, errno);
+        NEXUS_LOG_ERROR(status.message());
+        return status;
+    }
+    return {};
 }
 
 std::vector<std::string> ConfigManager::get_search_directories() const {
@@ -216,15 +226,19 @@ std::vector<std::string> ConfigManager::get_search_directories() const {
     return search_directories_;
 }
 
-bool ConfigManager::add_search_directory(const std::string& path) {
+utils::Status ConfigManager::add_search_directory(const std::string& path) {
     const std::optional<std::string> home_expanded = utils::expand_home(path);
-    if (!home_expanded) return false;
+    if (!home_expanded) return utils::Status::error("can't add " + path + ": HOME is unset or not absolute");
 
     const std::string& expanded = *home_expanded;
     std::error_code ec;
-    if (!std::filesystem::exists(expanded, ec) || !std::filesystem::is_directory(expanded, ec)) {
-        return false;
-    }
+    // `exists` is also false when the path can't be checked (EACCES); then `ec` holds the real reason.
+    const bool found = std::filesystem::exists(expanded, ec);
+    if (ec) return utils::Status::error("can't add " + path + ": " + ec.message());
+    if (!found) return utils::Status::error("can't add " + path + ": no such directory");
+    const bool is_dir = std::filesystem::is_directory(expanded, ec);
+    if (ec) return utils::Status::error("can't add " + path + ": " + ec.message());
+    if (!is_dir) return utils::Status::error("can't add " + path + ": not a directory");
 
     std::string canonical = std::filesystem::canonical(expanded, ec).string();
     if (canonical.empty()) canonical = expanded;
@@ -238,7 +252,7 @@ bool ConfigManager::add_search_directory(const std::string& path) {
     return save();
 }
 
-bool ConfigManager::remove_search_directory(const std::string& path) {
+utils::Status ConfigManager::remove_search_directory(const std::string& path) {
     const std::string expanded = utils::expand_home(path).value_or(path);
     std::error_code ec;
     std::string canonical = std::filesystem::canonical(expanded, ec).string();
@@ -251,7 +265,7 @@ bool ConfigManager::remove_search_directory(const std::string& path) {
         if (it != search_directories_.end()) {
             search_directories_.erase(it, search_directories_.end());
         } else {
-            return false;
+            return utils::Status::error(path + " is not in the search directory list");
         }
     }
     return save();
@@ -273,7 +287,7 @@ void ConfigManager::set_file_exclusions(const std::vector<std::string>& names) {
             }
         }
     }
-    save();
+    static_cast<void>(save());  // these setters can't report; save() logs the failure
 }
 
 int ConfigManager::get_result_count() const {
@@ -291,7 +305,7 @@ void ConfigManager::set_result_count(int count) {
         std::lock_guard<std::mutex> lock(mutex_);
         result_count_ = std::clamp(count, kMinResultCount, kMaxResultCount);
     }
-    save();
+    static_cast<void>(save());  // these setters can't report; save() logs the failure
 }
 
 bool ConfigManager::is_provider_enabled(const std::string& provider_id) const {
@@ -306,7 +320,7 @@ void ConfigManager::set_provider_enabled(const std::string& provider_id, bool en
         if (enabled && it != disabled_providers_.end()) disabled_providers_.erase(it);
         if (!enabled && it == disabled_providers_.end()) disabled_providers_.push_back(provider_id);
     }
-    save();
+    static_cast<void>(save());  // these setters can't report; save() logs the failure
 }
 
 bool ConfigManager::is_ctrl_np_navigation_enabled() const {
@@ -319,7 +333,7 @@ void ConfigManager::set_ctrl_np_navigation_enabled(bool enabled) {
         std::lock_guard<std::mutex> lock(mutex_);
         enable_ctrl_np_navigation_ = enabled;
     }
-    save();
+    static_cast<void>(save());  // these setters can't report; save() logs the failure
 }
 
 bool ConfigManager::is_history_enabled() const {
@@ -332,7 +346,7 @@ void ConfigManager::set_history_enabled(bool enabled) {
         std::lock_guard<std::mutex> lock(mutex_);
         history_enabled_ = enabled;
     }
-    save();
+    static_cast<void>(save());  // these setters can't report; save() logs the failure
 }
 
 utils::ThemeMode ConfigManager::get_theme() const {
@@ -345,7 +359,7 @@ void ConfigManager::set_theme(utils::ThemeMode mode) {
         std::lock_guard<std::mutex> lock(mutex_);
         theme_ = mode;
     }
-    save();
+    static_cast<void>(save());  // these setters can't report; save() logs the failure
 }
 
 std::string ConfigManager::get_shortcut() const {
@@ -353,8 +367,11 @@ std::string ConfigManager::get_shortcut() const {
     return shortcut_;
 }
 
-bool ConfigManager::set_shortcut(const std::string& shortcut) {
-    if (!utils::parse_shortcut(shortcut)) return false;
+utils::Status ConfigManager::set_shortcut(const std::string& shortcut) {
+    if (!utils::parse_shortcut(shortcut)) {
+        const std::string hint = "use modifiers plus a key, like Alt+Space or Ctrl+Shift+K";
+        return utils::Status::error("\"" + shortcut + "\" is not a valid shortcut: " + hint);
+    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         shortcut_ = shortcut;

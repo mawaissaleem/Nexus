@@ -175,8 +175,8 @@ int main(int argc, char** argv) {
     make_tree(tree, n_files);
     core::ConfigManager cfg(core::ConfigManager::resolve_config_path());
     core::AliasManager aliases(core::AliasManager::resolve_aliases_path());
-    for (const auto& d : cfg.get_search_directories()) cfg.remove_search_directory(d);
-    cfg.add_search_directory(tree.string());
+    for (const auto& d : cfg.get_search_directories()) assert(cfg.remove_search_directory(d));
+    assert(cfg.add_search_directory(tree.string()));
 
     const std::string db_path = (root / "nexus.db").string();
     std::cout << "bench_nexus: apps=" << n_apps << " files=" << n_files << " iters=" << iters << "\n"
@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
     // Startup (core part of main(), no Qt): Database open + AppIndexer::initialize + provider registration.
     auto build_engine = [&](std::shared_ptr<index::Database>& db, std::shared_ptr<index::AppIndexer>& idx) {
         db = std::make_shared<index::Database>(db_path);
-        db->open();
+        assert(db->open());
         idx = std::make_shared<index::AppIndexer>(db);
         idx->initialize();
         auto eng = std::make_shared<core::SearchEngine>();

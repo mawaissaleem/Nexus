@@ -19,7 +19,8 @@ using ConfirmFn = std::function<bool(const core::SearchResult&)>;
 bool ask_yes_no(const core::SearchResult& res);
 
 // Runs a result: asks `confirm` first when res.confirm is set, then dispatches and copies.
-// Returns false (and does nothing) when the user said no. `on_shell_failure` is passed on to the dispatcher.
+// Returns false (and does nothing) when the user said no. `on_shell_failure` is passed on to the dispatcher, and
+// also hears (title, reason) when the action itself could not start, so the user sees why nothing happened.
 bool run_action(const core::SearchResult& res, const std::vector<core::SearchProviderPtr>& providers,
                 const ConfirmFn& confirm, core::ShellFailureFn on_shell_failure = {});
 

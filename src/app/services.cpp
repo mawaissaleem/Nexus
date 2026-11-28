@@ -18,8 +18,9 @@ Services make_services(core::ConfigManager& config, core::AliasManager& aliases,
                        const std::vector<std::filesystem::path>& plugin_dirs) {
     Services s;
     s.db = std::make_shared<index::Database>();
-    if (!s.db->open()) {
-        NEXUS_LOG_WARN("Could not open local SQLite database. Running in-memory.");
+    const utils::Status opened = s.db->open();
+    if (!opened) {
+        NEXUS_LOG_WARN(opened.message() + ". Running without a database.");
     }
     s.app_indexer = std::make_shared<index::AppIndexer>(s.db);
     s.app_indexer->initialize();

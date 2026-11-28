@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <cerrno>
 #include <cstdlib>
 #include <algorithm>
 
@@ -33,7 +34,7 @@ AliasType AliasManager::detect_type(std::string_view target) {
 
 AliasManager::AliasManager(const std::string& aliases_path) : file_path_(aliases_path) {
     set_defaults();
-    load();
+    static_cast<void>(load());  // a missing file means built-in aliases; a malformed one is logged inside load()
 }
 
 std::string AliasManager::resolve_aliases_path() {
@@ -74,7 +75,7 @@ void AliasManager::set_defaults() {
     }
 }
 
-bool AliasManager::load(const std::string& custom_path) {
+utils::Status AliasManager::load(const std::string& custom_path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!custom_path.empty()) {
         file_path_ = custom_path;
@@ -82,7 +83,7 @@ bool AliasManager::load(const std::string& custom_path) {
 
     std::ifstream file(file_path_);
     if (!file.is_open()) {
-        return false;
+        return utils::Status::from_errno("can't read " + file_path_, errno);
     }
 
     std::stringstream buf;
@@ -95,7 +96,8 @@ bool AliasManager::load(const std::string& custom_path) {
         const std::string kept_at = backup.empty() ? "nowhere (backup failed)" : backup;
         NEXUS_LOG_ERROR("Malformed aliases file " + file_path_ + ": " + reason + "; using defaults, original kept at " +
                         kept_at);
-        return false;
+        return utils::Status::error("can't use " + file_path_ + ": " + reason +
+                                    " (using built-in aliases, the original is kept at " + kept_at + ")");
     }
 
     std::vector<AliasEntry> loaded;
@@ -114,19 +116,20 @@ bool AliasManager::load(const std::string& custom_path) {
     if (!loaded.empty()) {
         aliases_ = std::move(loaded);
     }
-    return true;
+    return {};
 }
 
-bool AliasManager::save() {
+utils::Status AliasManager::save() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (file_path_.empty()) {
         NEXUS_LOG_ERROR("No config directory; aliases not saved");
-        return false;
+        return utils::Status::error("can't save aliases: there is no usable config directory");
     }
     std::ofstream file(file_path_);
     if (!file.is_open()) {
-        NEXUS_LOG_ERROR("Cannot write " + file_path_);
-        return false;
+        const utils::Status status = utils::Status::from_errno("can't write " + file_path_, errno);
+        NEXUS_LOG_ERROR(status.message());
+        return status;
     }
 
     file << "[\n";
@@ -142,7 +145,14 @@ bool AliasManager::save() {
     }
     file << "]\n";
 
-    return true;
+    // Close now so a write that failed late (disk full) is caught here and not lost in the destructor.
+    file.close();
+    if (file.fail()) {
+        const utils::Status status = utils::Status::from_errno("can't write " + file_path_, errno);
+        NEXUS_LOG_ERROR(status.message());
+        return status;
+    }
+    return {};
 }
 
 std::vector<AliasEntry> AliasManager::get_aliases() const {
@@ -150,8 +160,8 @@ std::vector<AliasEntry> AliasManager::get_aliases() const {
     return aliases_;
 }
 
-bool AliasManager::add_alias(const std::string& name, const std::string& target) {
-    if (name.empty() || target.empty()) return false;
+utils::Status AliasManager::add_alias(const std::string& name, const std::string& target) {
+    if (name.empty() || target.empty()) return utils::Status::error("an alias needs both a name and a target");
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -172,14 +182,14 @@ bool AliasManager::add_alias(const std::string& name, const std::string& target)
     return save();
 }
 
-bool AliasManager::remove_alias(const std::string& name) {
+utils::Status AliasManager::remove_alias(const std::string& name) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = std::remove_if(aliases_.begin(), aliases_.end(), [&](const AliasEntry& a) { return a.name == name; });
         if (it != aliases_.end()) {
             aliases_.erase(it, aliases_.end());
         } else {
-            return false;
+            return utils::Status::error("there is no alias named \"" + name + "\"");
         }
     }
     return save();

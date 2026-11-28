@@ -71,15 +71,17 @@ void print_results(std::ostream& out, const std::vector<core::SearchResult>& res
 int run_dir(const Args& args, core::ConfigManager& config, std::ostream& out, std::ostream& err) {
     const std::string sub = args.size() >= 2 ? args[1] : "";
     if (sub == "add" && args.size() >= 3) {
-        if (!config.add_search_directory(args[2])) {
-            err << "Failed: directory does not exist or the config could not be saved: " << args[2] << '\n';
+        const utils::Status added = config.add_search_directory(args[2]);
+        if (!added) {
+            err << "Failed: " << added.message() << '\n';
             return 1;
         }
         out << "Added search directory: " << args[2]
             << "\nRun `nexus --rebuild-index` (or restart Nexus) to index it.\n";
     } else if (sub == "remove" && args.size() >= 3) {
-        if (!config.remove_search_directory(args[2])) {
-            err << "Directory not found in search list: " << args[2] << '\n';
+        const utils::Status removed = config.remove_search_directory(args[2]);
+        if (!removed) {
+            err << "Failed: " << removed.message() << '\n';
             return 1;
         }
         out << "Removed search directory: " << args[2]
@@ -99,14 +101,16 @@ int run_alias(const Args& args, core::AliasManager& aliases, std::ostream& out, 
     if (sub == "add" && args.size() >= 4) {
         std::string target = args[3];
         for (size_t i = 4; i < args.size(); ++i) target += " " + args[i];  // unquoted multi-word target
-        if (!aliases.add_alias(args[2], target)) {
-            err << "Failed to save alias.\n";
+        const utils::Status added = aliases.add_alias(args[2], target);
+        if (!added) {
+            err << "Failed: " << added.message() << '\n';
             return 1;
         }
         out << "Saved alias: '" << args[2] << "' -> " << target << '\n';
     } else if (sub == "remove" && args.size() >= 3) {
-        if (!aliases.remove_alias(args[2])) {
-            err << "Alias not found: " << args[2] << '\n';
+        const utils::Status removed = aliases.remove_alias(args[2]);
+        if (!removed) {
+            err << "Failed: " << removed.message() << '\n';
             return 1;
         }
         out << "Removed alias: " << args[2] << '\n';
@@ -128,17 +132,19 @@ int run_history(const Args& args, std::ostream& out, std::ostream& err,
     }
     // Database only: no application scan, no providers.
     index::Database db;
-    if (!db.open()) {
-        NEXUS_LOG_WARN("Could not open local SQLite database. Running in-memory.");
-    }
-    const auto cleared = db.clear_history();
-    if (!cleared) {
-        err << "Failed to clear history.\n";
+    const utils::Status opened = db.open();
+    if (!opened) {
+        err << "Failed: " << opened.message() << '\n';
         return 1;
     }
-    out << "Cleared " << cleared->usage_events << " usage events and " << cleared->queries
-        << " query history entries.\n";
-    if (!cleared->file_compacted) {
+    index::Database::ClearedHistory cleared;
+    const utils::Status status = db.clear_history(cleared);
+    if (!status) {
+        err << "Failed: " << status.message() << '\n';
+        return 1;
+    }
+    out << "Cleared " << cleared.usage_events << " usage events and " << cleared.queries << " query history entries.\n";
+    if (!cleared.file_compacted) {
         err << "Could not compact the database file, so old entries may still be readable in it."
                " Run again when Nexus is closed.\n";
     }

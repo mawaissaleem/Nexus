@@ -7,13 +7,13 @@ ApplicationProvider::ApplicationProvider(std::shared_ptr<index::AppIndexer> inde
                                          std::shared_ptr<index::Database> db, std::function<bool()> history_enabled)
     : indexer_(std::move(indexer)), db_(std::move(db)), history_enabled_(std::move(history_enabled)) {}
 
-bool ApplicationProvider::on_executed(const core::SearchResult& result) {
-    if (result.action_kind != core::ActionKind::Launch) return true;  // only real app launches count as usage
+utils::Status ApplicationProvider::on_executed(const core::SearchResult& result) {
+    if (result.action_kind != core::ActionKind::Launch) return {};  // only real app launches count as usage
     if (db_ && db_->is_open() && (!history_enabled_ || history_enabled_())) {
         db_->record_usage(result.id, result.query);
         db_->record_query(result.query, result.id, "applications");
     }
-    return true;
+    return {};
 }
 
 std::vector<core::SearchResult> ApplicationProvider::search(const core::Query& query,

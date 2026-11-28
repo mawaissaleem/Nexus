@@ -244,12 +244,12 @@ void PluginProvider::finish_shutdown(std::chrono::milliseconds grace) {
                                                                 until - std::chrono::steady_clock::now())));
 }
 
-bool PluginProvider::on_executed(const core::SearchResult& result) {
+utils::Status PluginProvider::on_executed(const core::SearchResult& result) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!proc_) return false;
-    if (proc_->write_line(plugin::encode_executed(result.id))) return true;
+    if (!proc_) return utils::Status::error("plugin " + name() + " is not running");
+    if (proc_->write_line(plugin::encode_executed(result.id))) return {};
     write_failed_ = true;  // a full pipe or a partial line leaves the stream unusable; the next search() restarts it
-    return false;
+    return utils::Status::error("can't reach plugin " + name() + ": it is not reading its input");
 }
 
 }  // namespace nexus::providers

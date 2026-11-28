@@ -21,7 +21,7 @@ public:
     std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
 
     // Inline "alias <name> <target>" creation: the Internal result is executed here.
-    bool on_executed(const core::SearchResult& result) override;
+    utils::Status on_executed(const core::SearchResult& result) override;
 
 private:
     core::AliasManager& aliases_;

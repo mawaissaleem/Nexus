@@ -15,6 +15,8 @@
 #include <thread>
 #include <chrono>
 #include <cstdlib>
+#include <csignal>
+#include <sys/resource.h>
 #include <unistd.h>
 
 int main() {
@@ -202,7 +204,7 @@ int main() {
             assert(mgr.add_alias(name, target));
             auto r = provider.search(Query(name), cancel);
             assert(!r.empty() && r[0].title == name);
-            const bool ok = dispatch_action(r[0], providers);
+            const bool ok = static_cast<bool>(dispatch_action(r[0], providers));
             // Children are detached; poll briefly for the recorder output.
             for (int i = 0; ok && i < 250 && !fs::exists(out); ++i)
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -289,7 +291,7 @@ int main() {
 
     // Test 5: quotes/backslashes round-trip; malformed file is rejected without losing aliases
     assert(mgr.add_alias("q", "echo \"hi\" \\n"));
-    mgr.load(temp_alias_file.string());
+    assert(mgr.load(temp_alias_file.string()));
     bool found = false;
     for (const auto& a : mgr.get_aliases())
         if (a.name == "q") {
@@ -373,11 +375,15 @@ int main() {
 
         AliasManager unusable(AliasManager::resolve_aliases_path());
         for (const auto& a : unusable.get_aliases()) CHECK_EQ(a.name == "evil", false);
-        CHECK_EQ(unusable.save(), false);
+        assert(!unusable.save());
 
         // Unwritable path: save fails and does not fall back to cwd.
         AliasManager unwritable((planted_dir / "missing_dir" / "x.json").string());
-        CHECK_EQ(unwritable.save(), false);
+        const nexus::utils::Status unwritable_status = unwritable.save();
+        assert(!unwritable_status);
+        // The message names the path and the system's reason, not just "failed".
+        assert(unwritable_status.message().find("missing_dir") != std::string::npos);
+        assert(unwritable_status.message().find("No such file or directory") != std::string::npos);
 
         for (const auto& p : planted) CHECK_EQ(fs::file_size(p), payload.size());
         CHECK_EQ(fs::exists("/tmp/nexus"), tmp_existed);
@@ -388,6 +394,55 @@ int main() {
         fs::current_path(saved_cwd);
         fs::remove_all(planted_dir);
         fs::remove_all(abs_home);
+    }
+
+    // Failures say why: the path and the system's reason, or the name that was not found.
+    {
+        const fs::path dir = fs::temp_directory_path() / ("nexus_alias_status_" + std::to_string(getpid()));
+        fs::create_directories(dir);
+        auto has = [](const nexus::utils::Status& s, const std::string& text) {
+            return s.message().find(text) != std::string::npos;
+        };
+
+        AliasManager manager((dir / "aliases.json").string());  // no such file yet: defaults
+        const auto missing = manager.load((dir / "absent.json").string());
+        assert(!missing && has(missing, (dir / "absent.json").string()) && has(missing, "No such file or directory"));
+
+        std::ofstream(dir / "bad.json") << "{ not json";
+        const auto malformed = manager.load((dir / "bad.json").string());
+        assert(!malformed && has(malformed, "bad.json") && has(malformed, ".malformed"));
+
+        assert(!manager.load((dir / "aliases.json").string()));  // not written yet; switches the save path back
+        const auto empty_target = manager.add_alias("x", "");
+        assert(!empty_target && has(empty_target, "name and a target"));
+        const auto unknown = manager.remove_alias("no-such-alias");
+        assert(!unknown && has(unknown, "no-such-alias"));
+        assert(manager.add_alias("x", "https://x.example"));  // writes aliases.json in the temp dir
+        assert(manager.remove_alias("x"));
+
+        // A soft file-size limit makes the write fail late, inside close(), the way a full disk does.
+        signal(SIGXFSZ, SIG_IGN);
+        rlimit old_limit{};
+        getrlimit(RLIMIT_FSIZE, &old_limit);
+        rlimit tiny = old_limit;
+        tiny.rlim_cur = 16;
+        setrlimit(RLIMIT_FSIZE, &tiny);
+        const auto too_big = manager.save();
+        setrlimit(RLIMIT_FSIZE, &old_limit);
+        signal(SIGXFSZ, SIG_DFL);
+        assert(!too_big && has(too_big, (dir / "aliases.json").string()) && has(too_big, "File too large"));
+
+        // Saving an alias from the launcher reports the write failure, not just "failed".
+        const fs::path unwritable = dir / "missing_dir" / "aliases.json";
+        AliasManager unwritable_mgr(unwritable.string());
+        const std::vector<SearchProviderPtr> launcher{std::make_shared<AliasProvider>(unwritable_mgr)};
+        std::atomic<bool> no_cancel{false};
+        const auto created = launcher[0]->search(Query("alias made /tmp", "alias "), no_cancel);
+        assert(created.size() == 1 && created[0].action_kind == ActionKind::Internal);
+        const auto not_saved = dispatch_action(created[0], launcher);
+        assert(!not_saved && has(not_saved, "can't write") && has(not_saved, unwritable.string()));
+
+        fs::remove_all(dir);
     }
 
     std::cout << "All Alias tests passed successfully!\n";

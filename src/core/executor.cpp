@@ -144,11 +144,11 @@ std::optional<std::vector<std::string>> Executor::parse_desktop_exec(std::string
     return args;
 }
 
-bool Executor::launch_desktop_exec(std::string_view exec_line, bool terminal) {
+utils::Status Executor::launch_desktop_exec(std::string_view exec_line, bool terminal) {
     auto args = parse_desktop_exec(exec_line);
     if (!args) {
         NEXUS_LOG_WARN("Cannot launch malformed or empty desktop command");
-        return false;
+        return utils::Status::error("can't launch: the command is empty or malformed");
     }
     if (terminal) {
         // argv form of -e (no shell); works with xterm-style emulators.
@@ -200,8 +200,8 @@ void redirect_stdio_to_null() {
 
 }  // namespace
 
-bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_failure) {
-    if (command.empty()) return false;
+utils::Status Executor::launch_shell_command(std::string_view command, ShellFailureFn on_failure) {
+    if (command.empty()) return utils::Status::error("can't run: the shell command is empty");
 
     std::string cmd_str(command);
     NEXUS_LOG_INFO("Executing command: " + cmd_str);
@@ -209,8 +209,9 @@ bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_
     ChildEnvironment env;  // built before fork: the child must not allocate
     pid_t pid = fork();
     if (pid < 0) {
+        const int err = errno;
         NEXUS_LOG_ERROR("fork() failed");
-        return false;
+        return utils::Status::from_errno("can't start the shell", err);
     }
 
     if (pid == 0) {
@@ -224,11 +225,11 @@ bool Executor::launch_shell_command(std::string_view command, ShellFailureFn on_
     }
 
     reap_shell_child(pid, std::move(cmd_str), std::move(on_failure));
-    return true;
+    return {};
 }
 
-bool Executor::spawn_detached(const std::vector<std::string>& args) {
-    if (args.empty()) return false;
+utils::Status Executor::spawn_detached(const std::vector<std::string>& args) {
+    if (args.empty()) return utils::Status::error("can't start: no program given");
 
     std::vector<char*> argv;
     for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
@@ -244,7 +245,7 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
         if (posix_spawn_file_actions_init(&actions) == 0) {
             posix_spawn_file_actions_destroy(&actions);
         }
-        return false;
+        return utils::Status::error("can't start \"" + args[0] + "\": out of resources");
     }
 
     int stdin_fd = open("/dev/null", O_RDONLY);
@@ -276,7 +277,7 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
     if (stderr_fd >= 0) close(stderr_fd);
     posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&actions);
-    if (rc != 0) return false;
+    if (rc != 0) return utils::Status::from_errno("can't start \"" + args[0] + "\"", rc);
     // Reap in a detached waiter so the child never lingers as a zombie.
     try {
         std::thread([pid] {
@@ -290,7 +291,7 @@ bool Executor::spawn_detached(const std::vector<std::string>& args) {
         waitpid(pid, &st, WNOHANG);
         NEXUS_LOG_WARN("spawn_detached: could not start reaper thread; child may linger as a zombie");
     }
-    return true;
+    return {};
 }
 
 bool Executor::run_capture(const std::vector<std::string>& args, std::string& output,
@@ -513,8 +514,8 @@ ChildProcess Executor::spawn_with_pipes(const std::vector<std::string>& args, co
     return ChildProcess(pid, to_child[1], from_child[0]);
 }
 
-bool Executor::open_path_or_url(std::string_view target) {
-    if (target.empty()) return false;
+utils::Status Executor::open_path_or_url(std::string_view target) {
+    if (target.empty()) return utils::Status::error("can't open: nothing to open");
     return spawn_detached({"xdg-open", std::string(target)});
 }
 

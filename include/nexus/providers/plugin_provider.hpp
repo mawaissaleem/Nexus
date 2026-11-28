@@ -35,7 +35,7 @@ public:
     [[nodiscard]] std::vector<std::string> prefixes() const override { return manifest_.prefixes; }
 
     std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
-    bool on_executed(const core::SearchResult& result) override;
+    utils::Status on_executed(const core::SearchResult& result) override;
 
     // Two-step shutdown so plugins share one wait: request_shutdown() on all (sends `shutdown`, detaches, later
     // searches return nothing), then finish_shutdown(grace) on each with the time left: waits for a running search

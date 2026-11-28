@@ -1,4 +1,5 @@
 #include "nexus/core/action_dispatcher.hpp"
+#include "check.hpp"
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
@@ -15,11 +16,11 @@ using namespace nexus::core;
 namespace {
 struct HookProvider : ISearchProvider {
     int calls{0};
-    bool outcome{true};
+    nexus::utils::Status outcome;
     std::string id() const override { return "hook"; }
     std::string name() const override { return "hook"; }
     std::vector<SearchResult> search(const Query&, const std::atomic<bool>&) override { return {}; }
-    bool on_executed(const SearchResult&) override {
+    nexus::utils::Status on_executed(const SearchResult&) override {
         ++calls;
         return outcome;
     }
@@ -83,15 +84,29 @@ int main() {
     assert(!dispatch_action(make(ActionKind::None, ""), none));
     assert(!fs::exists(out));
 
+    // A failed action says why, so the launcher can show it.
+    {
+        const auto missing = dispatch_action(make(ActionKind::Launch, "/nonexistent/nexus-no-such-binary"), none);
+        assert(!missing);
+        assert(missing.message().find("/nonexistent/nexus-no-such-binary") != std::string::npos);
+        assert(missing.message().find("No such file or directory") != std::string::npos);
+        assert(dispatch_action(make(ActionKind::Shell, ""), none).message().find("empty") != std::string::npos);
+        assert(dispatch_action(make(ActionKind::None, ""), none).message().find("no action") != std::string::npos);
+        assert(dispatch_action(make(ActionKind::Internal, "", "missing"), none).message().find("nothing handles") !=
+               std::string::npos);
+    }
+
     // Hook: runs for the matching provider on every kind, before the action, outcome ignored unless Internal.
     auto hook = std::make_shared<HookProvider>();
     const std::vector<SearchProviderPtr> provs{hook};
-    hook->outcome = false;
+    hook->outcome = nexus::utils::Status::error("can't save hook: disk full");
     assert(dispatch_action(make(ActionKind::Copy, "1", "hook"), provs) && hook->calls == 1);
     assert(dispatch_action(make(ActionKind::Copy, "1", "other"), provs) && hook->calls == 1);
     // Internal: the hook is the action; no provider or a failing hook means failure.
-    assert(!dispatch_action(make(ActionKind::Internal, "", "hook"), provs) && hook->calls == 2);
-    hook->outcome = true;
+    const nexus::utils::Status failed = dispatch_action(make(ActionKind::Internal, "", "hook"), provs);
+    assert(!failed && hook->calls == 2);
+    CHECK_EQ(failed.message(), std::string("can't save hook: disk full"));  // the hook's own reason reaches the UI
+    hook->outcome = {};
     assert(dispatch_action(make(ActionKind::Internal, "", "hook"), provs));
     assert(!dispatch_action(make(ActionKind::Internal, "", "missing"), provs));
 

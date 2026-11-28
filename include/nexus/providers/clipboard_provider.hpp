@@ -26,7 +26,7 @@ public:
     void clear();  // thread-safe; also what "clip clear" runs
 
     std::vector<core::SearchResult> search(const core::Query& query, const std::atomic<bool>& cancel_token) override;
-    bool on_executed(const core::SearchResult& result) override;  // "clip clear" empties the list
+    utils::Status on_executed(const core::SearchResult& result) override;  // "clip clear" empties the list
 
 private:
     std::size_t retention_;

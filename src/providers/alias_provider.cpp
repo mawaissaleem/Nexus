@@ -58,10 +58,11 @@ std::optional<std::string> resolve_target(const core::AliasEntry& alias) {
 
 }  // namespace
 
-bool AliasProvider::on_executed(const core::SearchResult& result) {
-    if (result.action_kind != core::ActionKind::Internal) return true;
+utils::Status AliasProvider::on_executed(const core::SearchResult& result) {
+    if (result.action_kind != core::ActionKind::Internal) return {};
     const auto name = result.metadata.find("alias_name");
-    return name != result.metadata.end() && aliases_.add_alias(name->second, result.execution_payload);
+    if (name == result.metadata.end()) return utils::Status::error("can't save the alias: it has no name");
+    return aliases_.add_alias(name->second, result.execution_payload);
 }
 
 std::vector<core::SearchResult> AliasProvider::search(const core::Query& query, const std::atomic<bool>& cancel_token) {

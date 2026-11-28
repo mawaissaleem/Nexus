@@ -105,14 +105,19 @@ int main() {
         assert(h.save_applications({e}));
         assert(h.record_usage("keep", "k") && h.record_usage("keep", "ke") &&
                h.record_query("k", "keep", "applications"));
-        const auto cleared = h.clear_history();
-        assert(cleared && cleared->usage_events == 2 && cleared->queries == 1);
+        Database::ClearedHistory cleared;
+        assert(h.clear_history(cleared));
+        assert(cleared.usage_events == 2 && cleared.queries == 1);
         assert(h.get_usage_count("keep") == 0 && h.get_usage_counts("k").empty());
         assert(h.load_applications().size() == 1);
-        const auto again = h.clear_history();
-        assert(again && again->usage_events == 0 && again->queries == 0);
+        Database::ClearedHistory again;
+        assert(h.clear_history(again));
+        assert(again.usage_events == 0 && again.queries == 0);
         Database closed(":memory:");
-        assert(!closed.clear_history());  // never opened
+        Database::ClearedHistory none;
+        const auto status = closed.clear_history(none);  // never opened
+        assert(!status);
+        assert(status.message().find("not open") != std::string::npos);
     }
 
     // clear_history wipes the query text from the raw file bytes
@@ -158,8 +163,9 @@ int main() {
         assert(leaks());  // stale free pages hold the marker before the clear
         // plus live rows written the normal way
         assert(w.record_usage("wipe", marker) && w.record_query(marker, "wipe", "applications"));
-        const auto c = w.clear_history();
-        assert(c && c->usage_events == 1 && c->queries == 1 && c->file_compacted);
+        Database::ClearedHistory c;
+        assert(w.clear_history(c));
+        assert(c.usage_events == 1 && c.queries == 1 && c.file_compacted);
         assert(!leaks());
         fs::remove_all(d);
     }

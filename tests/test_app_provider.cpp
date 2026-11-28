@@ -118,7 +118,7 @@ int main() {
         auto rs = hist_provider.search(core::Query("histapp"), go);
         const auto* r = find(rs, "histapp");
         assert(r && r->action_kind == core::ActionKind::Launch);
-        core::dispatch_action(*r, {hist_ptr});
+        assert(!core::dispatch_action(*r, {hist_ptr}));  // the binary is missing, so only the hook's record counts
     };
     run_histapp();  // off: nothing written
     assert(db->get_usage_count("histapp") == 0);
@@ -129,8 +129,9 @@ int main() {
     run_histapp();  // switched off again at runtime
     assert(db->get_usage_count("histapp") == 1);
     // query_history is written next to usage_events: clearing reports both
-    const auto cleared = db->clear_history();
-    assert(cleared && cleared->queries == 1);
+    index::Database::ClearedHistory cleared;
+    assert(db->clear_history(cleared));
+    assert(cleared.queries == 1);
 
     restore_env("HOME", old_home, s_home);
     restore_env("XDG_DATA_HOME", old_xdh, s_xdh);

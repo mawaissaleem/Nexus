@@ -3,6 +3,7 @@
 #include "nexus/index/desktop_entry.hpp"
 #include "nexus/index/file_entry.hpp"
 #include "nexus/index/database_migrations.hpp"
+#include "nexus/utils/status.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -20,7 +21,9 @@ public:
     explicit Database(std::string db_path = "");
     ~Database();
 
-    bool open();
+    // The Status says why the database could not be used (corrupt file, schema newer than this build, ...).
+    // An unwritable location is not an error: the database falls back to memory and says so in the log.
+    utils::Status open();
     void close();
     [[nodiscard]] bool is_open() const noexcept { return db_ != nullptr; }
 
@@ -56,13 +59,14 @@ public:
     bool record_query(const std::string& query_text, const std::string& selected_id, const std::string& provider_id);
 
     // Deletes every usage_events and query_history row in one transaction (applications and files are untouched).
-    // Returns the removed row counts, or nullopt if the database is closed or the delete failed (nothing removed).
+    // Fills `cleared` with the removed row counts; the Status says why when the database is closed or the delete
+    // failed (nothing removed).
     struct ClearedHistory {
         int usage_events{0};
         int queries{0};
         bool file_compacted{false};  // VACUUM succeeded: old text is gone from free pages too
     };
-    std::optional<ClearedHistory> clear_history();
+    utils::Status clear_history(ClearedHistory& cleared);
 
     // ~/.local/share/nexus/nexus.db (or under $XDG_DATA_HOME); ":memory:" when there is no usable data dir
     static std::string default_db_path();

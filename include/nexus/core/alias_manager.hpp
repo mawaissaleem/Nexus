@@ -1,5 +1,6 @@
 #pragma once
 
+#include "nexus/utils/status.hpp"
 #include <string>
 #include <vector>
 #include <mutex>
@@ -26,12 +27,13 @@ public:
     explicit AliasManager(const std::string& aliases_path);
     static std::string resolve_aliases_path();
 
-    bool load(const std::string& custom_path = "");
-    bool save();
+    // Each of these returns a Status whose message says why it failed (missing or unwritable file, unknown alias, ...).
+    utils::Status load(const std::string& custom_path = "");
+    utils::Status save();
 
     std::vector<AliasEntry> get_aliases() const;
-    bool add_alias(const std::string& name, const std::string& target);
-    bool remove_alias(const std::string& name);
+    utils::Status add_alias(const std::string& name, const std::string& target);
+    utils::Status remove_alias(const std::string& name);
 
     static AliasType detect_type(std::string_view target);
 

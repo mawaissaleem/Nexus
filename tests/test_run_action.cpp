@@ -15,9 +15,9 @@ struct Recorder : core::ISearchProvider {
     std::string id() const override { return "rec"; }
     std::string name() const override { return "rec"; }
     std::vector<core::SearchResult> search(const core::Query&, const std::atomic<bool>&) override { return {}; }
-    bool on_executed(const core::SearchResult&) override {
+    utils::Status on_executed(const core::SearchResult&) override {
         ++executed;
-        return true;
+        return {};
     }
 };
 }  // namespace
@@ -49,6 +49,26 @@ int main(int argc, char** argv) {
     res.confirm = false;  // no confirm flag: never asked
     assert(ui::run_action(res, providers, confirm));
     assert(asked == 2 && rec->executed == 2);
+
+    // An action that cannot start reports (title, reason) through the failure callback; one that starts stays silent.
+    {
+        std::vector<std::string> reported;
+        const core::ShellFailureFn on_failure = [&](const std::string& title, const std::string& reason) {
+            reported.push_back(title + " | " + reason);
+        };
+        core::SearchResult broken;
+        broken.title = "Ghost";
+        broken.action_kind = core::ActionKind::Launch;
+        broken.execution_payload = "/nonexistent/nexus-no-such-binary";
+        assert(ui::run_action(broken, providers, confirm, on_failure));  // it ran (was not declined), but failed
+        assert(reported.size() == 1);
+        assert(reported[0].find("Ghost | ") == 0);
+        assert(reported[0].find("No such file or directory") != std::string::npos);
+
+        res.confirm = false;
+        assert(ui::run_action(res, providers, confirm, on_failure));
+        assert(reported.size() == 1);
+    }
 
     // The question quotes the title; the subtitle (a shell alias's command) is shown below it.
     res.title = "Shut down";

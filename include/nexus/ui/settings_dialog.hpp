@@ -13,6 +13,7 @@
 #include "nexus/core/alias_manager.hpp"
 #include "nexus/core/config_manager.hpp"
 #include "nexus/ui/theme.hpp"
+#include "nexus/utils/status.hpp"
 #include <functional>
 #include <memory>
 #include <string>
@@ -47,8 +48,8 @@ private:
 
 // What the dialog asks of the application. The dialog stays UI-only: the caller persists, re-grabs and re-indexes.
 struct SettingsHooks {
-    // Called with the shortcut text when the user applies one; returns false if it is invalid.
-    std::function<bool(const std::string&)> apply_shortcut;
+    // Called with the shortcut text when the user applies one; the Status says why it was not applied.
+    std::function<utils::Status(const std::string&)> apply_shortcut;
     // Set only on GNOME Wayland without a portal: writes the custom keybinding, returns a message for the user.
     std::function<std::string()> setup_gnome_shortcut;
     // Called after the user adds or removes a search directory or exclusion; the caller re-indexes.
@@ -100,6 +101,7 @@ private slots:
 private:
     void setup_ui();
     void apply_theme();
+    void warn_failed(const QString& title, const utils::Status& status);
     void reload_aliases();
     void reload_directories();
     void reload_exclusions();

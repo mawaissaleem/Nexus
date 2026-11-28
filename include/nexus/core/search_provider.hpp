@@ -2,6 +2,7 @@
 
 #include "nexus/core/query.hpp"
 #include "nexus/core/result.hpp"
+#include "nexus/utils/status.hpp"
 #include <string>
 #include <vector>
 #include <atomic>
@@ -27,8 +28,8 @@ public:
     virtual std::vector<SearchResult> search(const Query& query, const std::atomic<bool>& cancel_token) = 0;
 
     // Post-execute hook, called by dispatch_action() before the action runs (so a failed launch still counts).
-    // For ActionKind::Internal results this IS the action and its return value is the outcome.
-    virtual bool on_executed(const SearchResult& /*result*/) { return true; }
+    // For ActionKind::Internal results this IS the action and its Status is the outcome; other kinds ignore it.
+    virtual utils::Status on_executed(const SearchResult& /*result*/) { return {}; }
 };
 
 using SearchProviderPtr = std::shared_ptr<ISearchProvider>;
